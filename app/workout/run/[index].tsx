@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo } from 'react';
 import {
@@ -13,15 +14,53 @@ import {
 } from 'react-native';
 
 import { BackButton } from '@/components/back-button';
-import { HoldTracker } from '@/components/hold-tracker';
 import { PrimaryButton } from '@/components/primary-button';
 import { RepTracker } from '@/components/rep-tracker';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { muscleColor } from '@/constants/workout-data';
 import { useWorkoutSession } from '@/contexts/workout-session';
 import { useTheme } from '@/hooks/use-theme';
+import { exerciseImageUrl } from '@/lib/exercises';
+import { exerciseXp } from '@/lib/workouts';
 
-const MUSCLE_ICON: Record<string, string> = {
+function titleCase(s: string): string {
+  if (!s) return s;
+  return s
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
+// Map raw plan-exercise muscle keys (e.g. "abdominals", "quadriceps") to a
+// coarse group used for the badge color and icon.
+const MUSCLE_GROUP: Record<string, string> = {
+  chest: 'Chest',
+  middle_back: 'Back',
+  lower_back: 'Back',
+  lats: 'Back',
+  traps: 'Back',
+  abdominals: 'Core',
+  quadriceps: 'Legs',
+  hamstrings: 'Legs',
+  calves: 'Legs',
+  glutes: 'Legs',
+  shoulders: 'Shoulders',
+  biceps: 'Arms',
+  triceps: 'Arms',
+  forearms: 'Arms',
+  neck: 'Full Body',
+};
+
+const GROUP_COLOR: Record<string, string> = {
+  Chest: '#FF6B7A',
+  Back: '#4EA3FF',
+  Legs: '#2EC07E',
+  Shoulders: '#F4A93B',
+  Arms: '#9B6BFF',
+  Core: '#FF8A3D',
+};
+
+const GROUP_ICON: Record<string, string> = {
   Chest: 'human-handsup',
   Back: 'human-handsdown',
   Legs: 'run-fast',
@@ -39,7 +78,7 @@ export default function RunExercise() {
 
   const {
     session,
-    exercises,
+    planExercises,
     totalCount,
     completeCurrent,
     reset,
@@ -47,7 +86,7 @@ export default function RunExercise() {
     calories,
   } = useWorkoutSession();
 
-  const exercise = exercises[idx];
+  const exercise = planExercises[idx];
 
   if (!session.isActive || !exercise) {
     return (
@@ -74,7 +113,11 @@ export default function RunExercise() {
     );
   }
 
-  const color = muscleColor(exercise.muscle, COLORS);
+  const primaryRaw = exercise.primaryMuscles[0]?.toLowerCase() ?? '';
+  const group = MUSCLE_GROUP[primaryRaw] ?? 'Full Body';
+  const color = GROUP_COLOR[group] ?? COLORS.primary;
+  const xp = exerciseXp(exercise);
+
   const screenW = Dimensions.get('window').width;
   const imageW = screenW - 40;
 
@@ -97,10 +140,10 @@ export default function RunExercise() {
 
   const onNext = () => {
     if (isLast) {
-      const done = session.completedIds.length + 1;
-      const xp = Math.max(
+      const done = session.completedCount + 1;
+      const totalXp = Math.max(
         50,
-        session.accumulatedXp + exercise.xp + minutes * 3 + 50
+        session.accumulatedXp + xp + minutes * 3 + 50
       );
       router.replace({
         pathname: '/workout/summary',
@@ -108,14 +151,19 @@ export default function RunExercise() {
           duration: String(Math.max(1, minutes)),
           calories: String(calories),
           done: String(done),
-          xp: String(xp),
+          xp: String(totalXp),
+          planId: session.planId ?? '',
+          dayNum: session.dayNum != null ? String(session.dayNum) : '',
         },
       });
     } else {
-      completeCurrent(exercise.xp);
+      completeCurrent(xp);
       router.replace('/workout/rest');
     }
   };
+
+  const imageUrls = exercise.images.map(exerciseImageUrl);
+  const equipmentLabel = exercise.equipment ? titleCase(exercise.equipment) : '';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -148,69 +196,132 @@ export default function RunExercise() {
           showsHorizontalScrollIndicator={false}
           style={{ marginBottom: 6 }}
         >
-          {[0, 1].map((i) => (
+          {imageUrls.length === 0 ? (
             <View
-              key={i}
               style={[
                 styles.imageBox,
                 { width: imageW, backgroundColor: color + '22' },
               ]}
             >
               <MaterialCommunityIcons
-                name={(MUSCLE_ICON[exercise.muscle] ?? 'dumbbell') as never}
+                name={(GROUP_ICON[group] ?? 'dumbbell') as never}
                 size={84}
                 color={color}
               />
-              <Text style={styles.imageLabel}>
-                {i === 0 ? 'Start position' : 'End position'}
-              </Text>
             </View>
-          ))}
+          ) : (
+            imageUrls.map((url, i) => (
+              <View
+                key={url}
+                style={[
+                  styles.imageBox,
+                  { width: imageW, backgroundColor: COLORS.card },
+                ]}
+              >
+                <Image
+                  source={{ uri: url }}
+                  style={StyleSheet.absoluteFillObject}
+                  contentFit="cover"
+                  transition={150}
+                />
+                <Text style={styles.imageLabel}>
+                  {imageUrls.length > 1
+                    ? i === 0
+                      ? 'Start position'
+                      : i === imageUrls.length - 1
+                        ? 'End position'
+                        : `Step ${i + 1}`
+                    : 'Position'}
+                </Text>
+              </View>
+            ))
+          )}
         </ScrollView>
 
         <Text style={styles.title}>{exercise.name}</Text>
         <View style={styles.badgeRow}>
           <View style={[styles.badge, { backgroundColor: color + '22' }]}>
-            <Text style={[styles.badgeText, { color }]}>{exercise.muscle}</Text>
+            <Text style={[styles.badgeText, { color }]}>{group}</Text>
           </View>
-          <View style={styles.badgeOutline}>
-            <Text style={styles.badgeOutlineText}>{exercise.level}</Text>
-          </View>
-          <View style={styles.badgeOutline}>
-            <Text style={styles.badgeOutlineText}>{exercise.equipment}</Text>
-          </View>
+          {equipmentLabel ? (
+            <View style={styles.badgeOutline}>
+              <Text style={styles.badgeOutlineText}>{equipmentLabel}</Text>
+            </View>
+          ) : null}
+          {exercise.category ? (
+            <View style={styles.badgeOutline}>
+              <Text style={styles.badgeOutlineText}>
+                {titleCase(exercise.category)}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.metricsRow}>
           <View style={styles.metric}>
             <Ionicons name="time-outline" size={18} color={COLORS.primary} />
             <Text style={styles.metricValue}>
-              {exercise.holdSec
-                ? `${exercise.sets * exercise.holdSec}s`
-                : `${exercise.sets} × ${exercise.reps}`}
+              {exercise.sets} × {exercise.reps}
             </Text>
-            <Text style={styles.metricLabel}>Duration</Text>
+            <Text style={styles.metricLabel}>Sets × Reps</Text>
           </View>
           <View style={styles.metric}>
             <Ionicons name="flash-outline" size={18} color={COLORS.primary} />
-            <Text style={styles.metricValue}>+{exercise.xp}</Text>
+            <Text style={styles.metricValue}>+{xp}</Text>
             <Text style={styles.metricLabel}>XP</Text>
           </View>
           <View style={styles.metric}>
-            <Ionicons name="gift-outline" size={18} color={COLORS.primary} />
-            <Text style={styles.metricValue}>+{exercise.xp}</Text>
-            <Text style={styles.metricLabel}>Reward</Text>
+            <Ionicons name="flame-outline" size={18} color={COLORS.primary} />
+            <Text style={styles.metricValue}>{calories}</Text>
+            <Text style={styles.metricLabel}>Calories</Text>
           </View>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Track Your Sets</Text>
-          {exercise.holdSec ? (
-            <HoldTracker exercise={exercise} COLORS={COLORS} />
-          ) : (
-            <RepTracker exercise={exercise} COLORS={COLORS} />
-          )}
+          <RepTracker exercise={exercise} COLORS={COLORS} />
         </View>
+
+        {exercise.secondaryMuscles && exercise.secondaryMuscles.length > 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Muscles Targeted</Text>
+            <View style={styles.muscleRow}>
+              {exercise.primaryMuscles.map((m) => (
+                <View
+                  key={`p-${m}`}
+                  style={[styles.musclePill, { backgroundColor: color + '22' }]}
+                >
+                  <Text style={[styles.musclePillText, { color }]}>
+                    {titleCase(m)} · primary
+                  </Text>
+                </View>
+              ))}
+              {exercise.secondaryMuscles.map((m) => (
+                <View key={`s-${m}`} style={styles.musclePillOutline}>
+                  <Text style={styles.musclePillOutlineText}>
+                    {titleCase(m)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Muscles Targeted</Text>
+            <View style={styles.muscleRow}>
+              {exercise.primaryMuscles.map((m) => (
+                <View
+                  key={`p-${m}`}
+                  style={[styles.musclePill, { backgroundColor: color + '22' }]}
+                >
+                  <Text style={[styles.musclePillText, { color }]}>
+                    {titleCase(m)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {exercise.instructions.length > 0 && (
           <View style={styles.card}>
@@ -294,10 +405,11 @@ const makeStyles = (COLORS: Palette) =>
     },
     scroll: { padding: 20, paddingBottom: 24 },
     imageBox: {
-      height: 200,
+      height: 220,
       borderRadius: RADIUS.lg,
       alignItems: 'center',
       justifyContent: 'center',
+      overflow: 'hidden',
     },
     imageLabel: {
       position: 'absolute',
@@ -378,6 +490,26 @@ const makeStyles = (COLORS: Palette) =>
       color: COLORS.text,
       marginBottom: 4,
     },
+    muscleRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: 8,
+    },
+    musclePill: {
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: RADIUS.pill,
+    },
+    musclePillText: { fontSize: 11, fontWeight: '800' },
+    musclePillOutline: {
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: RADIUS.pill,
+      borderWidth: 1,
+      borderColor: COLORS.border,
+    },
+    musclePillOutlineText: { fontSize: 11, fontWeight: '700', color: COLORS.muted },
     stepRow: {
       flexDirection: 'row',
       alignItems: 'flex-start',

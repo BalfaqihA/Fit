@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   Pressable,
   SafeAreaView,
@@ -15,28 +15,53 @@ import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { USER_STATS } from '@/constants/workout-data';
 import { useWorkoutSession } from '@/contexts/workout-session';
+import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
+import { recordCompletedWorkout } from '@/lib/workouts';
 
 export default function WorkoutSummary() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { reset } = useWorkoutSession();
-
-  useEffect(() => {
-    reset();
-  }, [reset]);
+  const { user } = useAuth();
 
   const params = useLocalSearchParams<{
     duration?: string;
     calories?: string;
     done?: string;
     xp?: string;
+    planId?: string;
+    dayNum?: string;
   }>();
 
-  const duration = Number(params.duration ?? 30);
-  const calories = Number(params.calories ?? 210);
-  const done = Number(params.done ?? 4);
-  const xp = Number(params.xp ?? 180);
+  const duration = Number(params.duration ?? 0);
+  const calories = Number(params.calories ?? 0);
+  const done = Number(params.done ?? 0);
+  const xp = Number(params.xp ?? 0);
+
+  const persisted = useRef(false);
+  useEffect(() => {
+    if (persisted.current) return;
+    persisted.current = true;
+    const run = async () => {
+      if (user) {
+        try {
+          await recordCompletedWorkout(user.uid, {
+            planId: params.planId || undefined,
+            dayNum: params.dayNum ? Number(params.dayNum) : undefined,
+            durationMin: duration,
+            caloriesKcal: calories,
+            exercisesCompleted: done,
+            xp,
+          });
+        } catch {
+          // non-blocking; UI is already shown
+        }
+      }
+      reset();
+    };
+    run();
+  }, [user, duration, calories, done, xp, reset, params.planId, params.dayNum]);
 
   const baseExp = 50;
   const durationBonus = duration * 3;

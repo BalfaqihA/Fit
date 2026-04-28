@@ -8,6 +8,7 @@ import {
   type Auth,
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getFunctions, type Functions } from 'firebase/functions';
 import { Platform } from 'react-native';
 
 // 🔧 Replace these placeholders with the values from Firebase Console
@@ -21,7 +22,6 @@ const firebaseConfig = {
   appId: "1:1023687451349:web:16fa40799cf93750e2385c",
   measurementId: "G-9Q710QQVMH"
 };
-
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 let _auth: Auth;
@@ -40,4 +40,5 @@ if (Platform.OS === 'web') {
 
 export const auth = _auth;
 export const db = getFirestore(app);
+export const functions: Functions = getFunctions(app, 'us-central1');
 export { app };

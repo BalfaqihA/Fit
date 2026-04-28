@@ -291,9 +291,15 @@ export default function ExerciseDetail() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Track Your Sets</Text>
           {exercise.holdSec ? (
-            <HoldTracker exercise={exercise} COLORS={COLORS} />
+            <HoldTracker
+              exercise={{ sets: exercise.sets, holdSec: exercise.holdSec }}
+              COLORS={COLORS}
+            />
           ) : (
-            <RepTracker exercise={exercise} COLORS={COLORS} />
+            <RepTracker
+              exercise={{ sets: exercise.sets, reps: exercise.reps ?? 0 }}
+              COLORS={COLORS}
+            />
           )}
         </View>
 

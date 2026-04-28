@@ -12,20 +12,11 @@ import {
 } from 'react-native';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import {
-  EXERCISES,
-  getDayByNumber,
-  todayDayNumber,
-} from '@/constants/workout-data';
+import { todayDayNumber } from '@/constants/workout-data';
+import { useAuth } from '@/hooks/use-auth';
 import { usePlan } from '@/hooks/use-plan';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
-
-const quickStats = [
-  { label: 'Workouts', value: '12', icon: 'run' },
-  { label: 'Calories', value: '8.4k', icon: 'fire' },
-  { label: 'Minutes', value: '340', icon: 'timer-outline' },
-];
 
 const primaryActions: {
   label: string;
@@ -58,6 +49,7 @@ export default function HomeTab() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { profile } = useUserProfile();
+  const { user } = useAuth();
   const firstName = useMemo(
     () => profile.displayName.split(' ')[0] || profile.displayName,
     [profile.displayName]
@@ -65,35 +57,32 @@ export default function HomeTab() {
 
   const { plan } = usePlan();
 
-  // Prefer the user's personalized plan when available; fall back to the
-  // static seed plan so the screen still renders for users without a plan yet.
   const personalizedDay = useMemo(() => {
     if (!plan || plan.days.length === 0) return null;
     const dayIndex = (todayDayNumber() - 1) % plan.days.length;
     return plan.days[dayIndex];
   }, [plan]);
 
-  const fallbackDay = useMemo(() => getDayByNumber(todayDayNumber()), []);
+  const heroTitle = personalizedDay ? personalizedDay.title : 'Generate your plan';
+  const heroMeta = personalizedDay
+    ? `${personalizedDay.estimatedMinutes} min · ${personalizedDay.exercises.length} exercises`
+    : 'Finish onboarding to begin';
+  const heroRoute = personalizedDay ? '/workout/start' : '/onboarding';
 
-  let heroTitle: string;
-  let heroMeta: string;
-
-  if (personalizedDay) {
-    heroTitle = personalizedDay.title;
-    heroMeta = `${personalizedDay.estimatedMinutes} min · ${personalizedDay.exercises.length} exercises`;
-  } else if (fallbackDay?.isRestDay) {
-    heroTitle = 'Rest Day';
-    heroMeta = 'Recovery is part of the plan';
-  } else if (fallbackDay) {
-    heroTitle = fallbackDay.name;
-    heroMeta = `${fallbackDay.estimatedMinutes} min · ${
-      fallbackDay.exercises.filter((id) => EXERCISES.some((e) => e.id === id))
-        .length
-    } exercises`;
-  } else {
-    heroTitle = 'Full Body Burn';
-    heroMeta = '35 min · 8 exercises';
-  }
+  const quickStats = useMemo(() => {
+    const s = profile.stats ?? {
+      totalWorkouts: 0,
+      totalCaloriesKcal: 0,
+      totalMinutes: 0,
+    };
+    const fmtK = (n: number) =>
+      n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
+    return [
+      { label: 'Workouts', value: `${s.totalWorkouts}`, icon: 'run' },
+      { label: 'Calories', value: fmtK(s.totalCaloriesKcal), icon: 'fire' },
+      { label: 'Minutes', value: `${s.totalMinutes}`, icon: 'timer-outline' },
+    ];
+  }, [profile.stats]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -107,7 +96,9 @@ export default function HomeTab() {
             <Text style={styles.name}>Ready to train?</Text>
           </View>
           <Pressable
-            onPress={() => router.push('/settings/edit-profile' as never)}
+            onPress={() => {
+              if (user) router.push(`/community/profile/${user.uid}` as never);
+            }}
             style={({ pressed }) => [
               styles.avatar,
               pressed && { opacity: 0.85 },
@@ -130,13 +121,17 @@ export default function HomeTab() {
             <Text style={styles.heroMeta}>{heroMeta}</Text>
           </View>
           <Pressable
-            onPress={() => router.push('/workout/start')}
+            onPress={() => router.push(heroRoute as never)}
             style={({ pressed }) => [
               styles.heroPlay,
               pressed && { opacity: 0.85 },
             ]}
           >
-            <Ionicons name="play" size={22} color={COLORS.primary} />
+            <Ionicons
+              name={personalizedDay ? 'play' : 'arrow-forward'}
+              size={22}
+              color={COLORS.primary}
+            />
           </Pressable>
         </LinearGradient>
 

@@ -50,7 +50,13 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
       ref,
       (snap) => {
         if (snap.exists()) {
-          setProfile({ ...DEFAULT_PROFILE, ...(snap.data() as UserProfile) });
+          setProfile({
+            ...DEFAULT_PROFILE,
+            ...(snap.data() as UserProfile),
+            // Always pin id to the auth uid so community lookups (getUserById)
+            // can find the current user regardless of what's stored in Firestore.
+            id: user.uid,
+          });
         } else {
           // Document doesn't exist yet (rare race after signup); fall back to auth basics
           setProfile({
@@ -73,7 +79,9 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
 
   const updateProfile = useCallback(
     async (patch: Partial<UserProfile>) => {
-      if (!user) return;
+      if (!user) {
+        throw new Error('You must be signed in to update your profile.');
+      }
       const ref = doc(db, 'users', user.uid);
       await setDoc(
         ref,

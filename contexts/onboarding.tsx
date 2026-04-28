@@ -24,6 +24,8 @@ export type OnboardingAnswers = {
   daysPerWeek: number | null;
 };
 
+export type OnboardingMode = 'full' | 'change';
+
 const EMPTY: OnboardingAnswers = {
   age: null,
   gender: null,
@@ -38,10 +40,12 @@ const EMPTY: OnboardingAnswers = {
 
 type OnboardingContextValue = {
   answers: OnboardingAnswers;
+  mode: OnboardingMode;
   setAnswer: <K extends keyof OnboardingAnswers>(
     key: K,
     value: OnboardingAnswers[K]
   ) => void;
+  setMode: (mode: OnboardingMode) => void;
   reset: () => void;
 };
 
@@ -49,6 +53,7 @@ export const OnboardingContext = createContext<OnboardingContextValue | null>(nu
 
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const [answers, setAnswers] = useState<OnboardingAnswers>(EMPTY);
+  const [mode, setMode] = useState<OnboardingMode>('full');
 
   const setAnswer = useCallback(
     <K extends keyof OnboardingAnswers>(key: K, value: OnboardingAnswers[K]) => {
@@ -57,11 +62,14 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     []
   );
 
-  const reset = useCallback(() => setAnswers(EMPTY), []);
+  const reset = useCallback(() => {
+    setAnswers(EMPTY);
+    setMode('full');
+  }, []);
 
   const value = useMemo<OnboardingContextValue>(
-    () => ({ answers, setAnswer, reset }),
-    [answers, setAnswer, reset]
+    () => ({ answers, mode, setAnswer, setMode, reset }),
+    [answers, mode, setAnswer, reset]
   );
 
   return (

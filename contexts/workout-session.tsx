@@ -8,42 +8,41 @@ import React, {
   useState,
 } from 'react';
 
-import {
-  CALORIES_PER_MINUTE,
-  EXERCISES,
-  type Exercise,
-} from '@/constants/workout-data';
+import { CALORIES_PER_MINUTE } from '@/constants/workout-data';
+import type { PlanDay, PlanExercise } from '@/types/plan';
 
 type SessionState = {
   isActive: boolean;
+  planId?: string;
   dayNum?: number;
-  exerciseIds: string[];
+  planExercises: PlanExercise[];
   currentIndex: number;
-  completedIds: string[];
+  completedCount: number;
   accumulatedXp: number;
   startedAt: number;
 };
 
 type WorkoutSessionContextValue = {
   session: SessionState;
-  startSession: (exerciseIds: string[], dayNum?: number) => void;
+  startSession: (day: PlanDay, planId?: string) => void;
   completeCurrent: (xpDelta: number) => void;
   reset: () => void;
   elapsedSec: number;
   minutes: number;
   calories: number;
   totalCount: number;
-  currentExercise?: Exercise;
-  nextExercise?: Exercise;
-  exercises: Exercise[];
+  currentExercise?: PlanExercise;
+  nextExercise?: PlanExercise;
+  planExercises: PlanExercise[];
 };
 
 const emptySession: SessionState = {
   isActive: false,
+  planId: undefined,
   dayNum: undefined,
-  exerciseIds: [],
+  planExercises: [],
   currentIndex: 0,
-  completedIds: [],
+  completedCount: 0,
   accumulatedXp: 0,
   startedAt: 0,
 };
@@ -76,13 +75,14 @@ export function WorkoutSessionProvider({
   }, [session.isActive, session.startedAt]);
 
   const startSession = useCallback(
-    (exerciseIds: string[], dayNum?: number) => {
+    (day: PlanDay, planId?: string) => {
       setSession({
         isActive: true,
-        dayNum,
-        exerciseIds,
+        planId,
+        dayNum: day.day,
+        planExercises: day.exercises,
         currentIndex: 0,
-        completedIds: [],
+        completedCount: 0,
         accumulatedXp: 0,
         startedAt: Date.now(),
       });
@@ -94,14 +94,9 @@ export function WorkoutSessionProvider({
   const completeCurrent = useCallback((xpDelta: number) => {
     setSession((prev) => {
       if (!prev.isActive) return prev;
-      const currentId = prev.exerciseIds[prev.currentIndex];
-      const alreadyDone = currentId && prev.completedIds.includes(currentId);
       return {
         ...prev,
-        completedIds:
-          currentId && !alreadyDone
-            ? [...prev.completedIds, currentId]
-            : prev.completedIds,
+        completedCount: prev.completedCount + 1,
         accumulatedXp: prev.accumulatedXp + xpDelta,
         currentIndex: prev.currentIndex + 1,
       };
@@ -113,14 +108,9 @@ export function WorkoutSessionProvider({
     setElapsedSec(0);
   }, []);
 
-  const exercises = useMemo<Exercise[]>(() => {
-    return session.exerciseIds
-      .map((id) => EXERCISES.find((e) => e.id === id))
-      .filter((e): e is Exercise => Boolean(e));
-  }, [session.exerciseIds]);
-
-  const currentExercise = exercises[session.currentIndex];
-  const nextExercise = exercises[session.currentIndex];
+  const planExercises = session.planExercises;
+  const currentExercise = planExercises[session.currentIndex];
+  const nextExercise = planExercises[session.currentIndex + 1];
 
   const minutes = Math.floor(elapsedSec / 60);
   const calories = Math.round(minutes * CALORIES_PER_MINUTE);
@@ -134,10 +124,10 @@ export function WorkoutSessionProvider({
       elapsedSec,
       minutes,
       calories,
-      totalCount: session.exerciseIds.length,
+      totalCount: planExercises.length,
       currentExercise,
       nextExercise,
-      exercises,
+      planExercises,
     }),
     [
       session,
@@ -149,7 +139,7 @@ export function WorkoutSessionProvider({
       calories,
       currentExercise,
       nextExercise,
-      exercises,
+      planExercises,
     ]
   );
 

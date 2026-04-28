@@ -12,11 +12,38 @@ import {
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { muscleColor } from '@/constants/workout-data';
 import { useWorkoutSession } from '@/contexts/workout-session';
 import { useTheme } from '@/hooks/use-theme';
+import { exerciseXp } from '@/lib/workouts';
 
 const REST_SECONDS = 60;
+
+const MUSCLE_GROUP: Record<string, string> = {
+  chest: 'Chest',
+  middle_back: 'Back',
+  lower_back: 'Back',
+  lats: 'Back',
+  traps: 'Back',
+  abdominals: 'Core',
+  quadriceps: 'Legs',
+  hamstrings: 'Legs',
+  calves: 'Legs',
+  glutes: 'Legs',
+  shoulders: 'Shoulders',
+  biceps: 'Arms',
+  triceps: 'Arms',
+  forearms: 'Arms',
+  neck: 'Full Body',
+};
+
+const GROUP_COLOR: Record<string, string> = {
+  Chest: '#FF6B7A',
+  Back: '#4EA3FF',
+  Legs: '#2EC07E',
+  Shoulders: '#F4A93B',
+  Arms: '#9B6BFF',
+  Core: '#FF8A3D',
+};
 
 const MUSCLE_ICON: Record<string, string> = {
   Chest: 'human-handsup',
@@ -37,10 +64,10 @@ function fmt(secs: number): string {
 export default function RestScreen() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
-  const { session, exercises, totalCount } = useWorkoutSession();
+  const { session, planExercises, totalCount } = useWorkoutSession();
 
   const nextIndex = session.currentIndex;
-  const nextExercise = exercises[nextIndex];
+  const nextExercise = planExercises[nextIndex];
 
   const [timeLeft, setTimeLeft] = useState(REST_SECONDS);
   const [totalRest, setTotalRest] = useState(REST_SECONDS);
@@ -83,7 +110,10 @@ export default function RestScreen() {
   const ringColor =
     ratio < 0.5 ? COLORS.success : ratio < 0.85 ? '#F4A93B' : COLORS.accent;
 
-  const color = muscleColor(nextExercise.muscle, COLORS);
+  const primaryRaw = nextExercise.primaryMuscles[0]?.toLowerCase() ?? '';
+  const group = MUSCLE_GROUP[primaryRaw] ?? 'Full Body';
+  const color = GROUP_COLOR[group] ?? COLORS.primary;
+  const xp = exerciseXp(nextExercise);
 
   const addFifteen = () => {
     setTotalRest((t) => t + 15);
@@ -133,7 +163,7 @@ export default function RestScreen() {
         <View style={styles.nextCard}>
           <View style={[styles.nextIcon, { backgroundColor: color + '22' }]}>
             <MaterialCommunityIcons
-              name={(MUSCLE_ICON[nextExercise.muscle] ?? 'dumbbell') as never}
+              name={(MUSCLE_ICON[group] ?? 'dumbbell') as never}
               size={28}
               color={color}
             />
@@ -144,21 +174,16 @@ export default function RestScreen() {
             </Text>
             <View style={styles.nextChipRow}>
               <View style={[styles.chip, { backgroundColor: color + '22' }]}>
-                <Text style={[styles.chipText, { color }]}>
-                  {nextExercise.muscle}
-                </Text>
+                <Text style={[styles.chipText, { color }]}>{group}</Text>
               </View>
               <Text style={styles.nextMeta}>
-                {nextExercise.sets} ×{' '}
-                {nextExercise.reps
-                  ? `${nextExercise.reps} reps`
-                  : `${nextExercise.holdSec}s`}
+                {nextExercise.sets} × {nextExercise.reps} reps
               </Text>
             </View>
           </View>
           <View style={styles.xpBadge}>
             <Ionicons name="flash" size={11} color={COLORS.primary} />
-            <Text style={styles.xpBadgeText}>+{nextExercise.xp}</Text>
+            <Text style={styles.xpBadgeText}>+{xp}</Text>
           </View>
         </View>
       </View>

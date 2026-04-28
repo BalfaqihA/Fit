@@ -3,10 +3,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { type Palette } from '@/constants/design';
-import { type Exercise } from '@/constants/workout-data';
 
 type Props = {
-  exercise: Exercise;
+  exercise: { sets: number; holdSec?: number };
   COLORS: Palette;
 };
 

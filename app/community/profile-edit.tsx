@@ -68,7 +68,7 @@ export default function CommunityProfileEdit() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Community Profile</Text>
+        <Text style={styles.headerTitle}>Edit Profile</Text>
         <View style={{ width: 40 }} />
       </View>
 

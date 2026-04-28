@@ -15,27 +15,11 @@ import {
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import {
-  EXERCISES,
-  getDayByNumber,
-  muscleColor,
-  type Exercise,
-} from '@/constants/workout-data';
 import { useWorkoutSession } from '@/contexts/workout-session';
 import { usePlan } from '@/hooks/use-plan';
 import { useTheme } from '@/hooks/use-theme';
 import { exerciseImageUrl, getExerciseById } from '@/lib/exercises';
-import type { PlanDay, PlanExercise } from '@/types/plan';
-
-const MUSCLE_ICON: Record<string, string> = {
-  Chest: 'human-handsup',
-  Back: 'human-handsdown',
-  Legs: 'run-fast',
-  Shoulders: 'weight-lifter',
-  Arms: 'arm-flex',
-  Core: 'meditation',
-  'Full Body': 'dumbbell',
-};
+import type { Plan, PlanDay, PlanExercise } from '@/types/plan';
 
 function titleCase(s: string): string {
   if (!s) return s;
@@ -67,152 +51,34 @@ export default function DayDetail() {
         styles={styles}
         COLORS={COLORS}
         planDay={planDay}
-        dayNum={dayNum}
+        plan={plan}
         startSession={startSession}
       />
     );
   }
 
-  // ---- legacy fallback ----
-  const legacyPlan = getDayByNumber(dayNum);
-  if (!legacyPlan) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle}>Day</Text>
-          <View style={{ width: 40 }} />
-        </View>
-        <View style={styles.empty}>
-          <Ionicons name="alert-circle-outline" size={36} color={COLORS.muted} />
-          <Text style={styles.emptyTitle}>Day not found</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (legacyPlan.isRestDay) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle}>{legacyPlan.name}</Text>
-          <View style={{ width: 40 }} />
-        </View>
-        <View style={styles.empty}>
-          <View style={styles.restIcon}>
-            <Ionicons name="moon" size={42} color={COLORS.primary} />
-          </View>
-          <Text style={styles.emptyTitle}>Rest Day</Text>
-          <Text style={styles.emptyMeta}>
-            Take it easy today. Recovery is part of the plan.
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const exercises: Exercise[] = legacyPlan.exercises
-    .map((id) => EXERCISES.find((e) => e.id === id))
-    .filter((e): e is Exercise => Boolean(e));
-
-  const totalXp = exercises.reduce((n, e) => n + e.xp, 0);
-
-  const renderItem = ({ item }: { item: Exercise }) => {
-    const color = muscleColor(item.muscle, COLORS);
-    return (
-      <Pressable
-        onPress={() => router.push(`/workout/exercise/${item.id}` as never)}
-        style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
-      >
-        <View style={[styles.cardIcon, { backgroundColor: color + '22' }]}>
-          <MaterialCommunityIcons
-            name={(MUSCLE_ICON[item.muscle] ?? 'dumbbell') as never}
-            size={26}
-            color={color}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.cardName} numberOfLines={2}>
-            {item.name}
-          </Text>
-          <View style={styles.cardChipRow}>
-            <View style={[styles.chip, { backgroundColor: color + '22' }]}>
-              <Text style={[styles.chipText, { color }]}>{item.muscle}</Text>
-            </View>
-            <View style={styles.chipOutline}>
-              <Text style={styles.chipOutlineText}>{item.level}</Text>
-            </View>
-          </View>
-          <Text style={styles.cardMeta}>
-            {item.sets} × {item.reps ? `${item.reps} reps` : `${item.holdSec}s hold`}
-          </Text>
-        </View>
-        <View style={styles.xpBadge}>
-          <Ionicons name="flash" size={11} color={COLORS.primary} />
-          <Text style={styles.xpBadgeText}>+{item.xp}</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={16} color={COLORS.muted} />
-      </Pressable>
-    );
-  };
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>{legacyPlan.name}</Text>
+        <Text style={styles.headerTitle}>Day {dayNum}</Text>
         <View style={{ width: 40 }} />
       </View>
-
-      <FlatList
-        data={exercises}
-        renderItem={renderItem}
-        keyExtractor={(i) => i.id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <View>
-            <LinearGradient
-              colors={['#8E54E9', '#6C56D9']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.banner}
-            >
-              <View style={styles.bannerRow}>
-                <Item value={`${exercises.length}`} label="Exercises" />
-                <View style={styles.bannerDivider} />
-                <Item value={`${legacyPlan.estimatedMinutes}m`} label="Estimated" />
-                <View style={styles.bannerDivider} />
-                <Item value={`${totalXp}`} label="Max XP" />
-              </View>
-              <View style={styles.focusRow}>
-                {legacyPlan.focusMuscles.map((m) => (
-                  <View key={m} style={styles.focusPill}>
-                    <Text style={styles.focusPillText}>{m}</Text>
-                  </View>
-                ))}
-              </View>
-            </LinearGradient>
-            <Text style={styles.sectionTitle}>Today&apos;s exercises</Text>
-          </View>
-        }
-        ListFooterComponent={
-          <View style={{ marginTop: 16 }}>
-            <PrimaryButton
-              label="Start This Day"
-              onPress={() => {
-                startSession(
-                  exercises.map((e) => e.id),
-                  dayNum
-                );
-                router.push(`/workout/run/0` as never);
-              }}
-              icon={<Ionicons name="play" size={18} color="#fff" />}
-            />
-          </View>
-        }
-      />
+      <View style={styles.empty}>
+        <View style={styles.restIcon}>
+          <Ionicons name="sparkles" size={42} color={COLORS.primary} />
+        </View>
+        <Text style={styles.emptyTitle}>No plan yet</Text>
+        <Text style={styles.emptyMeta}>
+          Finish onboarding to get a personalized plan.
+        </Text>
+        <View style={{ height: 16 }} />
+        <PrimaryButton
+          label="Complete Onboarding"
+          onPress={() => router.push('/onboarding' as never)}
+          icon={<Ionicons name="arrow-forward" size={18} color="#fff" />}
+        />
+      </View>
     </SafeAreaView>
   );
 }
@@ -221,14 +87,14 @@ function PlanDayView({
   styles,
   COLORS,
   planDay,
-  dayNum,
+  plan,
   startSession,
 }: {
   styles: ReturnType<typeof makeStyles>;
   COLORS: Palette;
   planDay: PlanDay;
-  dayNum: number;
-  startSession: (ids: string[], dayNum: number) => void;
+  plan: Plan | null;
+  startSession: (day: PlanDay, planId?: string) => void;
 }) {
   const focusMuscles = useMemo(() => {
     const set = new Set<string>();
@@ -303,7 +169,7 @@ function PlanDayView({
       <FlatList
         data={planDay.exercises}
         renderItem={renderItem}
-        keyExtractor={(_, idx) => `${dayNum}-${idx}`}
+        keyExtractor={(_, idx) => `${planDay.day}-${idx}`}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
@@ -339,10 +205,7 @@ function PlanDayView({
             <PrimaryButton
               label="Start This Day"
               onPress={() => {
-                startSession(
-                  planDay.exercises.map((e) => e.exerciseId),
-                  dayNum
-                );
+                startSession(planDay, plan?.id);
                 router.push(`/workout/run/0` as never);
               }}
               icon={<Ionicons name="play" size={18} color="#fff" />}

@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { getApp } from 'firebase/app';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { doc, getDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,9 +15,11 @@ import {
 
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette } from '@/constants/design';
+import { useAuth } from '@/hooks/use-auth';
 import { useOnboarding } from '@/hooks/use-onboarding';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
+import { auth, db, functions } from '@/lib/firebase';
 import type {
   EquipmentKey,
   FitnessLevel,
@@ -52,12 +54,45 @@ type GeneratePlanResult = { planId: string };
 export default function ProfileCompletePage() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
-  const { answers } = useOnboarding();
+  const { answers, mode, setMode } = useOnboarding();
   const { updateProfile } = useUserProfile();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
 
-  const summaryItems = useMemo(
-    () => [
+  const isChangeMode = mode === 'change';
+
+  const summaryItems = useMemo(() => {
+    const planItems = [
+      {
+        label: 'Goal',
+        value: answers.goal ? GOAL_LABEL[answers.goal] : '—',
+        icon: 'flag',
+      },
+      {
+        label: 'Fitness Level',
+        value: answers.level ? LEVEL_LABEL[answers.level] : '—',
+        icon: 'dumbbell',
+      },
+      {
+        label: 'Equipment',
+        value: answers.equipment ? EQUIPMENT_LABEL[answers.equipment] : '—',
+        icon: 'tools',
+      },
+      {
+        label: 'Days Per Week',
+        value: answers.daysPerWeek ? `${answers.daysPerWeek} days` : '—',
+        icon: 'calendar-month',
+      },
+      {
+        label: 'Workout Duration',
+        value: answers.sessionMinutes ? `${answers.sessionMinutes} min` : '—',
+        icon: 'timer-outline',
+      },
+    ];
+
+    if (isChangeMode) return planItems;
+
+    const profileItems = [
       {
         label: 'Age',
         value: answers.age ? `${answers.age} years` : '—',
@@ -80,34 +115,9 @@ export default function ProfileCompletePage() {
         value: answers.heightCm ? `${answers.heightCm} cm` : '—',
         icon: 'human-male-height',
       },
-      {
-        label: 'Fitness Level',
-        value: answers.level ? LEVEL_LABEL[answers.level] : '—',
-        icon: 'dumbbell',
-      },
-      {
-        label: 'Goal',
-        value: answers.goal ? GOAL_LABEL[answers.goal] : '—',
-        icon: 'flag',
-      },
-      {
-        label: 'Equipment',
-        value: answers.equipment ? EQUIPMENT_LABEL[answers.equipment] : '—',
-        icon: 'tools',
-      },
-      {
-        label: 'Days Per Week',
-        value: answers.daysPerWeek ? `${answers.daysPerWeek} days` : '—',
-        icon: 'calendar-month',
-      },
-      {
-        label: 'Workout Duration',
-        value: answers.sessionMinutes ? `${answers.sessionMinutes} min` : '—',
-        icon: 'timer-outline',
-      },
-    ],
-    [answers]
-  );
+    ];
+    return [...profileItems, ...planItems];
+  }, [answers, isChangeMode]);
 
   const ready =
     !!answers.goal &&
@@ -115,6 +125,13 @@ export default function ProfileCompletePage() {
     !!answers.equipment &&
     !!answers.daysPerWeek &&
     !!answers.sessionMinutes;
+
+  const headerTitle = isChangeMode ? 'Review New Plan' : 'Setup Complete';
+  const headerSubtitle = isChangeMode
+    ? 'Confirm your new plan settings and we will rebuild your workouts.'
+    : "We've completed your setup and prepared your personalized experience";
+  const ctaLabel = isChangeMode ? 'Update My Plan' : 'Generate My Plan';
+  const cardTitle = isChangeMode ? 'Plan Settings' : 'Profile Summary';
 
   const onGenerate = async () => {
     if (!ready) {
@@ -125,24 +142,56 @@ export default function ProfileCompletePage() {
       return;
     }
 
+    if (!user) {
+      Alert.alert(
+        'Sign in required',
+        'Please sign in again to generate your workout plan.'
+      );
+      router.replace('/auth/login' as never);
+      return;
+    }
+
     setLoading(true);
     try {
-      // 1) persist the onboarding answers on the user profile
-      await updateProfile({
-        age: answers.age ?? undefined,
-        gender: answers.gender ?? undefined,
-        heightCm: answers.heightCm ?? undefined,
-        weightKg: answers.weightKg ?? undefined,
-        fitnessLevel: answers.level ?? undefined,
-        equipment: answers.equipment ?? undefined,
-        sessionMinutes: answers.sessionMinutes ?? undefined,
-        daysPerWeek: answers.daysPerWeek ?? undefined,
-        primaryGoal: answers.goal ?? undefined,
-        goals: answers.goal ? [answers.goal] : [],
-      });
+      // 1) persist the onboarding answers on the user profile.
+      // In change mode, only update plan-relevant fields so we don't wipe
+      // out age/gender/height/weight that the user already set during full onboarding.
+      const profilePatch = isChangeMode
+        ? {
+            fitnessLevel: answers.level ?? undefined,
+            equipment: answers.equipment ?? undefined,
+            sessionMinutes: answers.sessionMinutes ?? undefined,
+            daysPerWeek: answers.daysPerWeek ?? undefined,
+            primaryGoal: answers.goal ?? undefined,
+            goals: answers.goal ? [answers.goal] : [],
+          }
+        : {
+            age: answers.age ?? undefined,
+            gender: answers.gender ?? undefined,
+            heightCm: answers.heightCm ?? undefined,
+            weightKg: answers.weightKg ?? undefined,
+            fitnessLevel: answers.level ?? undefined,
+            equipment: answers.equipment ?? undefined,
+            sessionMinutes: answers.sessionMinutes ?? undefined,
+            daysPerWeek: answers.daysPerWeek ?? undefined,
+            primaryGoal: answers.goal ?? undefined,
+            goals: answers.goal ? [answers.goal] : [],
+          };
+      await updateProfile(profilePatch);
 
-      // 2) ask the Cloud Function to build a plan
-      const fns = getFunctions(getApp(), 'us-central1');
+      // 2) make sure we send a fresh ID token with the callable request
+      const current = auth.currentUser;
+      if (!current) {
+        Alert.alert(
+          'Sign in required',
+          'Please sign in again to generate your workout plan.'
+        );
+        router.replace('/auth/login' as never);
+        return;
+      }
+      await current.getIdToken(true);
+
+      // 3) ask the Cloud Function to build a plan
       const fn = httpsCallable<
         {
           goal: GoalKey;
@@ -152,9 +201,9 @@ export default function ProfileCompletePage() {
           sessionMinutes: number;
         },
         GeneratePlanResult
-      >(fns, 'generate_plan');
+      >(functions, 'generate_plan');
 
-      await fn({
+      const result = await fn({
         goal: answers.goal!,
         level: answers.level!,
         equipment: answers.equipment!,
@@ -162,11 +211,41 @@ export default function ProfileCompletePage() {
         sessionMinutes: answers.sessionMinutes!,
       });
 
+      const planId = result.data?.planId;
+      if (!planId) {
+        throw new Error('Plan generation returned no planId.');
+      }
+
+      // 4) verify the plan document was actually written by the function
+      const planSnap = await getDoc(
+        doc(db, 'users', user.uid, 'plans', planId)
+      );
+      if (!planSnap.exists()) {
+        throw new Error('Plan was not created. Please try again.');
+      }
+
+      // 5) verify currentPlanId is now linked on the user profile
+      const userSnap = await getDoc(doc(db, 'users', user.uid));
+      const linkedPlanId = userSnap.exists()
+        ? (userSnap.data() as { currentPlanId?: string }).currentPlanId
+        : undefined;
+      if (linkedPlanId !== planId) {
+        throw new Error(
+          'Plan was created but not linked to your profile. Please try again.'
+        );
+      }
+
+      // Reset onboarding mode so the next entry to onboarding starts fresh.
+      setMode('full');
       router.replace('/(tabs)' as never);
     } catch (e) {
-      const msg =
-        e instanceof Error ? e.message : 'Could not generate your plan.';
-      Alert.alert('Error', msg);
+      console.error('[generate_plan] failed:', e);
+      const err = e as
+        | { code?: string; message?: string; details?: unknown }
+        | null;
+      const code = err?.code;
+      const message = err?.message ?? 'Could not generate your plan.';
+      Alert.alert('Error', code ? `${code}: ${message}` : message);
     } finally {
       setLoading(false);
     }
@@ -179,14 +258,12 @@ export default function ProfileCompletePage() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Setup Complete</Text>
-          <Text style={styles.subtitle}>
-            We&apos;ve completed your setup and prepared your personalized experience
-          </Text>
+          <Text style={styles.title}>{headerTitle}</Text>
+          <Text style={styles.subtitle}>{headerSubtitle}</Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Profile Summary</Text>
+          <Text style={styles.cardTitle}>{cardTitle}</Text>
 
           {summaryItems.map((item, index) => (
             <View key={item.label}>
@@ -217,7 +294,7 @@ export default function ProfileCompletePage() {
                 <Text style={styles.loadingText}>Generating your plan…</Text>
               </View>
             ) : (
-              <PrimaryButton label="Generate My Plan" onPress={onGenerate} />
+              <PrimaryButton label={ctaLabel} onPress={onGenerate} />
             )}
           </View>
         </View>

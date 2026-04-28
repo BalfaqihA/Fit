@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
+import { useAuth } from '@/hooks/use-auth';
+import { useOnboarding } from '@/hooks/use-onboarding';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import { mapAuthError, signOut } from '@/lib/auth';
@@ -20,29 +22,8 @@ import { mapAuthError, signOut } from '@/lib/auth';
 type SettingsRow = {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
-  route: string;
+  onPress: () => void;
 };
-
-const accountRows: SettingsRow[] = [
-  { label: 'Edit Profile', icon: 'person-outline', route: '/settings/edit-profile' },
-  { label: 'Community Profile', icon: 'people-circle-outline', route: '/community/profile-edit' },
-  { label: 'Change Password', icon: 'lock-closed-outline', route: '/settings/change-password' },
-  { label: 'Notifications', icon: 'notifications-outline', route: '/settings/notifications' },
-  { label: 'Fitness Goals', icon: 'trophy-outline', route: '/settings/fitness-goals' },
-];
-
-const preferenceRows: SettingsRow[] = [
-  { label: 'Units', icon: 'speedometer-outline', route: '/settings/units' },
-  { label: 'Language', icon: 'language-outline', route: '/settings/language' },
-  { label: 'Dark Mode', icon: 'moon-outline', route: '/settings/dark-mode' },
-];
-
-const supportRows: SettingsRow[] = [
-  { label: 'Help & FAQ', icon: 'help-circle-outline', route: '/settings/help-faq' },
-  { label: 'About', icon: 'information-circle-outline', route: '/settings/about' },
-  { label: 'Privacy Policy', icon: 'shield-checkmark-outline', route: '/settings/privacy-policy' },
-  { label: 'Terms of Service', icon: 'document-text-outline', route: '/settings/terms-of-service' },
-];
 
 function Row({
   row,
@@ -56,7 +37,7 @@ function Row({
   return (
     <Pressable
       style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
-      onPress={() => router.push(row.route as never)}
+      onPress={row.onPress}
     >
       <View style={styles.rowIcon}>
         <Ionicons name={row.icon} size={18} color={COLORS.primary} />
@@ -97,6 +78,75 @@ export default function SettingsHub() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { profile } = useUserProfile();
+  const { user } = useAuth();
+  const { setMode, reset: resetOnboarding } = useOnboarding();
+
+  const profileHref = user ? (`/community/profile/${user.uid}` as const) : null;
+
+  const startChangePlan = () => {
+    resetOnboarding();
+    setMode('change');
+    router.push('/onboarding/goal' as never);
+  };
+
+  const accountRows: SettingsRow[] = [
+    {
+      label: 'Change Password',
+      icon: 'lock-closed-outline',
+      onPress: () => router.push('/settings/change-password' as never),
+    },
+    {
+      label: 'Notifications',
+      icon: 'notifications-outline',
+      onPress: () => router.push('/settings/notifications' as never),
+    },
+    {
+      label: 'Change Plan',
+      icon: 'refresh-outline',
+      onPress: startChangePlan,
+    },
+  ];
+
+  const preferenceRows: SettingsRow[] = [
+    {
+      label: 'Units',
+      icon: 'speedometer-outline',
+      onPress: () => router.push('/settings/units' as never),
+    },
+    {
+      label: 'Language',
+      icon: 'language-outline',
+      onPress: () => router.push('/settings/language' as never),
+    },
+    {
+      label: 'Dark Mode',
+      icon: 'moon-outline',
+      onPress: () => router.push('/settings/dark-mode' as never),
+    },
+  ];
+
+  const supportRows: SettingsRow[] = [
+    {
+      label: 'Help & FAQ',
+      icon: 'help-circle-outline',
+      onPress: () => router.push('/settings/help-faq' as never),
+    },
+    {
+      label: 'About',
+      icon: 'information-circle-outline',
+      onPress: () => router.push('/settings/about' as never),
+    },
+    {
+      label: 'Privacy Policy',
+      icon: 'shield-checkmark-outline',
+      onPress: () => router.push('/settings/privacy-policy' as never),
+    },
+    {
+      label: 'Terms of Service',
+      icon: 'document-text-outline',
+      onPress: () => router.push('/settings/terms-of-service' as never),
+    },
+  ];
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -108,7 +158,9 @@ export default function SettingsHub() {
 
         <Pressable
           style={styles.profileCard}
-          onPress={() => router.push('/settings/edit-profile')}
+          onPress={() => {
+            if (profileHref) router.push(profileHref as never);
+          }}
         >
           <View style={styles.avatar}>
             {profile.avatarUri ? (

@@ -42,6 +42,11 @@ export type UserProfile = {
   daysPerWeek?: number;
   primaryGoal?: GoalKey;
   currentPlanId?: string;
+  stats?: {
+    totalWorkouts: number;
+    totalMinutes: number;
+    totalCaloriesKcal: number;
+  };
 };
 
 export type SeedUser = {

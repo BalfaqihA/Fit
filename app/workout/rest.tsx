@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -14,6 +15,7 @@ import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useWorkoutSession } from '@/contexts/workout-session';
 import { useTheme } from '@/hooks/use-theme';
+import { exerciseImageUrl } from '@/lib/exercises';
 import { exerciseXp } from '@/lib/workouts';
 
 const REST_SECONDS = 60;
@@ -162,11 +164,20 @@ export default function RestScreen() {
         <Text style={styles.upNextLabel}>Up next</Text>
         <View style={styles.nextCard}>
           <View style={[styles.nextIcon, { backgroundColor: color + '22' }]}>
-            <MaterialCommunityIcons
-              name={(MUSCLE_ICON[group] ?? 'dumbbell') as never}
-              size={28}
-              color={color}
-            />
+            {nextExercise.images?.[0] ? (
+              <Image
+                source={{ uri: exerciseImageUrl(nextExercise.images[0]) }}
+                style={StyleSheet.absoluteFillObject}
+                contentFit="cover"
+                transition={120}
+              />
+            ) : (
+              <MaterialCommunityIcons
+                name={(MUSCLE_ICON[group] ?? 'dumbbell') as never}
+                size={28}
+                color={color}
+              />
+            )}
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.nextName} numberOfLines={2}>
@@ -298,6 +309,7 @@ const makeStyles = (COLORS: Palette) =>
       borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
+      overflow: 'hidden',
     },
     nextName: { fontSize: 15, fontWeight: '800', color: COLORS.text },
     nextChipRow: {

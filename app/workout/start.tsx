@@ -14,11 +14,12 @@ import {
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { todayDayNumber } from '@/constants/workout-data';
 import { useWorkoutSession } from '@/contexts/workout-session';
 import { usePlan } from '@/hooks/use-plan';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserProfile } from '@/hooks/use-user-profile';
 import { exerciseImageUrl } from '@/lib/exercises';
+import { computeDayNumber, planDayIndex } from '@/lib/plan-day';
 import type { Plan, PlanDay, PlanExercise } from '@/types/plan';
 
 function titleCase(s: string): string {
@@ -35,13 +36,16 @@ export default function StartSession() {
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { startSession } = useWorkoutSession();
   const { plan } = usePlan();
+  const { profile } = useUserProfile();
 
-  const dayNum = todayDayNumber();
+  const dayNum = useMemo(
+    () => computeDayNumber(profile.planStartDate),
+    [profile.planStartDate]
+  );
 
   const planDay: PlanDay | null = useMemo(() => {
     if (!plan || plan.days.length === 0) return null;
-    const idx = (dayNum - 1) % plan.days.length;
-    return plan.days[idx];
+    return plan.days[planDayIndex(dayNum, plan.days.length)];
   }, [plan, dayNum]);
 
   if (!planDay) {
@@ -77,6 +81,7 @@ export default function StartSession() {
       COLORS={COLORS}
       planDay={planDay}
       plan={plan}
+      dayNum={dayNum}
       startSession={startSession}
     />
   );
@@ -87,12 +92,14 @@ function PlanStartView({
   COLORS,
   planDay,
   plan,
+  dayNum,
   startSession,
 }: {
   styles: ReturnType<typeof makeStyles>;
   COLORS: Palette;
   planDay: PlanDay;
   plan: Plan | null;
+  dayNum: number;
   startSession: (day: PlanDay, planId?: string) => void;
 }) {
   const focusMuscles = useMemo(() => {
@@ -187,7 +194,7 @@ function PlanStartView({
                 <View style={styles.bannerDivider} />
                 <Stat value={`${planDay.estimatedMinutes}m`} label="Estimated" />
                 <View style={styles.bannerDivider} />
-                <Stat value={`Day ${planDay.day}`} label="Today" />
+                <Stat value={`Day ${dayNum}`} label="Today" />
               </View>
               {focusMuscles.length > 0 && (
                 <View style={styles.focusRow}>

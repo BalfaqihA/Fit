@@ -2,6 +2,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -13,8 +14,9 @@ import {
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { SESSIONS, USER_STATS, type WorkoutSession } from '@/constants/workout-data';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserProfile } from '@/hooks/use-user-profile';
+import { useWorkoutHistory, type WorkoutSessionDoc } from '@/hooks/use-workout-history';
 
 type Filter = 'All' | 'This Week' | 'This Month';
 const FILTERS: Filter[] = ['All', 'This Week', 'This Month'];
@@ -30,27 +32,29 @@ function startOfWeek(d: Date): Date {
 export default function WorkoutHistory() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  const { profile } = useUserProfile();
+  const { sessions, loading } = useWorkoutHistory();
 
   const [filter, setFilter] = useState<Filter>('All');
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const now = new Date();
-    if (filter === 'All') return SESSIONS;
+    if (filter === 'All') return sessions;
     if (filter === 'This Week') {
       const start = startOfWeek(now);
-      return SESSIONS.filter((s) => new Date(s.date) >= start);
+      return sessions.filter((s) => s.completedAt >= start);
     }
-    return SESSIONS.filter((s) => {
-      const d = new Date(s.date);
+    return sessions.filter((s) => {
+      const d = s.completedAt;
       return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     });
-  }, [filter]);
+  }, [filter, sessions]);
 
   const grouped = useMemo(() => {
-    const map = new Map<string, WorkoutSession[]>();
+    const map = new Map<string, WorkoutSessionDoc[]>();
     for (const s of filtered) {
-      const d = new Date(s.date);
+      const d = s.completedAt;
       const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(s);
@@ -59,14 +63,14 @@ export default function WorkoutHistory() {
       .sort(([a], [b]) => (a > b ? -1 : 1))
       .map(([key, list]) => ({
         key,
-        list: list.sort((a, b) => +new Date(b.date) - +new Date(a.date)),
+        list: list.sort((a, b) => +b.completedAt - +a.completedAt),
       }));
   }, [filtered]);
 
-  const avg =
-    USER_STATS.totalWorkouts === 0
-      ? 0
-      : Math.round(USER_STATS.totalMinutes / USER_STATS.totalWorkouts);
+  const totalWorkouts = profile.stats?.totalWorkouts ?? 0;
+  const totalMinutes = profile.stats?.totalMinutes ?? 0;
+  const totalCalories = profile.stats?.totalCaloriesKcal ?? 0;
+  const avg = totalWorkouts === 0 ? 0 : Math.round(totalMinutes / totalWorkouts);
 
   const iconColor = (i: number) =>
     ['#6C56D9', '#FF6B7A', '#4EA3FF', '#2EC07E', '#F4A93B'][i % 5];
@@ -84,10 +88,9 @@ export default function WorkoutHistory() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.statsRow}>
-          <Stat COLORS={COLORS} label="Workouts" value={USER_STATS.totalWorkouts} />
-          <Stat COLORS={COLORS} label="Minutes" value={USER_STATS.totalMinutes} />
-          <Stat COLORS={COLORS} label="Calories" value={USER_STATS.totalCalories} />
-          <Stat COLORS={COLORS} label="Total XP" value={USER_STATS.totalExp} />
+          <Stat COLORS={COLORS} label="Workouts" value={totalWorkouts} />
+          <Stat COLORS={COLORS} label="Minutes" value={totalMinutes} />
+          <Stat COLORS={COLORS} label="Calories" value={totalCalories} />
         </View>
 
         <View style={styles.infoBanner}>
@@ -119,7 +122,11 @@ export default function WorkoutHistory() {
           })}
         </View>
 
-        {grouped.length === 0 ? (
+        {loading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator color={COLORS.primary} />
+          </View>
+        ) : grouped.length === 0 ? (
           <View style={styles.emptyCard}>
             <MaterialCommunityIcons name="dumbbell" size={32} color={COLORS.muted} />
             <Text style={styles.emptyTitle}>No workouts yet</Text>
@@ -127,7 +134,7 @@ export default function WorkoutHistory() {
             <View style={{ height: 12 }} />
             <PrimaryButton
               label="Start a Workout"
-              onPress={() => router.push('/workout/plan' as never)}
+              onPress={() => router.push('/workout/start' as never)}
               icon={<Ionicons name="arrow-forward" size={16} color="#fff" />}
             />
           </View>
@@ -145,7 +152,7 @@ export default function WorkoutHistory() {
                 </Text>
                 {list.map((s, i) => {
                   const isOpen = expanded === s.id;
-                  const dd = new Date(s.date);
+                  const dd = s.completedAt;
                   return (
                     <Pressable
                       key={s.id}
@@ -174,10 +181,10 @@ export default function WorkoutHistory() {
                             })}
                           </Text>
                           <Text style={styles.cardMeta}>
-                            {s.duration} min · {s.calories} kcal · {s.exercisesCompleted} ex
+                            {s.durationMin} min · {s.caloriesKcal} kcal · {s.exercisesCompleted} ex
                           </Text>
                         </View>
-                        <Text style={styles.cardXp}>+{s.expEarned}</Text>
+                        <Text style={styles.cardXp}>+{s.xp}</Text>
                         <Ionicons
                           name={isOpen ? 'chevron-up' : 'chevron-down'}
                           size={16}
@@ -197,19 +204,19 @@ export default function WorkoutHistory() {
                             COLORS={COLORS}
                             icon="time-outline"
                             label="Duration"
-                            value={`${s.duration} min`}
+                            value={`${s.durationMin} min`}
                           />
                           <Detail
                             COLORS={COLORS}
                             icon="flame-outline"
                             label="Calories"
-                            value={`${s.calories}`}
+                            value={`${s.caloriesKcal}`}
                           />
                           <Detail
                             COLORS={COLORS}
                             icon="flash-outline"
                             label="XP"
-                            value={`+${s.expEarned}`}
+                            value={`+${s.xp}`}
                           />
                         </View>
                       )}
@@ -305,6 +312,7 @@ const makeStyles = (COLORS: Palette) =>
       borderColor: COLORS.primary,
     },
     filterPillText: { fontSize: 12, fontWeight: '800', color: COLORS.muted },
+    loadingWrap: { padding: 24, alignItems: 'center' },
     monthHeader: {
       fontSize: 13,
       fontWeight: '800',

@@ -12,11 +12,11 @@ import {
 } from 'react-native';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { todayDayNumber } from '@/constants/workout-data';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlan } from '@/hooks/use-plan';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
+import { computeDayNumber, planDayIndex } from '@/lib/plan-day';
 
 const primaryActions: {
   label: string;
@@ -57,12 +57,17 @@ export default function HomeTab() {
 
   const { plan } = usePlan();
 
+  const dayNumber = useMemo(
+    () => computeDayNumber(profile.planStartDate),
+    [profile.planStartDate]
+  );
+
   const personalizedDay = useMemo(() => {
     if (!plan || plan.days.length === 0) return null;
-    const dayIndex = (todayDayNumber() - 1) % plan.days.length;
-    return plan.days[dayIndex];
-  }, [plan]);
+    return plan.days[planDayIndex(dayNumber, plan.days.length)];
+  }, [plan, dayNumber]);
 
+  const heroLabel = personalizedDay ? `Day ${dayNumber}` : "Today's session";
   const heroTitle = personalizedDay ? personalizedDay.title : 'Generate your plan';
   const heroMeta = personalizedDay
     ? `${personalizedDay.estimatedMinutes} min · ${personalizedDay.exercises.length} exercises`
@@ -116,7 +121,7 @@ export default function HomeTab() {
           style={styles.heroCard}
         >
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroLabel}>Today&apos;s session</Text>
+            <Text style={styles.heroLabel}>{heroLabel}</Text>
             <Text style={styles.heroTitle}>{heroTitle}</Text>
             <Text style={styles.heroMeta}>{heroMeta}</Text>
           </View>

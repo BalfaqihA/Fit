@@ -7,6 +7,7 @@ import {
 } from 'firebase/firestore';
 
 import { db } from '@/lib/firebase';
+import { todayIso } from '@/lib/plan-day';
 import type { PlanExercise } from '@/types/plan';
 
 export const exerciseXp = (e: Pick<PlanExercise, 'sets' | 'reps'>) =>
@@ -19,6 +20,8 @@ export type CompletedWorkoutPayload = {
   caloriesKcal: number;
   exercisesCompleted: number;
   xp: number;
+  /** When provided (the user has no `planStartDate` yet), stamps the user doc with this ISO date. */
+  setPlanStartDate?: boolean;
 };
 
 export async function recordCompletedWorkout(
@@ -28,18 +31,17 @@ export async function recordCompletedWorkout(
   const userRef = doc(db, 'users', uid);
   const workoutRef = doc(collection(db, 'users', uid, 'workouts'));
   const batch = writeBatch(db);
-  batch.set(workoutRef, { ...payload, completedAt: serverTimestamp() });
-  batch.set(
-    userRef,
-    {
-      stats: {
-        totalWorkouts: increment(1),
-        totalMinutes: increment(payload.durationMin),
-        totalCaloriesKcal: increment(payload.caloriesKcal),
-      },
+  const { setPlanStartDate, ...session } = payload;
+  batch.set(workoutRef, { ...session, completedAt: serverTimestamp() });
+  const userPatch: Record<string, unknown> = {
+    stats: {
+      totalWorkouts: increment(1),
+      totalMinutes: increment(payload.durationMin),
+      totalCaloriesKcal: increment(payload.caloriesKcal),
     },
-    { merge: true },
-  );
+  };
+  if (setPlanStartDate) userPatch.planStartDate = todayIso();
+  batch.set(userRef, userPatch, { merge: true });
   await batch.commit();
   return workoutRef.id;
 }

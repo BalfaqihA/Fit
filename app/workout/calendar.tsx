@@ -11,8 +11,11 @@ import {
 
 import { BackButton } from '@/components/back-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { SESSIONS, USER_STATS } from '@/constants/workout-data';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserProfile } from '@/hooks/use-user-profile';
+import { useWorkoutHistory } from '@/hooks/use-workout-history';
+import { usePlan } from '@/hooks/use-plan';
+import { computeStreak, isoToLocalDayStart } from '@/lib/plan-day';
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS = [
@@ -30,6 +33,9 @@ const MONTHS = [
   'December',
 ];
 
+const PLAN_HORIZON_DAYS = 60;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 function toIsoDate(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
@@ -38,9 +44,16 @@ function daysInMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
 }
 
+function dateToIso(d: Date): string {
+  return toIsoDate(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
 export default function WorkoutCalendar() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  const { profile } = useUserProfile();
+  const { sessions } = useWorkoutHistory();
+  const { plan } = usePlan();
 
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -48,35 +61,50 @@ export default function WorkoutCalendar() {
 
   const workoutDays = useMemo(() => {
     const set = new Set<string>();
-    for (const s of SESSIONS) {
-      const d = new Date(s.date);
-      set.add(toIsoDate(d.getFullYear(), d.getMonth(), d.getDate()));
+    for (const s of sessions) set.add(dateToIso(s.completedAt));
+    return set;
+  }, [sessions]);
+
+  const plannedDays = useMemo(() => {
+    const set = new Set<string>();
+    if (!plan || plan.days.length === 0 || !profile.planStartDate) return set;
+    const startMs = isoToLocalDayStart(profile.planStartDate);
+    for (let i = 0; i < PLAN_HORIZON_DAYS; i++) {
+      const d = new Date(startMs + i * MS_PER_DAY);
+      set.add(dateToIso(d));
     }
     return set;
-  }, []);
+  }, [plan, profile.planStartDate]);
 
   const monthSessions = useMemo(
     () =>
-      SESSIONS.filter((s) => {
-        const d = new Date(s.date);
+      sessions.filter((s) => {
+        const d = s.completedAt;
         return d.getFullYear() === year && d.getMonth() === month;
-      }).sort((a, b) => +new Date(b.date) - +new Date(a.date)),
-    [year, month]
+      }),
+    [sessions, year, month]
   );
 
   const monthTotals = useMemo(
     () => ({
       workouts: monthSessions.length,
-      minutes: monthSessions.reduce((n, s) => n + s.duration, 0),
-      calories: monthSessions.reduce((n, s) => n + s.calories, 0),
-      xp: monthSessions.reduce((n, s) => n + s.expEarned, 0),
+      minutes: monthSessions.reduce((n, s) => n + s.durationMin, 0),
+      calories: monthSessions.reduce((n, s) => n + s.caloriesKcal, 0),
+      xp: monthSessions.reduce((n, s) => n + s.xp, 0),
     }),
     [monthSessions]
   );
 
+  const streak = useMemo(
+    () => computeStreak(sessions.map((s) => s.completedAt)),
+    [sessions]
+  );
+
+  const totalWorkouts = profile.stats?.totalWorkouts ?? 0;
+
   const firstWeekday = new Date(year, month, 1).getDay();
   const total = daysInMonth(year, month);
-  const todayIso = toIsoDate(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayIso = dateToIso(now);
 
   const cells: (number | null)[] = [];
   for (let i = 0; i < firstWeekday; i++) cells.push(null);
@@ -113,7 +141,7 @@ export default function WorkoutCalendar() {
         <View style={styles.stripRow}>
           <View style={styles.stripCard}>
             <Ionicons name="flame" size={20} color="#FF8A3D" />
-            <Text style={styles.stripValue}>{USER_STATS.dayStreak}</Text>
+            <Text style={styles.stripValue}>{streak}</Text>
             <Text style={styles.stripLabel}>Day Streak</Text>
           </View>
           <View style={styles.stripCard}>
@@ -122,7 +150,7 @@ export default function WorkoutCalendar() {
               size={20}
               color={COLORS.primary}
             />
-            <Text style={styles.stripValue}>{USER_STATS.totalWorkouts}</Text>
+            <Text style={styles.stripValue}>{totalWorkouts}</Text>
             <Text style={styles.stripLabel}>Total Workouts</Text>
           </View>
         </View>
@@ -153,6 +181,7 @@ export default function WorkoutCalendar() {
               if (d === null) return <View key={`b-${i}`} style={styles.cell} />;
               const iso = toIsoDate(year, month, d);
               const isWorkout = workoutDays.has(iso);
+              const isPlanned = plannedDays.has(iso) && !isWorkout;
               const isToday = iso === todayIso;
               return (
                 <View
@@ -160,6 +189,7 @@ export default function WorkoutCalendar() {
                   style={[
                     styles.cell,
                     isWorkout && styles.cellWorkout,
+                    isPlanned && styles.cellPlanned,
                     isToday && !isWorkout && styles.cellToday,
                   ]}
                 >
@@ -182,6 +212,15 @@ export default function WorkoutCalendar() {
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: COLORS.primary }]} />
               <Text style={styles.legendText}>Workout</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View
+                style={[
+                  styles.legendDot,
+                  { backgroundColor: COLORS.primarySoft },
+                ]}
+              />
+              <Text style={styles.legendText}>Planned</Text>
             </View>
             <View style={styles.legendItem}>
               <View
@@ -210,29 +249,32 @@ export default function WorkoutCalendar() {
             <Text style={styles.emptyText}>No workouts this month yet.</Text>
           </View>
         ) : (
-          monthSessions.map((s) => {
-            const d = new Date(s.date);
-            return (
-              <View key={s.id} style={styles.sessionRow}>
-                <View style={styles.sessionIcon}>
-                  <MaterialCommunityIcons name="dumbbell" size={20} color={COLORS.primary} />
+          monthSessions
+            .slice()
+            .sort((a, b) => +b.completedAt - +a.completedAt)
+            .map((s) => {
+              const d = s.completedAt;
+              return (
+                <View key={s.id} style={styles.sessionRow}>
+                  <View style={styles.sessionIcon}>
+                    <MaterialCommunityIcons name="dumbbell" size={20} color={COLORS.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sessionDate}>
+                      {d.toLocaleDateString(undefined, {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </Text>
+                    <Text style={styles.sessionMeta}>
+                      {s.durationMin} min · {s.caloriesKcal} kcal · {s.exercisesCompleted} ex
+                    </Text>
+                  </View>
+                  <Text style={styles.sessionXp}>+{s.xp}</Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.sessionDate}>
-                    {d.toLocaleDateString(undefined, {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </Text>
-                  <Text style={styles.sessionMeta}>
-                    {s.duration} min · {s.calories} kcal · {s.exercisesCompleted} ex
-                  </Text>
-                </View>
-                <Text style={styles.sessionXp}>+{s.expEarned}</Text>
-              </View>
-            );
-          })
+              );
+            })
         )}
       </ScrollView>
     </SafeAreaView>
@@ -322,6 +364,10 @@ const makeStyles = (COLORS: Palette) =>
     },
     cellWorkout: {
       backgroundColor: COLORS.primary,
+      borderRadius: 12,
+    },
+    cellPlanned: {
+      backgroundColor: COLORS.primarySoft,
       borderRadius: 12,
     },
     cellToday: {

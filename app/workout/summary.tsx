@@ -3,7 +3,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef } from 'react';
 import {
-  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -17,6 +16,7 @@ import { USER_STATS } from '@/constants/workout-data';
 import { useWorkoutSession } from '@/contexts/workout-session';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserProfile } from '@/hooks/use-user-profile';
 import { recordCompletedWorkout } from '@/lib/workouts';
 
 export default function WorkoutSummary() {
@@ -24,6 +24,7 @@ export default function WorkoutSummary() {
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { reset } = useWorkoutSession();
   const { user } = useAuth();
+  const { profile } = useUserProfile();
 
   const params = useLocalSearchParams<{
     duration?: string;
@@ -53,6 +54,7 @@ export default function WorkoutSummary() {
             caloriesKcal: calories,
             exercisesCompleted: done,
             xp,
+            setPlanStartDate: !profile.planStartDate,
           });
         } catch {
           // non-blocking; UI is already shown
@@ -61,7 +63,17 @@ export default function WorkoutSummary() {
       reset();
     };
     run();
-  }, [user, duration, calories, done, xp, reset, params.planId, params.dayNum]);
+  }, [
+    user,
+    duration,
+    calories,
+    done,
+    xp,
+    reset,
+    params.planId,
+    params.dayNum,
+    profile.planStartDate,
+  ]);
 
   const baseExp = 50;
   const durationBonus = duration * 3;
@@ -171,13 +183,6 @@ export default function WorkoutSummary() {
           onPress={() => router.replace('/(tabs)' as never)}
           icon={<Ionicons name="home-outline" size={18} color="#fff" />}
         />
-        <View style={{ height: 10 }} />
-        <Pressable
-          onPress={() => router.replace('/workout/plan' as never)}
-          style={styles.outlineBtn}
-        >
-          <Text style={styles.outlineBtnText}>Start Another Workout</Text>
-        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -334,17 +339,4 @@ const makeStyles = (COLORS: Palette) =>
       marginTop: 8,
     },
     progressMeta: { fontSize: 12, color: COLORS.muted, fontWeight: '600' },
-    outlineBtn: {
-      height: 52,
-      borderRadius: RADIUS.md,
-      borderWidth: 2,
-      borderColor: COLORS.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    outlineBtnText: {
-      color: COLORS.primary,
-      fontSize: 15,
-      fontWeight: '800',
-    },
   });

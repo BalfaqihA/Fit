@@ -42,6 +42,8 @@ export type UserProfile = {
   daysPerWeek?: number;
   primaryGoal?: GoalKey;
   currentPlanId?: string;
+  /** ISO `YYYY-MM-DD` of the day the user completed their first workout. */
+  planStartDate?: string;
   stats?: {
     totalWorkouts: number;
     totalMinutes: number;

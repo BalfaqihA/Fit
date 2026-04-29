@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
@@ -9,91 +10,123 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import {
-  EXERCISES,
-  type Exercise,
-  type MuscleGroup,
-  muscleColor,
-} from '@/constants/workout-data';
 import { useTheme } from '@/hooks/use-theme';
+import {
+  ALL_EXERCISES,
+  exerciseImageUrl,
+  type ExerciseRecord,
+} from '@/lib/exercises';
 
-const FILTERS: (MuscleGroup | 'All')[] = [
-  'All',
-  'Chest',
-  'Back',
-  'Legs',
-  'Shoulders',
-  'Arms',
-  'Core',
-  'Full Body',
-];
+const SUGGESTION_LIMIT = 8;
+const FILTER_ALL = 'All';
 
-const MUSCLE_ICON: Record<MuscleGroup, string> = {
-  Chest: 'human-handsup',
-  Back: 'human-handsdown',
-  Legs: 'run-fast',
-  Shoulders: 'weight-lifter',
-  Arms: 'arm-flex',
-  Core: 'meditation',
-  'Full Body': 'dumbbell',
-};
+function titleCase(s: string): string {
+  if (!s) return s;
+  return s
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
 
 export default function WorkoutPlan() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
 
-  const [filter, setFilter] = useState<MuscleGroup | 'All'>('All');
+  const [filter, setFilter] = useState<string>(FILTER_ALL);
+  const [query, setQuery] = useState('');
 
-  const list = useMemo(
-    () => (filter === 'All' ? EXERCISES : EXERCISES.filter((e) => e.muscle === filter)),
-    [filter]
-  );
+  const filterOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of ALL_EXERCISES) {
+      for (const m of e.primaryMuscles) set.add(m);
+    }
+    return [FILTER_ALL, ...Array.from(set).sort()];
+  }, []);
 
-  const totalXp = useMemo(
-    () => EXERCISES.reduce((sum, e) => sum + e.xp, 0),
-    []
-  );
+  const heroStats = useMemo(() => {
+    const muscles = new Set<string>();
+    const equipment = new Set<string>();
+    for (const e of ALL_EXERCISES) {
+      for (const m of e.primaryMuscles) muscles.add(m);
+      if (e.equipment) equipment.add(e.equipment);
+    }
+    return {
+      total: ALL_EXERCISES.length,
+      muscles: muscles.size,
+      equipment: equipment.size,
+    };
+  }, []);
 
-  const renderItem = ({ item }: { item: Exercise }) => {
-    const color = muscleColor(item.muscle, COLORS);
+  const trimmedQuery = query.trim().toLowerCase();
+
+  const list = useMemo(() => {
+    return ALL_EXERCISES.filter((e) => {
+      if (filter !== FILTER_ALL && !e.primaryMuscles.includes(filter)) return false;
+      if (trimmedQuery && !e.name.toLowerCase().includes(trimmedQuery)) return false;
+      return true;
+    });
+  }, [filter, trimmedQuery]);
+
+  const suggestions = useMemo(() => {
+    if (!trimmedQuery) return [];
+    return ALL_EXERCISES.filter((e) =>
+      e.name.toLowerCase().includes(trimmedQuery)
+    ).slice(0, SUGGESTION_LIMIT);
+  }, [trimmedQuery]);
+
+  const renderItem = ({ item }: { item: ExerciseRecord }) => {
+    const thumb = item.images?.[0];
+    const muscle = item.primaryMuscles[0];
     return (
       <Pressable
         onPress={() => router.push(`/workout/exercise/${item.id}` as never)}
         style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
       >
-        <View style={[styles.cardIcon, { backgroundColor: color + '22' }]}>
-          <MaterialCommunityIcons
-            name={MUSCLE_ICON[item.muscle] as never}
-            size={26}
-            color={color}
-          />
+        <View style={styles.cardThumb}>
+          {thumb ? (
+            <Image
+              source={{ uri: exerciseImageUrl(thumb) }}
+              style={StyleSheet.absoluteFillObject}
+              contentFit="cover"
+              transition={120}
+            />
+          ) : (
+            <MaterialCommunityIcons
+              name="dumbbell"
+              size={26}
+              color={COLORS.primary}
+            />
+          )}
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardName} numberOfLines={1}>
+          <Text style={styles.cardName} numberOfLines={2}>
             {item.name}
           </Text>
           <View style={styles.cardChipRow}>
-            <View style={[styles.chip, { backgroundColor: color + '22' }]}>
-              <Text style={[styles.chipText, { color }]}>{item.muscle}</Text>
-            </View>
-            <View style={styles.chipOutline}>
-              <Text style={styles.chipOutlineText}>{item.level}</Text>
-            </View>
+            {muscle ? (
+              <View style={styles.chip}>
+                <Text style={styles.chipText}>{titleCase(muscle)}</Text>
+              </View>
+            ) : null}
+            {item.level !== 'unknown' ? (
+              <View style={styles.chipOutline}>
+                <Text style={styles.chipOutlineText}>{titleCase(item.level)}</Text>
+              </View>
+            ) : null}
           </View>
-          <Text style={styles.cardMeta}>
-            {item.sets} × {item.reps ? `${item.reps} reps` : `${item.holdSec}s hold`}
-          </Text>
+          {item.equipment ? (
+            <Text style={styles.cardMeta}>{titleCase(item.equipment)}</Text>
+          ) : null}
         </View>
-        <View style={styles.xpBadge}>
-          <Ionicons name="flash" size={12} color={COLORS.primary} />
-          <Text style={styles.xpBadgeText}>+{item.xp}</Text>
-        </View>
+        <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
       </Pressable>
     );
   };
@@ -110,6 +143,7 @@ export default function WorkoutPlan() {
         data={list}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
+        keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View>
             <LinearGradient
@@ -118,28 +152,71 @@ export default function WorkoutPlan() {
               end={{ x: 1, y: 1 }}
               style={styles.banner}
             >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.bannerLabel}>Beginner Plan</Text>
-                <Text style={styles.bannerTitle}>
-                  {EXERCISES.length} exercises
-                </Text>
-                <Text style={styles.bannerMeta}>~{totalXp.toLocaleString()} XP total</Text>
+              <Text style={styles.bannerLabel}>Exercise Library</Text>
+              <View style={styles.bannerRow}>
+                <BannerStat value={heroStats.total} label="Exercises" />
+                <View style={styles.bannerDivider} />
+                <BannerStat value={heroStats.muscles} label="Muscles" />
+                <View style={styles.bannerDivider} />
+                <BannerStat value={heroStats.equipment} label="Equipment" />
               </View>
-              <Pressable
-                onPress={() => router.push('/workout/week-plan' as never)}
-                style={styles.bannerCta}
-              >
-                <Text style={styles.bannerCtaText}>My Plan</Text>
-                <Ionicons name="chevron-forward" size={16} color="#6C56D9" />
-              </Pressable>
             </LinearGradient>
+
+            <View style={styles.searchWrap}>
+              <View style={styles.searchBar}>
+                <Ionicons name="search" size={16} color={COLORS.muted} />
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Search exercises…"
+                  placeholderTextColor={COLORS.muted}
+                  style={styles.searchInput}
+                  autoCorrect={false}
+                  returnKeyType="search"
+                />
+                {query.length > 0 && (
+                  <Pressable onPress={() => setQuery('')} hitSlop={8}>
+                    <Ionicons name="close-circle" size={16} color={COLORS.muted} />
+                  </Pressable>
+                )}
+              </View>
+
+              {suggestions.length > 0 && (
+                <View style={styles.suggestionPanel}>
+                  {suggestions.map((s) => (
+                    <Pressable
+                      key={s.id}
+                      onPress={() => {
+                        setQuery('');
+                        router.push(`/workout/exercise/${s.id}` as never);
+                      }}
+                      style={({ pressed }) => [
+                        styles.suggestionRow,
+                        pressed && { backgroundColor: COLORS.primarySoft },
+                      ]}
+                    >
+                      <Ionicons name="search-outline" size={14} color={COLORS.muted} />
+                      <Text style={styles.suggestionText} numberOfLines={1}>
+                        {s.name}
+                      </Text>
+                      {s.primaryMuscles[0] && (
+                        <Text style={styles.suggestionMeta}>
+                          {titleCase(s.primaryMuscles[0])}
+                        </Text>
+                      )}
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
 
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filterRow}
+              keyboardShouldPersistTaps="handled"
             >
-              {FILTERS.map((f) => {
+              {filterOptions.map((f) => {
                 const active = f === filter;
                 return (
                   <Pressable
@@ -156,7 +233,7 @@ export default function WorkoutPlan() {
                         active && styles.filterChipTextActive,
                       ]}
                     >
-                      {f}
+                      {f === FILTER_ALL ? f : titleCase(f)}
                     </Text>
                   </Pressable>
                 );
@@ -165,6 +242,14 @@ export default function WorkoutPlan() {
 
             <Text style={styles.sectionTitle}>
               {list.length} {list.length === 1 ? 'exercise' : 'exercises'}
+            </Text>
+          </View>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyCard}>
+            <MaterialCommunityIcons name="magnify-close" size={32} color={COLORS.muted} />
+            <Text style={styles.emptyText}>
+              No exercises match your filters.
             </Text>
           </View>
         }
@@ -184,6 +269,27 @@ export default function WorkoutPlan() {
   );
 }
 
+function BannerStat({ value, label }: { value: number; label: string }) {
+  return (
+    <View style={{ flex: 1 }}>
+      <Text style={bannerStatStyles.value}>{value.toLocaleString()}</Text>
+      <Text style={bannerStatStyles.label}>{label}</Text>
+    </View>
+  );
+}
+
+const bannerStatStyles = StyleSheet.create({
+  value: { color: '#FFFFFF', fontSize: 20, fontWeight: '800' },
+  label: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+});
+
 const makeStyles = (COLORS: Palette) =>
   StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: COLORS.bg },
@@ -200,8 +306,6 @@ const makeStyles = (COLORS: Palette) =>
       borderRadius: RADIUS.lg,
       padding: 18,
       marginBottom: 16,
-      flexDirection: 'row',
-      alignItems: 'center',
       ...SHADOWS.button,
     },
     bannerLabel: {
@@ -210,28 +314,67 @@ const makeStyles = (COLORS: Palette) =>
       fontWeight: '700',
       letterSpacing: 0.6,
       textTransform: 'uppercase',
+      marginBottom: 12,
     },
-    bannerTitle: {
-      color: '#FFFFFF',
-      fontSize: 22,
-      fontWeight: '800',
-      marginTop: 4,
-    },
-    bannerMeta: {
-      color: 'rgba(255,255,255,0.85)',
-      fontSize: 13,
-      marginTop: 2,
-    },
-    bannerCta: {
-      backgroundColor: '#FFFFFF',
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderRadius: RADIUS.pill,
+    bannerRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
     },
-    bannerCtaText: { color: '#6C56D9', fontSize: 13, fontWeight: '800' },
+    bannerDivider: {
+      width: 1,
+      height: 30,
+      backgroundColor: 'rgba(255,255,255,0.25)',
+      marginHorizontal: 8,
+    },
+    searchWrap: {
+      marginBottom: 12,
+      position: 'relative',
+      zIndex: 10,
+    },
+    searchBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: COLORS.card,
+      borderRadius: RADIUS.md,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderWidth: 1,
+      borderColor: COLORS.border,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 14,
+      color: COLORS.text,
+      paddingVertical: 0,
+    },
+    suggestionPanel: {
+      marginTop: 6,
+      backgroundColor: COLORS.card,
+      borderRadius: RADIUS.md,
+      borderWidth: 1,
+      borderColor: COLORS.border,
+      overflow: 'hidden',
+      ...SHADOWS.card,
+    },
+    suggestionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    suggestionText: {
+      flex: 1,
+      fontSize: 13,
+      fontWeight: '700',
+      color: COLORS.text,
+    },
+    suggestionMeta: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: COLORS.muted,
+    },
     filterRow: { gap: 8, paddingVertical: 4, paddingRight: 8 },
     filterChip: {
       paddingHorizontal: 14,
@@ -268,12 +411,14 @@ const makeStyles = (COLORS: Palette) =>
       gap: 12,
       ...SHADOWS.card,
     },
-    cardIcon: {
+    cardThumb: {
       width: 56,
       height: 56,
       borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
+      overflow: 'hidden',
+      backgroundColor: COLORS.primarySoft,
     },
     cardName: { fontSize: 15, fontWeight: '800', color: COLORS.text },
     cardChipRow: { flexDirection: 'row', gap: 6, marginTop: 4 },
@@ -281,8 +426,9 @@ const makeStyles = (COLORS: Palette) =>
       paddingHorizontal: 8,
       paddingVertical: 2,
       borderRadius: RADIUS.pill,
+      backgroundColor: COLORS.primarySoft,
     },
-    chipText: { fontSize: 11, fontWeight: '700' },
+    chipText: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
     chipOutline: {
       paddingHorizontal: 8,
       paddingVertical: 2,
@@ -292,23 +438,23 @@ const makeStyles = (COLORS: Palette) =>
     },
     chipOutlineText: { fontSize: 11, fontWeight: '700', color: COLORS.muted },
     cardMeta: {
-      fontSize: 12,
+      fontSize: 11,
       color: COLORS.muted,
       marginTop: 4,
-      fontWeight: '600',
+      fontWeight: '700',
     },
-    xpBadge: {
-      flexDirection: 'row',
+    emptyCard: {
       alignItems: 'center',
-      gap: 3,
-      backgroundColor: COLORS.primarySoft,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: RADIUS.pill,
+      padding: 24,
+      backgroundColor: COLORS.card,
+      borderRadius: RADIUS.md,
+      ...SHADOWS.card,
     },
-    xpBadgeText: {
-      color: COLORS.primary,
-      fontSize: 12,
-      fontWeight: '800',
+    emptyText: {
+      fontSize: 13,
+      color: COLORS.muted,
+      marginTop: 8,
+      textAlign: 'center',
+      fontWeight: '600',
     },
   });

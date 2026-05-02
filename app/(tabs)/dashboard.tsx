@@ -12,19 +12,59 @@ import {
 } from 'react-native';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import {
-  ACTIVITY_TOTALS,
-  BODY_STATS,
-  PERSONAL_RECORDS,
-  WEEKLY_BARS,
-} from '@/constants/dashboard-data';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserProfile } from '@/hooks/use-user-profile';
+import { useWeeklyStats } from '@/hooks/use-weekly-stats';
+import { useDerivedRecords } from '@/hooks/use-derived-records';
+import { useMeasurements } from '@/hooks/use-measurements';
+import { bmiFromKg } from '@/lib/measurements';
 
 export default function DashboardTab() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  const { profile } = useUserProfile();
+  const { bars, totals, currentStreak } = useWeeklyStats();
+  const records = useDerivedRecords();
+  const { latestWeight, measurements } = useMeasurements();
 
-  const topPRs = PERSONAL_RECORDS.slice(0, 3);
+  const topPRs = records.slice(0, 3);
+
+  const heightCm = profile.heightCm ?? 0;
+  const bmi = bmiFromKg(latestWeight, heightCm);
+
+  const bodyStats = useMemo(() => {
+    const items: {
+      key: 'weight' | 'bmi';
+      label: string;
+      value: string;
+      unit: string;
+      change: string;
+      trend: 'up' | 'down';
+    }[] = [];
+    const first = measurements[0];
+    const weightDelta =
+      first && latestWeight ? latestWeight - first.weightKg : 0;
+    items.push({
+      key: 'weight',
+      label: 'Weight',
+      value: latestWeight ? latestWeight.toFixed(1) : '--',
+      unit: 'kg',
+      change:
+        weightDelta === 0
+          ? '0.0 kg'
+          : `${weightDelta > 0 ? '+' : ''}${weightDelta.toFixed(1)} kg`,
+      trend: weightDelta <= 0 ? 'down' : 'up',
+    });
+    items.push({
+      key: 'bmi',
+      label: 'BMI',
+      value: bmi ? bmi.toFixed(1) : '--',
+      unit: '',
+      change: heightCm ? 'Updated' : 'Set height',
+      trend: 'down',
+    });
+    return items;
+  }, [measurements, latestWeight, bmi, heightCm]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -53,19 +93,17 @@ export default function DashboardTab() {
             </View>
             <View style={styles.overviewRow}>
               <View style={styles.overviewItem}>
-                <Text style={styles.overviewValue}>{ACTIVITY_TOTALS.minutes}</Text>
+                <Text style={styles.overviewValue}>{totals.minutes}</Text>
                 <Text style={styles.overviewMeta}>minutes</Text>
               </View>
               <View style={styles.overviewDivider} />
               <View style={styles.overviewItem}>
-                <Text style={styles.overviewValue}>
-                  {(ACTIVITY_TOTALS.calories / 1000).toFixed(1)}k
-                </Text>
+                <Text style={styles.overviewValue}>{formatK(totals.calories)}</Text>
                 <Text style={styles.overviewMeta}>calories</Text>
               </View>
               <View style={styles.overviewDivider} />
               <View style={styles.overviewItem}>
-                <Text style={styles.overviewValue}>{ACTIVITY_TOTALS.workouts}</Text>
+                <Text style={styles.overviewValue}>{totals.workouts}</Text>
                 <Text style={styles.overviewMeta}>workouts</Text>
               </View>
             </View>
@@ -79,18 +117,20 @@ export default function DashboardTab() {
           <View style={styles.chartHeader}>
             <View>
               <Text style={styles.sectionTitle}>Activity</Text>
-              <Text style={styles.sectionSubtle}>Last 7 days</Text>
+              <Text style={styles.sectionSubtle}>
+                Last 7 days · {currentStreak}d streak
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
           </View>
           <View style={styles.chart}>
-            {WEEKLY_BARS.map((bar, idx) => (
-              <View key={`${bar.day}-${idx}`} style={styles.barColumn}>
+            {bars.map((bar, idx) => (
+              <View key={`${bar.dateIso}-${idx}`} style={styles.barColumn}>
                 <View style={styles.barTrack}>
                   <View
                     style={[
                       styles.barFill,
-                      { height: `${bar.value * 100}%` },
+                      { height: `${Math.max(bar.value * 100, bar.minutes > 0 ? 10 : 0)}%` },
                     ]}
                   />
                 </View>
@@ -110,38 +150,50 @@ export default function DashboardTab() {
           </Pressable>
         </View>
 
-        {topPRs.map((pr) => (
-          <Pressable
-            key={pr.id}
-            style={({ pressed }) => [styles.prCard, pressed && { opacity: 0.85 }]}
-            onPress={() =>
-              router.push(`/dashboard/personal-record/${pr.id}` as never)
-            }
-          >
-            <View style={styles.prIcon}>
-              <MaterialCommunityIcons
-                name={pr.icon as never}
-                size={22}
-                color={COLORS.primary}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.prLabel}>{pr.label}</Text>
-              <Text style={styles.prValue}>
-                {pr.value}
-                {pr.unit !== 'time' ? ` ${pr.unit}` : ''}
-              </Text>
-            </View>
-            <View style={styles.prDelta}>
-              <Ionicons
-                name={pr.trend === 'down' ? 'arrow-down' : 'arrow-up'}
-                size={12}
-                color={COLORS.success}
-              />
-              <Text style={styles.prDeltaText}>{pr.delta}</Text>
-            </View>
-          </Pressable>
-        ))}
+        {topPRs.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <MaterialCommunityIcons
+              name="trophy-outline"
+              size={28}
+              color={COLORS.muted}
+            />
+            <Text style={styles.emptyText}>
+              Finish a workout to start earning records.
+            </Text>
+          </View>
+        ) : (
+          topPRs.map((pr) => (
+            <Pressable
+              key={pr.id}
+              style={({ pressed }) => [styles.prCard, pressed && { opacity: 0.85 }]}
+              onPress={() =>
+                router.push(`/dashboard/personal-record/${pr.id}` as never)
+              }
+            >
+              <View style={styles.prIcon}>
+                <MaterialCommunityIcons
+                  name={pr.icon as never}
+                  size={22}
+                  color={COLORS.primary}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.prLabel}>{pr.label}</Text>
+                <Text style={styles.prValue}>
+                  {pr.value} {pr.unit}
+                </Text>
+              </View>
+              <View style={styles.prDelta}>
+                <Ionicons
+                  name={pr.trend === 'down' ? 'arrow-down' : 'arrow-up'}
+                  size={12}
+                  color={COLORS.success}
+                />
+                <Text style={styles.prDeltaText}>{pr.delta}</Text>
+              </View>
+            </Pressable>
+          ))
+        )}
 
         <View style={[styles.sectionHeader, { marginTop: 22 }]}>
           <Text style={styles.sectionTitle}>Body stats</Text>
@@ -153,7 +205,7 @@ export default function DashboardTab() {
           </Pressable>
         </View>
         <View style={styles.bodyRow}>
-          {BODY_STATS.map((stat) => (
+          {bodyStats.map((stat) => (
             <Pressable
               key={stat.key}
               style={({ pressed }) => [styles.bodyCard, pressed && { opacity: 0.85 }]}
@@ -164,7 +216,7 @@ export default function DashboardTab() {
               <Text style={styles.bodyLabel}>{stat.label}</Text>
               <Text style={styles.bodyValue}>
                 {stat.value}
-                {stat.unit && stat.unit !== '%' ? ` ${stat.unit}` : stat.unit}
+                {stat.unit ? ` ${stat.unit}` : ''}
               </Text>
               <View style={styles.bodyTrend}>
                 <Ionicons
@@ -180,6 +232,11 @@ export default function DashboardTab() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function formatK(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return `${n}`;
 }
 
 const makeStyles = (COLORS: Palette) =>
@@ -333,5 +390,20 @@ const makeStyles = (COLORS: Palette) =>
       fontSize: 12,
       color: COLORS.success,
       fontWeight: '700',
+    },
+    emptyCard: {
+      alignItems: 'center',
+      gap: 8,
+      padding: 22,
+      backgroundColor: COLORS.card,
+      borderRadius: RADIUS.md,
+      marginBottom: 8,
+      ...SHADOWS.card,
+    },
+    emptyText: {
+      color: COLORS.muted,
+      fontSize: 13,
+      fontWeight: '600',
+      textAlign: 'center',
     },
   });

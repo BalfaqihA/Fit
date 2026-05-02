@@ -18,6 +18,7 @@ import { useWorkoutSession } from '@/contexts/workout-session';
 import { usePlan } from '@/hooks/use-plan';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
+import { useTodayWorkout } from '@/hooks/use-workout-history';
 import { exerciseImageUrl } from '@/lib/exercises';
 import { computeDayNumber, planDayIndex } from '@/lib/plan-day';
 import type { Plan, PlanDay, PlanExercise } from '@/types/plan';
@@ -102,6 +103,9 @@ function PlanStartView({
   dayNum: number;
   startSession: (day: PlanDay, planId?: string) => void;
 }) {
+  const todays = useTodayWorkout();
+  const isDoneToday = todays !== null;
+
   const focusMuscles = useMemo(() => {
     const set = new Set<string>();
     planDay.exercises.forEach((e) =>
@@ -211,11 +215,19 @@ function PlanStartView({
         }
         ListFooterComponent={
           <View style={{ marginTop: 18 }}>
-            <PrimaryButton
-              label="Start This Session"
-              onPress={onStart}
-              icon={<Ionicons name="play" size={18} color="#fff" />}
-            />
+            {isDoneToday ? (
+              <PrimaryButton
+                label="View Day Exercises"
+                onPress={() => router.push('/workout/day-exercises' as never)}
+                icon={<Ionicons name="list-outline" size={18} color="#fff" />}
+              />
+            ) : (
+              <PrimaryButton
+                label="Start This Session"
+                onPress={onStart}
+                icon={<Ionicons name="play" size={18} color="#fff" />}
+              />
+            )}
           </View>
         }
       />

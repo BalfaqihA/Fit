@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 
 import { CALORIES_PER_MINUTE } from '@/constants/workout-data';
+import type { CompletedExerciseLog } from '@/lib/workouts';
 import type { PlanDay, PlanExercise } from '@/types/plan';
 
 type SessionState = {
@@ -20,12 +21,13 @@ type SessionState = {
   completedCount: number;
   accumulatedXp: number;
   startedAt: number;
+  completedExercises: CompletedExerciseLog[];
 };
 
 type WorkoutSessionContextValue = {
   session: SessionState;
   startSession: (day: PlanDay, planId?: string) => void;
-  completeCurrent: (xpDelta: number) => void;
+  completeCurrent: (xpDelta: number, actualSets: number) => void;
   reset: () => void;
   elapsedSec: number;
   minutes: number;
@@ -34,6 +36,7 @@ type WorkoutSessionContextValue = {
   currentExercise?: PlanExercise;
   nextExercise?: PlanExercise;
   planExercises: PlanExercise[];
+  completedExercises: CompletedExerciseLog[];
 };
 
 const emptySession: SessionState = {
@@ -45,7 +48,22 @@ const emptySession: SessionState = {
   completedCount: 0,
   accumulatedXp: 0,
   startedAt: 0,
+  completedExercises: [],
 };
+
+function buildLog(
+  exercise: PlanExercise,
+  actualSets: number
+): CompletedExerciseLog {
+  return {
+    name: exercise.name,
+    primaryMuscle: exercise.primaryMuscles[0],
+    imageId: exercise.images?.[0],
+    plannedSets: exercise.sets,
+    plannedReps: exercise.reps,
+    actualSets: Math.max(0, Math.min(actualSets, exercise.sets)),
+  };
+}
 
 const WorkoutSessionContext = createContext<WorkoutSessionContextValue | null>(
   null
@@ -85,23 +103,32 @@ export function WorkoutSessionProvider({
         completedCount: 0,
         accumulatedXp: 0,
         startedAt: Date.now(),
+        completedExercises: [],
       });
       setElapsedSec(0);
     },
     []
   );
 
-  const completeCurrent = useCallback((xpDelta: number) => {
-    setSession((prev) => {
-      if (!prev.isActive) return prev;
-      return {
-        ...prev,
-        completedCount: prev.completedCount + 1,
-        accumulatedXp: prev.accumulatedXp + xpDelta,
-        currentIndex: prev.currentIndex + 1,
-      };
-    });
-  }, []);
+  const completeCurrent = useCallback(
+    (xpDelta: number, actualSets: number) => {
+      setSession((prev) => {
+        if (!prev.isActive) return prev;
+        const exercise = prev.planExercises[prev.currentIndex];
+        const log = exercise ? buildLog(exercise, actualSets) : null;
+        return {
+          ...prev,
+          completedCount: prev.completedCount + 1,
+          accumulatedXp: prev.accumulatedXp + xpDelta,
+          currentIndex: prev.currentIndex + 1,
+          completedExercises: log
+            ? [...prev.completedExercises, log]
+            : prev.completedExercises,
+        };
+      });
+    },
+    []
+  );
 
   const reset = useCallback(() => {
     setSession(emptySession);
@@ -113,7 +140,7 @@ export function WorkoutSessionProvider({
   const nextExercise = planExercises[session.currentIndex + 1];
 
   const minutes = Math.floor(elapsedSec / 60);
-  const calories = Math.round(minutes * CALORIES_PER_MINUTE);
+  const calories = Math.round((elapsedSec / 60) * CALORIES_PER_MINUTE);
 
   const value = useMemo<WorkoutSessionContextValue>(
     () => ({
@@ -128,6 +155,7 @@ export function WorkoutSessionProvider({
       currentExercise,
       nextExercise,
       planExercises,
+      completedExercises: session.completedExercises,
     }),
     [
       session,

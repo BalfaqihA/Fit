@@ -1,8 +1,11 @@
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-export function todayIso(): string {
-  const d = new Date();
+export function dateToIso(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+export function todayIso(): string {
+  return dateToIso(new Date());
 }
 
 function startOfLocalDay(d: Date): number {

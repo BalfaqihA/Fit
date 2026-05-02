@@ -48,7 +48,13 @@ export type UserProfile = {
     totalWorkouts: number;
     totalMinutes: number;
     totalCaloriesKcal: number;
+    totalXp?: number;
+    longestStreak?: number;
   };
+  /** ISO `YYYY-MM-DD` of the last weight log; used to nudge weekly weigh-ins. */
+  weightLastUpdatedAt?: string;
+  /** ISO `YYYY-MM-DD` of the most recently completed workout. */
+  lastWorkoutAt?: string;
 };
 
 export type SeedUser = {

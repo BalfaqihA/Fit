@@ -12,17 +12,18 @@ import {
 
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { USER_STATS } from '@/constants/workout-data';
 import { useWorkoutSession } from '@/contexts/workout-session';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import { recordCompletedWorkout } from '@/lib/workouts';
 
+const LEVEL_XP = 1000;
+
 export default function WorkoutSummary() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
-  const { reset } = useWorkoutSession();
+  const { reset, completedExercises } = useWorkoutSession();
   const { user } = useAuth();
   const { profile } = useUserProfile();
 
@@ -44,6 +45,7 @@ export default function WorkoutSummary() {
   useEffect(() => {
     if (persisted.current) return;
     persisted.current = true;
+    const exercisesSnapshot = completedExercises;
     const run = async () => {
       if (user) {
         try {
@@ -54,6 +56,7 @@ export default function WorkoutSummary() {
             caloriesKcal: calories,
             exercisesCompleted: done,
             xp,
+            exercises: exercisesSnapshot.length > 0 ? exercisesSnapshot : undefined,
             setPlanStartDate: !profile.planStartDate,
           });
         } catch {
@@ -73,20 +76,21 @@ export default function WorkoutSummary() {
     params.planId,
     params.dayNum,
     profile.planStartDate,
+    completedExercises,
   ]);
 
   const baseExp = 50;
   const durationBonus = duration * 3;
   const exerciseExp = Math.max(0, xp - baseExp - durationBonus);
 
-  const progress = Math.min(
-    1,
-    (USER_STATS.currentLevelExp + xp) / USER_STATS.expToNextLevel
-  );
-  const remaining = Math.max(
-    0,
-    USER_STATS.expToNextLevel - USER_STATS.currentLevelExp - xp
-  );
+  // Live profile.stats.totalXp already includes this workout's xp once Firestore
+  // confirms the write — until then we project the post-workout value locally.
+  const persistedXp = profile.stats?.totalXp ?? 0;
+  const totalXp = Math.max(persistedXp, xp);
+  const level = Math.floor(totalXp / LEVEL_XP) + 1;
+  const currentLevelExp = totalXp % LEVEL_XP;
+  const progress = Math.min(1, currentLevelExp / LEVEL_XP);
+  const remaining = Math.max(0, LEVEL_XP - currentLevelExp);
 
   const stats = [
     { icon: 'time-outline', label: 'Duration', value: `${duration}m` },
@@ -157,7 +161,7 @@ export default function WorkoutSummary() {
           <View style={styles.levelHeader}>
             <Text style={styles.cardTitle}>Level Progress</Text>
             <View style={styles.levelBadge}>
-              <Text style={styles.levelBadgeText}>Lv {USER_STATS.level}</Text>
+              <Text style={styles.levelBadgeText}>Lv {level}</Text>
             </View>
           </View>
           <View style={styles.progressTrack}>
@@ -170,10 +174,10 @@ export default function WorkoutSummary() {
           </View>
           <View style={styles.progressRow}>
             <Text style={styles.progressMeta}>
-              {USER_STATS.currentLevelExp + xp} / {USER_STATS.expToNextLevel}
+              {currentLevelExp} / {LEVEL_XP}
             </Text>
             <Text style={styles.progressMeta}>
-              {remaining} XP to Lv {USER_STATS.level + 1}
+              {remaining} XP to Lv {level + 1}
             </Text>
           </View>
         </View>

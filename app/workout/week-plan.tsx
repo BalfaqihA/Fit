@@ -15,16 +15,33 @@ import {
 import { BackButton } from '@/components/back-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import {
-  USER_STATS,
   WEEK_PLAN,
   muscleColor,
   todayDayNumber,
 } from '@/constants/workout-data';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserProfile } from '@/hooks/use-user-profile';
+import type { GoalKey } from '@/types/community';
+
+const GOAL_LABEL: Record<GoalKey, string> = {
+  lose_weight: 'Lose Weight',
+  build_muscle: 'Build Muscle',
+  stay_fit: 'Stay Fit',
+  increase_endurance: 'Endurance',
+  improve_flexibility: 'Flexibility',
+};
 
 export default function WeekPlan() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  const { profile } = useUserProfile();
+
+  const fitnessLevelLabel = profile.fitnessLevel
+    ? profile.fitnessLevel.charAt(0).toUpperCase() + profile.fitnessLevel.slice(1)
+    : 'Beginner';
+  const goalLabel = profile.primaryGoal
+    ? GOAL_LABEL[profile.primaryGoal]
+    : 'Stay Fit';
 
   const today = todayDayNumber();
   const totals = useMemo(() => {
@@ -75,11 +92,11 @@ export default function WeekPlan() {
         <View style={styles.profileRow}>
           <View style={styles.profileChip}>
             <Ionicons name="trophy" size={14} color={COLORS.primary} />
-            <Text style={styles.profileChipText}>{USER_STATS.fitnessLevel}</Text>
+            <Text style={styles.profileChipText}>{fitnessLevelLabel}</Text>
           </View>
           <View style={styles.profileChip}>
             <Ionicons name="flag" size={14} color={COLORS.primary} />
-            <Text style={styles.profileChipText}>{USER_STATS.goal}</Text>
+            <Text style={styles.profileChipText}>{goalLabel}</Text>
           </View>
         </View>
 

@@ -11,11 +11,14 @@ import {
   View,
 } from 'react-native';
 
+import { WeighInBanner } from '@/components/weigh-in-banner';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlan } from '@/hooks/use-plan';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
+import { useWeeklyStats } from '@/hooks/use-weekly-stats';
+import { useTodayWorkout } from '@/hooks/use-workout-history';
 import { computeDayNumber, planDayIndex } from '@/lib/plan-day';
 
 const primaryActions: {
@@ -67,11 +70,34 @@ export default function HomeTab() {
     return plan.days[planDayIndex(dayNumber, plan.days.length)];
   }, [plan, dayNumber]);
 
-  const heroLabel = personalizedDay ? `Day ${dayNumber}` : "Today's session";
-  const heroTitle = personalizedDay ? personalizedDay.title : 'Generate your plan';
-  const heroMeta = personalizedDay
-    ? `${personalizedDay.estimatedMinutes} min · ${personalizedDay.exercises.length} exercises`
-    : 'Finish onboarding to begin';
+  const todays = useTodayWorkout();
+  const isDoneToday = todays !== null;
+  const { currentStreak } = useWeeklyStats();
+
+  const motivation = useMemo(() => {
+    if (currentStreak >= 30) return 'A month of grind. Legendary work.';
+    if (currentStreak >= 14) return 'Two weeks straight — you are unstoppable.';
+    if (currentStreak >= 7) return 'A full week on fire. Keep stoking it.';
+    if (currentStreak >= 3) return `Day ${currentStreak} streak — momentum is yours.`;
+    if (currentStreak === 2) return 'Two in a row. Build the habit.';
+    return 'One down. Show up tomorrow and start a streak.';
+  }, [currentStreak]);
+
+  const heroLabel = isDoneToday
+    ? 'Today · Done'
+    : personalizedDay
+      ? `Day ${dayNumber}`
+      : "Today's session";
+  const heroTitle = isDoneToday
+    ? "Today's workout is complete!"
+    : personalizedDay
+      ? personalizedDay.title
+      : 'Generate your plan';
+  const heroMeta = isDoneToday
+    ? `${todays!.durationMin} min · ${todays!.caloriesKcal} kcal · +${todays!.xp} XP · ${motivation}`
+    : personalizedDay
+      ? `${personalizedDay.estimatedMinutes} min · ${personalizedDay.exercises.length} exercises`
+      : 'Finish onboarding to begin';
   const heroRoute = personalizedDay ? '/workout/start' : '/onboarding';
 
   const quickStats = useMemo(() => {
@@ -86,8 +112,9 @@ export default function HomeTab() {
       { label: 'Workouts', value: `${s.totalWorkouts}`, icon: 'run' },
       { label: 'Calories', value: fmtK(s.totalCaloriesKcal), icon: 'fire' },
       { label: 'Minutes', value: `${s.totalMinutes}`, icon: 'timer-outline' },
+      { label: 'Streak', value: `${currentStreak}d`, icon: 'flame' },
     ];
-  }, [profile.stats]);
+  }, [profile.stats, currentStreak]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -114,8 +141,12 @@ export default function HomeTab() {
           </Pressable>
         </View>
 
+        <WeighInBanner />
+
         <LinearGradient
-          colors={['#8E54E9', '#6C56D9']}
+          colors={
+            isDoneToday ? ['#2EC07E', '#1FAE6A'] : ['#8E54E9', '#6C56D9']
+          }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.heroCard}
@@ -125,22 +156,28 @@ export default function HomeTab() {
             <Text style={styles.heroTitle}>{heroTitle}</Text>
             <Text style={styles.heroMeta}>{heroMeta}</Text>
           </View>
-          <Pressable
-            onPress={() => router.push(heroRoute as never)}
-            style={({ pressed }) => [
-              styles.heroPlay,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <Ionicons
-              name={personalizedDay ? 'play' : 'arrow-forward'}
-              size={22}
-              color={COLORS.primary}
-            />
-          </Pressable>
+          {isDoneToday ? (
+            <View style={styles.heroPlay}>
+              <Ionicons name="checkmark" size={26} color={COLORS.success} />
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => router.push(heroRoute as never)}
+              style={({ pressed }) => [
+                styles.heroPlay,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Ionicons
+                name={personalizedDay ? 'play' : 'arrow-forward'}
+                size={22}
+                color={COLORS.primary}
+              />
+            </Pressable>
+          )}
         </LinearGradient>
 
-        <View style={styles.statsRow}>
+        <View style={styles.statsGrid}>
           {quickStats.map((stat) => (
             <View key={stat.label} style={styles.statCard}>
               <View style={styles.statIcon}>
@@ -277,13 +314,15 @@ const makeStyles = (COLORS: Palette) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    statsRow: {
+    statsGrid: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: 12,
       marginBottom: 24,
     },
     statCard: {
-      flex: 1,
+      width: '47%',
+      flexGrow: 1,
       backgroundColor: COLORS.card,
       borderRadius: RADIUS.md,
       padding: 14,

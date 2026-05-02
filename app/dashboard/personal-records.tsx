@@ -12,12 +12,13 @@ import {
 
 import { BackButton } from '@/components/back-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { PERSONAL_RECORDS } from '@/constants/dashboard-data';
+import { useDerivedRecords } from '@/hooks/use-derived-records';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function PersonalRecordsList() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  const records = useDerivedRecords();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -29,10 +30,12 @@ export default function PersonalRecordsList() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.intro}>
-          {PERSONAL_RECORDS.length} records tracked. Tap any one for the full history.
+          {records.length === 0
+            ? 'Finish a workout to start earning records.'
+            : `${records.length} achievements unlocked. Tap any one for the full history.`}
         </Text>
 
-        {PERSONAL_RECORDS.map((pr) => (
+        {records.map((pr) => (
           <Pressable
             key={pr.id}
             style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
@@ -50,20 +53,15 @@ export default function PersonalRecordsList() {
             <View style={{ flex: 1 }}>
               <Text style={styles.label}>{pr.label}</Text>
               <Text style={styles.meta}>
-                Latest · {formatDate(pr.achievedAt)}
+                Achieved · {formatDate(pr.achievedAt)}
               </Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={styles.value}>
-                {pr.value}
-                {pr.unit !== 'time' ? ` ${pr.unit}` : ''}
+                {pr.value} {pr.unit}
               </Text>
               <View style={styles.delta}>
-                <Ionicons
-                  name={pr.trend === 'down' ? 'arrow-down' : 'arrow-up'}
-                  size={11}
-                  color={COLORS.success}
-                />
+                <Ionicons name="arrow-up" size={11} color={COLORS.success} />
                 <Text style={styles.deltaText}>{pr.delta}</Text>
               </View>
             </View>

@@ -9,6 +9,7 @@ const REST_SECONDS = 90;
 type Props = {
   exercise: { sets: number; reps: number };
   COLORS: Palette;
+  onActualSetsChange?: (doneCount: number) => void;
 };
 
 type SetStatus = 'idle' | 'resting' | 'rested' | 'done';
@@ -19,7 +20,7 @@ function fmt(secs: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export function RepTracker({ exercise, COLORS }: Props) {
+export function RepTracker({ exercise, COLORS, onActualSetsChange }: Props) {
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const total = Math.max(0, exercise.sets);
 
@@ -38,6 +39,13 @@ export function RepTracker({ exercise, COLORS }: Props) {
     setTimeLeft(REST_SECONDS);
     setRestTotal(REST_SECONDS);
   }, [total]);
+
+  // Report done-set count to the parent whenever it changes. Done in an effect
+  // (not inside a setState updater) so we don't trigger setState in another
+  // component during render.
+  useEffect(() => {
+    onActualSetsChange?.(statuses.filter((s) => s === 'done').length);
+  }, [statuses, onActualSetsChange]);
 
   useEffect(() => {
     if (activeIdx === null) return;

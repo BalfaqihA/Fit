@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
+  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -10,16 +11,19 @@ import {
 } from 'react-native';
 
 import { BackButton } from '@/components/back-button';
+import { WeighInModal } from '@/components/weigh-in-modal';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { type BodyStat, getBodyStat } from '@/constants/dashboard-data';
+import { useBodyStats, type BodyStatKey } from '@/hooks/use-body-stats';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function BodyStatDetail() {
   const { key } = useLocalSearchParams<{ key: string }>();
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  const { stats } = useBodyStats();
+  const [logOpen, setLogOpen] = useState(false);
 
-  const stat = key ? getBodyStat(key as BodyStat['key']) : undefined;
+  const stat = stats.find((s) => s.key === (key as BodyStatKey));
 
   if (!stat) {
     return (
@@ -36,55 +40,54 @@ export default function BodyStatDetail() {
     );
   }
 
-  const max = Math.max(...stat.history.map((p) => p.value));
-  const min = Math.min(...stat.history.map((p) => p.value));
+  const history = stat.history;
+  const max = history.length ? Math.max(...history.map((p) => p.value)) : 0;
+  const min = history.length ? Math.min(...history.map((p) => p.value)) : 0;
   const range = Math.max(max - min, 0.0001);
-
-  // For body stats, 'down' trend usually means improving (e.g., weight, BMI, body fat)
-  const start = stat.history[0].value;
-  const end = stat.history[stat.history.length - 1].value;
+  const start = history.length ? history[0].value : 0;
+  const end = history.length ? history[history.length - 1].value : 0;
   const overallChange = end - start;
-  const positive = stat.trend === 'down' ? overallChange < 0 : overallChange > 0;
   const sign = overallChange > 0 ? '+' : '';
+  const trendColor = stat.improving ? COLORS.success : COLORS.accent;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <BackButton />
         <Text style={styles.headerTitle}>{stat.label}</Text>
-        <View style={{ width: 40 }} />
+        {stat.key === 'weight' ? (
+          <Pressable
+            onPress={() => setLogOpen(true)}
+            style={styles.logBtn}
+            hitSlop={6}
+          >
+            <Ionicons name="add" size={20} color={COLORS.primary} />
+          </Pressable>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.heroCard}>
           <Text style={styles.heroValue}>
             {stat.value}
-            {stat.unit && stat.unit !== '%' ? ` ${stat.unit}` : stat.unit}
+            {stat.unit ? ` ${stat.unit}` : ''}
           </Text>
           <Text style={styles.heroLabel}>Latest measurement</Text>
           <View
             style={[
               styles.heroTrend,
-              {
-                backgroundColor: positive
-                  ? 'rgba(46, 192, 126, 0.12)'
-                  : 'rgba(255, 90, 100, 0.12)',
-              },
+              { backgroundColor: trendColor + '22' },
             ]}
           >
             <Ionicons
-              name={stat.trend === 'down' ? 'trending-down' : 'trending-up'}
+              name={overallChange < 0 ? 'trending-down' : 'trending-up'}
               size={14}
-              color={positive ? COLORS.success : COLORS.accent}
+              color={trendColor}
             />
-            <Text
-              style={[
-                styles.heroTrendText,
-                { color: positive ? COLORS.success : COLORS.accent },
-              ]}
-            >
-              {stat.change}
-              {stat.unit && stat.unit !== '%' ? ` ${stat.unit}` : stat.unit} this month
+            <Text style={[styles.heroTrendText, { color: trendColor }]}>
+              {stat.changeLabel}
             </Text>
           </View>
         </View>
@@ -92,62 +95,92 @@ export default function BodyStatDetail() {
         <Text style={styles.about}>{stat.description}</Text>
 
         <Text style={styles.sectionLabel}>HISTORY</Text>
-        <View style={styles.chartCard}>
-          <View style={styles.chart}>
-            {stat.history.map((point, idx) => {
-              const norm = (point.value - min) / range;
-              const heightPct = norm * 100;
-              return (
-                <View key={`${point.date}-${idx}`} style={styles.barColumn}>
-                  <View style={styles.barTrack}>
-                    <View
-                      style={[
-                        styles.barFill,
-                        { height: `${Math.max(heightPct, 8)}%` },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.barValue}>{point.value}</Text>
-                  <Text style={styles.barDate}>{shortDate(point.date)}</Text>
-                </View>
-              );
-            })}
+        {history.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Ionicons name="bar-chart-outline" size={28} color={COLORS.muted} />
+            <Text style={styles.emptyText}>
+              No entries yet. Log a weigh-in to start your history.
+            </Text>
           </View>
-        </View>
+        ) : (
+          <View style={styles.chartCard}>
+            <View style={styles.chart}>
+              {history.map((point, idx) => {
+                const norm = (point.value - min) / range;
+                const heightPct = norm * 100;
+                return (
+                  <View key={`${point.date}-${idx}`} style={styles.barColumn}>
+                    <View style={styles.barTrack}>
+                      <View
+                        style={[
+                          styles.barFill,
+                          { height: `${Math.max(heightPct, 8)}%` },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.barValue}>{point.value}</Text>
+                    <Text style={styles.barDate}>{shortDate(point.date)}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         <Text style={[styles.sectionLabel, { marginTop: 22 }]}>SUMMARY</Text>
         <View style={styles.summaryCard}>
-          <Row label="Entries" value={`${stat.history.length}`} COLORS={COLORS} />
+          <Row label="Entries" value={`${history.length}`} COLORS={COLORS} />
           <View style={styles.divider} />
           <Row
             label="Starting value"
-            value={`${start}${stat.unit && stat.unit !== '%' ? ` ${stat.unit}` : stat.unit}`}
+            value={
+              history.length
+                ? `${start}${stat.unit ? ` ${stat.unit}` : ''}`
+                : '--'
+            }
             COLORS={COLORS}
           />
           <View style={styles.divider} />
           <Row
             label="Latest value"
-            value={`${end}${stat.unit && stat.unit !== '%' ? ` ${stat.unit}` : stat.unit}`}
+            value={
+              history.length
+                ? `${end}${stat.unit ? ` ${stat.unit}` : ''}`
+                : '--'
+            }
             COLORS={COLORS}
           />
           <View style={styles.divider} />
           <Row
             label="Net change"
-            value={`${sign}${overallChange.toFixed(1)}${stat.unit && stat.unit !== '%' ? ` ${stat.unit}` : stat.unit}`}
+            value={
+              history.length
+                ? `${sign}${overallChange.toFixed(1)}${stat.unit ? ` ${stat.unit}` : ''}`
+                : '--'
+            }
             COLORS={COLORS}
           />
-          {stat.goal && (
+          {stat.goal ? (
             <>
               <View style={styles.divider} />
               <Row label="Goal" value={stat.goal} COLORS={COLORS} />
             </>
-          )}
+          ) : null}
           <View style={styles.divider} />
-          <Row label="Highest" value={`${max}`} COLORS={COLORS} />
+          <Row
+            label="Highest"
+            value={history.length ? `${max}` : '--'}
+            COLORS={COLORS}
+          />
           <View style={styles.divider} />
-          <Row label="Lowest" value={`${min}`} COLORS={COLORS} />
+          <Row
+            label="Lowest"
+            value={history.length ? `${min}` : '--'}
+            COLORS={COLORS}
+          />
         </View>
       </ScrollView>
+      <WeighInModal visible={logOpen} onClose={() => setLogOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -189,6 +222,14 @@ const makeStyles = (COLORS: Palette) =>
       paddingVertical: 8,
     },
     headerTitle: { fontSize: 17, fontWeight: '800', color: COLORS.text },
+    logBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: COLORS.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     scroll: { padding: 20, paddingBottom: 40 },
     heroCard: {
       backgroundColor: COLORS.card,
@@ -261,5 +302,13 @@ const makeStyles = (COLORS: Palette) =>
       marginHorizontal: 14,
     },
     empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    emptyText: { fontSize: 15, color: COLORS.muted },
+    emptyText: { fontSize: 13, color: COLORS.muted, fontWeight: '600', textAlign: 'center' },
+    emptyCard: {
+      alignItems: 'center',
+      gap: 10,
+      padding: 24,
+      backgroundColor: COLORS.card,
+      borderRadius: RADIUS.lg,
+      ...SHADOWS.card,
+    },
   });

@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -86,6 +86,14 @@ export default function RunExercise() {
     calories,
   } = useWorkoutSession();
 
+  const [actualSets, setActualSets] = useState(0);
+  useEffect(() => {
+    setActualSets(0);
+  }, [idx]);
+  const handleActualSetsChange = useCallback((n: number) => {
+    setActualSets(n);
+  }, []);
+
   const exercise = planExercises[idx];
 
   if (!session.isActive || !exercise) {
@@ -145,6 +153,7 @@ export default function RunExercise() {
         50,
         session.accumulatedXp + xp + minutes * 3 + 50
       );
+      completeCurrent(xp, actualSets);
       router.replace({
         pathname: '/workout/summary',
         params: {
@@ -157,7 +166,7 @@ export default function RunExercise() {
         },
       });
     } else {
-      completeCurrent(xp);
+      completeCurrent(xp, actualSets);
       router.replace('/workout/rest');
     }
   };
@@ -279,7 +288,11 @@ export default function RunExercise() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Track Your Sets</Text>
-          <RepTracker exercise={exercise} COLORS={COLORS} />
+          <RepTracker
+            exercise={exercise}
+            COLORS={COLORS}
+            onActualSetsChange={handleActualSetsChange}
+          />
         </View>
 
         {exercise.secondaryMuscles && exercise.secondaryMuscles.length > 0 ? (

@@ -13,6 +13,15 @@ import type { PlanExercise } from '@/types/plan';
 export const exerciseXp = (e: Pick<PlanExercise, 'sets' | 'reps'>) =>
   Math.max(50, Math.round(e.sets * e.reps * 1.2));
 
+export type CompletedExerciseLog = {
+  name: string;
+  primaryMuscle?: string;
+  imageId?: string;
+  plannedSets: number;
+  plannedReps: number;
+  actualSets: number;
+};
+
 export type CompletedWorkoutPayload = {
   planId?: string;
   dayNum?: number;
@@ -20,6 +29,7 @@ export type CompletedWorkoutPayload = {
   caloriesKcal: number;
   exercisesCompleted: number;
   xp: number;
+  exercises?: CompletedExerciseLog[];
   /** When provided (the user has no `planStartDate` yet), stamps the user doc with this ISO date. */
   setPlanStartDate?: boolean;
 };
@@ -38,7 +48,9 @@ export async function recordCompletedWorkout(
       totalWorkouts: increment(1),
       totalMinutes: increment(payload.durationMin),
       totalCaloriesKcal: increment(payload.caloriesKcal),
+      totalXp: increment(payload.xp),
     },
+    lastWorkoutAt: todayIso(),
   };
   if (setPlanStartDate) userPatch.planStartDate = todayIso();
   batch.set(userRef, userPatch, { merge: true });

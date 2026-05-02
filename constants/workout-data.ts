@@ -482,46 +482,6 @@ export const WEEK_PLAN: DayPlan[] = [
   },
 ];
 
-function isoDaysAgo(daysAgo: number): string {
-  const d = new Date();
-  d.setHours(9, 0, 0, 0);
-  d.setDate(d.getDate() - daysAgo);
-  return d.toISOString();
-}
-
-export const SESSIONS: WorkoutSession[] = [
-  { id: 's-001', date: isoDaysAgo(1), duration: 52, calories: 364, exercisesCompleted: 5, expEarned: 245 },
-  { id: 's-002', date: isoDaysAgo(2), duration: 48, calories: 336, exercisesCompleted: 4, expEarned: 210 },
-  { id: 's-003', date: isoDaysAgo(4), duration: 61, calories: 427, exercisesCompleted: 5, expEarned: 270 },
-  { id: 's-004', date: isoDaysAgo(6), duration: 45, calories: 315, exercisesCompleted: 4, expEarned: 195 },
-  { id: 's-005', date: isoDaysAgo(8), duration: 55, calories: 385, exercisesCompleted: 5, expEarned: 250 },
-  { id: 's-006', date: isoDaysAgo(11), duration: 40, calories: 280, exercisesCompleted: 4, expEarned: 180 },
-  { id: 's-007', date: isoDaysAgo(14), duration: 58, calories: 406, exercisesCompleted: 6, expEarned: 290 },
-  { id: 's-008', date: isoDaysAgo(17), duration: 50, calories: 350, exercisesCompleted: 5, expEarned: 235 },
-  { id: 's-009', date: isoDaysAgo(21), duration: 47, calories: 329, exercisesCompleted: 4, expEarned: 205 },
-  { id: 's-010', date: isoDaysAgo(26), duration: 63, calories: 441, exercisesCompleted: 6, expEarned: 300 },
-  { id: 's-011', date: isoDaysAgo(33), duration: 42, calories: 294, exercisesCompleted: 4, expEarned: 190 },
-  { id: 's-012', date: isoDaysAgo(40), duration: 49, calories: 343, exercisesCompleted: 5, expEarned: 225 },
-];
-
-const _totalWorkouts = SESSIONS.length;
-const _totalMinutes = SESSIONS.reduce((n, s) => n + s.duration, 0);
-const _totalCalories = SESSIONS.reduce((n, s) => n + s.calories, 0);
-const _totalExp = SESSIONS.reduce((n, s) => n + s.expEarned, 0);
-
-export const USER_STATS = {
-  level: 7,
-  currentLevelExp: 420,
-  expToNextLevel: 800,
-  dayStreak: 5,
-  fitnessLevel: 'Intermediate' as Level,
-  goal: 'Build Muscle',
-  totalWorkouts: _totalWorkouts,
-  totalMinutes: _totalMinutes,
-  totalCalories: _totalCalories,
-  totalExp: _totalExp,
-};
-
 export function getExerciseById(id: string | undefined): Exercise | undefined {
   if (!id) return undefined;
   return EXERCISES.find((e) => e.id === id);

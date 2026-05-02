@@ -11,11 +11,13 @@ import {
 
 import { BackButton } from '@/components/back-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
+import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import { useWorkoutHistory } from '@/hooks/use-workout-history';
 import { usePlan } from '@/hooks/use-plan';
 import { computeStreak, isoToLocalDayStart } from '@/lib/plan-day';
+import { updatePlanDaysPerWeek } from '@/lib/plans';
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS = [
@@ -54,6 +56,11 @@ export default function WorkoutCalendar() {
   const { profile } = useUserProfile();
   const { sessions } = useWorkoutHistory();
   const { plan } = usePlan();
+  const { user } = useAuth();
+  const daysPerWeek = Math.min(
+    7,
+    Math.max(1, plan?.profile?.daysPerWeek ?? 4)
+  );
 
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -67,14 +74,15 @@ export default function WorkoutCalendar() {
 
   const plannedDays = useMemo(() => {
     const set = new Set<string>();
-    if (!plan || plan.days.length === 0 || !profile.planStartDate) return set;
+    if (!plan || !profile.planStartDate) return set;
     const startMs = isoToLocalDayStart(profile.planStartDate);
     for (let i = 0; i < PLAN_HORIZON_DAYS; i++) {
-      const d = new Date(startMs + i * MS_PER_DAY);
-      set.add(dateToIso(d));
+      if (i % 7 < daysPerWeek) {
+        set.add(dateToIso(new Date(startMs + i * MS_PER_DAY)));
+      }
     }
     return set;
-  }, [plan, profile.planStartDate]);
+  }, [plan, profile.planStartDate, daysPerWeek]);
 
   const monthSessions = useMemo(
     () =>
@@ -126,6 +134,15 @@ export default function WorkoutCalendar() {
     setYear(y);
   };
 
+  const setDays = async (n: number) => {
+    if (!user || !plan?.id || n === daysPerWeek) return;
+    try {
+      await updatePlanDaysPerWeek(user.uid, plan.id, n);
+    } catch {
+      // best-effort; the snapshot listener will reflect on success
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
@@ -155,6 +172,39 @@ export default function WorkoutCalendar() {
           </View>
         </View>
 
+        {plan ? (
+          <View style={styles.dpwCard}>
+            <View style={styles.dpwHeader}>
+              <Text style={styles.dpwTitle}>Days per week</Text>
+              <Text style={styles.dpwHint}>
+                {daysPerWeek} day{daysPerWeek === 1 ? '' : 's'}
+              </Text>
+            </View>
+            <View style={styles.dpwRow}>
+              {[1, 2, 3, 4, 5, 6, 7].map((n) => {
+                const active = n === daysPerWeek;
+                return (
+                  <Pressable
+                    key={n}
+                    onPress={() => setDays(n)}
+                    style={[styles.dpwPill, active && styles.dpwPillActive]}
+                    hitSlop={6}
+                  >
+                    <Text
+                      style={[
+                        styles.dpwPillText,
+                        active && styles.dpwPillTextActive,
+                      ]}
+                    >
+                      {n}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.card}>
           <View style={styles.monthNav}>
             <Pressable onPress={() => step(-1)} style={styles.navBtn} hitSlop={8}>
@@ -181,28 +231,28 @@ export default function WorkoutCalendar() {
               if (d === null) return <View key={`b-${i}`} style={styles.cell} />;
               const iso = toIsoDate(year, month, d);
               const isWorkout = workoutDays.has(iso);
-              const isPlanned = plannedDays.has(iso) && !isWorkout;
+              const isPlanned = plannedDays.has(iso);
+              const isPurple = isWorkout || isPlanned;
               const isToday = iso === todayIso;
               return (
-                <View
-                  key={iso}
-                  style={[
-                    styles.cell,
-                    isWorkout && styles.cellWorkout,
-                    isPlanned && styles.cellPlanned,
-                    isToday && !isWorkout && styles.cellToday,
-                  ]}
-                >
-                  <Text
+                <View key={iso} style={styles.cellWrap}>
+                  <View
                     style={[
-                      styles.cellText,
-                      isWorkout && styles.cellTextWorkout,
-                      isToday && !isWorkout && { color: COLORS.primary },
+                      styles.cellInner,
+                      isPurple ? styles.cellPurple : styles.cellRest,
+                      isToday && styles.cellToday,
                     ]}
                   >
-                    {d}
-                  </Text>
-                  {isWorkout && <View style={styles.cellDot} />}
+                    <Text
+                      style={[
+                        styles.cellText,
+                        isPurple && styles.cellTextPurple,
+                      ]}
+                    >
+                      {d}
+                    </Text>
+                    {isWorkout && <View style={styles.cellDot} />}
+                  </View>
                 </View>
               );
             })}
@@ -210,23 +260,33 @@ export default function WorkoutCalendar() {
 
           <View style={styles.legendRow}>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: COLORS.primary }]} />
-              <Text style={styles.legendText}>Workout</Text>
+              <View
+                style={[styles.legendDot, { backgroundColor: COLORS.primary }]}
+              />
+              <Text style={styles.legendText}>Workout day</Text>
             </View>
             <View style={styles.legendItem}>
               <View
                 style={[
                   styles.legendDot,
-                  { backgroundColor: COLORS.primarySoft },
+                  {
+                    backgroundColor: COLORS.card,
+                    borderWidth: 1,
+                    borderColor: COLORS.border,
+                  },
                 ]}
               />
-              <Text style={styles.legendText}>Planned</Text>
+              <Text style={styles.legendText}>Rest day</Text>
             </View>
             <View style={styles.legendItem}>
               <View
                 style={[
                   styles.legendDot,
-                  { borderWidth: 2, borderColor: COLORS.primary, backgroundColor: 'transparent' },
+                  {
+                    borderWidth: 2,
+                    borderColor: COLORS.primary,
+                    backgroundColor: 'transparent',
+                  },
                 ]}
               />
               <Text style={styles.legendText}>Today</Text>
@@ -325,6 +385,37 @@ const makeStyles = (COLORS: Palette) =>
     },
     stripValue: { fontSize: 22, fontWeight: '800', color: COLORS.text, marginTop: 6 },
     stripLabel: { fontSize: 12, fontWeight: '600', color: COLORS.muted, marginTop: 2 },
+    dpwCard: {
+      backgroundColor: COLORS.card,
+      borderRadius: RADIUS.md,
+      padding: 14,
+      marginBottom: 16,
+      ...SHADOWS.card,
+    },
+    dpwHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    dpwTitle: { fontSize: 14, fontWeight: '800', color: COLORS.text },
+    dpwHint: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
+    dpwRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: 6,
+    },
+    dpwPill: {
+      flex: 1,
+      paddingVertical: 8,
+      borderRadius: RADIUS.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: COLORS.primarySoft,
+    },
+    dpwPillActive: { backgroundColor: COLORS.primary },
+    dpwPillText: { fontSize: 13, fontWeight: '800', color: COLORS.primary },
+    dpwPillTextActive: { color: '#FFFFFF' },
     card: {
       backgroundColor: COLORS.card,
       borderRadius: RADIUS.lg,
@@ -359,24 +450,32 @@ const makeStyles = (COLORS: Palette) =>
     cell: {
       width: `${100 / 7}%`,
       aspectRatio: 1,
+    },
+    cellWrap: {
+      width: `${100 / 7}%`,
+      aspectRatio: 1,
+      padding: 3,
+    },
+    cellInner: {
+      flex: 1,
+      borderRadius: 12,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    cellWorkout: {
+    cellPurple: {
       backgroundColor: COLORS.primary,
-      borderRadius: 12,
     },
-    cellPlanned: {
-      backgroundColor: COLORS.primarySoft,
-      borderRadius: 12,
+    cellRest: {
+      backgroundColor: COLORS.card,
+      borderWidth: 1,
+      borderColor: COLORS.border,
     },
     cellToday: {
       borderWidth: 2,
       borderColor: COLORS.primary,
-      borderRadius: 12,
     },
     cellText: { fontSize: 13, fontWeight: '700', color: COLORS.text },
-    cellTextWorkout: { color: '#FFFFFF' },
+    cellTextPurple: { color: '#FFFFFF' },
     cellDot: {
       position: 'absolute',
       bottom: 6,

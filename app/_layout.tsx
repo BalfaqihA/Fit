@@ -1,6 +1,6 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import 'react-native-reanimated';
 
@@ -13,10 +13,33 @@ import { UserProfileProvider } from '@/contexts/user-profile';
 import { WorkoutSessionProvider } from '@/contexts/workout-session';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserProfile } from '@/hooks/use-user-profile';
+import {
+  requestNotificationPermissionOnce,
+  scheduleWeeklyWeighIn,
+} from '@/lib/notifications';
 
 function ThemedStatusBar() {
   const { colorScheme } = useTheme();
   return <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />;
+}
+
+function WeighInScheduler() {
+  const { user } = useAuth();
+  const { profile, hydrated } = useUserProfile();
+  const armed = useRef(false);
+
+  useEffect(() => {
+    if (!user || !hydrated || armed.current) return;
+    if (!profile.weightKg) return; // wait for onboarding to set baseline
+    armed.current = true;
+    (async () => {
+      const granted = await requestNotificationPermissionOnce();
+      if (granted) await scheduleWeeklyWeighIn();
+    })();
+  }, [user, hydrated, profile.weightKg]);
+
+  return null;
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {
@@ -75,6 +98,7 @@ export default function RootLayout() {
               <CommunityProvider>
                 <WorkoutSessionProvider>
                   <AuthGate>
+                    <WeighInScheduler />
                     <Stack screenOptions={{ headerShown: false }}>
                       <Stack.Screen name="index" />
                       <Stack.Screen name="auth" />

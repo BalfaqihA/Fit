@@ -11,15 +11,19 @@ import {
 
 import { BackButton } from '@/components/back-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { getPersonalRecord } from '@/constants/dashboard-data';
+import {
+  getDerivedRecord,
+  useDerivedRecords,
+} from '@/hooks/use-derived-records';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function PersonalRecordDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  const records = useDerivedRecords();
 
-  const pr = id ? getPersonalRecord(id) : undefined;
+  const pr = id ? getDerivedRecord(records, id) : undefined;
 
   if (!pr) {
     return (
@@ -30,23 +34,23 @@ export default function PersonalRecordDetail() {
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>Record not found.</Text>
+          <Text style={styles.emptyText}>
+            Finish a workout to start earning records.
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const max = Math.max(...pr.history.map((p) => p.value));
-  const min = Math.min(...pr.history.map((p) => p.value));
+  const history = pr.history;
+  const max = history.length ? Math.max(...history.map((p) => p.value)) : 0;
+  const min = history.length ? Math.min(...history.map((p) => p.value)) : 0;
   const range = Math.max(max - min, 0.0001);
-
-  // For time-based PRs (5K), lower is better — invert visual fill.
-  const isTime = pr.unit === 'time';
-  const start = pr.history[0].value;
-  const end = pr.history[pr.history.length - 1].value;
-  const overallChange = isTime ? start - end : end - start;
+  const start = history.length ? history[0].value : 0;
+  const end = history.length ? history[history.length - 1].value : 0;
+  const overallChange = end - start;
   const overallChangeStr =
-    (overallChange >= 0 ? '+' : '') + overallChange.toFixed(2);
+    (overallChange >= 0 ? '+' : '') + overallChange.toFixed(0);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -66,81 +70,72 @@ export default function PersonalRecordDetail() {
             />
           </View>
           <Text style={styles.heroValue}>
-            {pr.value}
-            {pr.unit !== 'time' ? ` ${pr.unit}` : ''}
+            {pr.value} {pr.unit}
           </Text>
           <Text style={styles.heroMeta}>
-            Last achieved {formatDate(pr.achievedAt)}
+            Achieved {formatDate(pr.achievedAt)}
           </Text>
           <View style={styles.heroDelta}>
-            <Ionicons
-              name={pr.trend === 'down' ? 'arrow-down' : 'arrow-up'}
-              size={14}
-              color={COLORS.success}
-            />
-            <Text style={styles.heroDeltaText}>{pr.delta} since last record</Text>
+            <Ionicons name="arrow-up" size={14} color={COLORS.success} />
+            <Text style={styles.heroDeltaText}>{pr.delta}</Text>
           </View>
         </View>
 
+        <Text style={styles.about}>{pr.description}</Text>
+
         <Text style={styles.sectionLabel}>HISTORY</Text>
-        <View style={styles.chartCard}>
-          <View style={styles.chart}>
-            {pr.history.map((point, idx) => {
-              const norm = (point.value - min) / range;
-              const heightPct = isTime ? (1 - norm) * 100 : norm * 100;
-              return (
-                <View key={`${point.date}-${idx}`} style={styles.barColumn}>
-                  <View style={styles.barTrack}>
-                    <View
-                      style={[
-                        styles.barFill,
-                        { height: `${Math.max(heightPct, 8)}%` },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.barValue}>
-                    {isTime
-                      ? formatTime(point.value)
-                      : `${point.value}${pr.unit ? '' : ''}`}
-                  </Text>
-                  <Text style={styles.barDate}>{shortDate(point.date)}</Text>
-                </View>
-              );
-            })}
+        {history.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Ionicons name="bar-chart-outline" size={28} color={COLORS.muted} />
+            <Text style={styles.emptyText}>No data yet.</Text>
           </View>
-        </View>
+        ) : (
+          <View style={styles.chartCard}>
+            <View style={styles.chart}>
+              {history.map((point, idx) => {
+                const norm = (point.value - min) / range;
+                const heightPct = norm * 100;
+                return (
+                  <View key={`${point.date}-${idx}`} style={styles.barColumn}>
+                    <View style={styles.barTrack}>
+                      <View
+                        style={[
+                          styles.barFill,
+                          { height: `${Math.max(heightPct, 8)}%` },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.barValue}>{point.value}</Text>
+                    <Text style={styles.barDate}>{shortDate(point.date)}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         <Text style={[styles.sectionLabel, { marginTop: 22 }]}>SUMMARY</Text>
         <View style={styles.summaryCard}>
-          <Row label="Records logged" value={`${pr.history.length}`} COLORS={COLORS} />
+          <Row label="Entries" value={`${history.length}`} COLORS={COLORS} />
           <View style={styles.divider} />
           <Row
             label="Starting value"
-            value={isTime ? formatTime(start) : `${start} ${pr.unit}`}
+            value={history.length ? `${start} ${pr.unit}` : '--'}
             COLORS={COLORS}
           />
           <View style={styles.divider} />
           <Row
             label="Latest value"
-            value={isTime ? formatTime(end) : `${end} ${pr.unit}`}
+            value={history.length ? `${end} ${pr.unit}` : '--'}
             COLORS={COLORS}
           />
           <View style={styles.divider} />
           <Row
             label="Overall change"
-            value={overallChangeStr + (isTime ? ' (faster)' : ` ${pr.unit}`)}
+            value={history.length ? `${overallChangeStr} ${pr.unit}` : '--'}
             COLORS={COLORS}
           />
         </View>
-
-        {pr.notes && (
-          <>
-            <Text style={[styles.sectionLabel, { marginTop: 22 }]}>NOTES</Text>
-            <View style={styles.notesCard}>
-              <Text style={styles.notes}>{pr.notes}</Text>
-            </View>
-          </>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -163,13 +158,6 @@ function Row({
       <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.text }}>{value}</Text>
     </View>
   );
-}
-
-function formatTime(value: number): string {
-  // value in minutes (e.g., 22.23 = 22m 14s if encoded as fractional minutes)
-  const m = Math.floor(value);
-  const s = Math.round((value - m) * 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 function formatDate(iso: string): string {
@@ -205,7 +193,7 @@ const makeStyles = (COLORS: Palette) =>
       padding: 22,
       alignItems: 'center',
       ...SHADOWS.card,
-      marginBottom: 22,
+      marginBottom: 14,
     },
     heroIcon: {
       width: 64,
@@ -229,6 +217,13 @@ const makeStyles = (COLORS: Palette) =>
       backgroundColor: 'rgba(46, 192, 126, 0.12)',
     },
     heroDeltaText: { color: COLORS.success, fontSize: 12, fontWeight: '700' },
+    about: {
+      fontSize: 13,
+      color: COLORS.muted,
+      lineHeight: 19,
+      marginBottom: 18,
+      paddingHorizontal: 4,
+    },
     sectionLabel: {
       fontSize: 11,
       fontWeight: '800',
@@ -272,13 +267,14 @@ const makeStyles = (COLORS: Palette) =>
       backgroundColor: COLORS.divider,
       marginHorizontal: 14,
     },
-    notesCard: {
+    empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
+    emptyText: { fontSize: 14, color: COLORS.muted, fontWeight: '600', textAlign: 'center' },
+    emptyCard: {
+      alignItems: 'center',
+      gap: 10,
+      padding: 24,
       backgroundColor: COLORS.card,
       borderRadius: RADIUS.lg,
-      padding: 16,
       ...SHADOWS.card,
     },
-    notes: { fontSize: 14, color: COLORS.text, lineHeight: 20 },
-    empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    emptyText: { fontSize: 15, color: COLORS.muted },
   });

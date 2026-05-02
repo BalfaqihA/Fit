@@ -5,10 +5,12 @@ import {
   query,
   type Timestamp,
 } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
+import { dateToIso, todayIso } from '@/lib/plan-day';
+import type { CompletedExerciseLog } from '@/lib/workouts';
 
 export type WorkoutSessionDoc = {
   id: string;
@@ -19,6 +21,7 @@ export type WorkoutSessionDoc = {
   xp: number;
   planId?: string;
   dayNum?: number;
+  exercises?: CompletedExerciseLog[];
 };
 
 export function useWorkoutHistory() {
@@ -49,6 +52,7 @@ export function useWorkoutHistory() {
             xp?: number;
             planId?: string;
             dayNum?: number;
+            exercises?: CompletedExerciseLog[];
           };
           return {
             id: d.id,
@@ -59,6 +63,7 @@ export function useWorkoutHistory() {
             xp: raw.xp ?? 0,
             planId: raw.planId,
             dayNum: raw.dayNum,
+            exercises: raw.exercises,
           };
         });
         setSessions(list);
@@ -70,4 +75,14 @@ export function useWorkoutHistory() {
   }, [user]);
 
   return { sessions, loading };
+}
+
+export function useTodayWorkout(): WorkoutSessionDoc | null {
+  const { sessions } = useWorkoutHistory();
+  return useMemo(() => {
+    const today = todayIso();
+    return (
+      sessions.find((s) => dateToIso(s.completedAt) === today) ?? null
+    );
+  }, [sessions]);
 }

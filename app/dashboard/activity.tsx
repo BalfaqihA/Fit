@@ -10,19 +10,25 @@ import {
 
 import { BackButton } from '@/components/back-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { ACTIVITY_TOTALS, WEEKLY_BARS } from '@/constants/dashboard-data';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserProfile } from '@/hooks/use-user-profile';
+import { useWeeklyStats } from '@/hooks/use-weekly-stats';
 
 export default function ActivityDetail() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  const { profile } = useUserProfile();
+  const { bars, totals, activeDays, currentStreak, longestStreak } =
+    useWeeklyStats();
 
-  const totalMinutes = WEEKLY_BARS.reduce((sum, b) => sum + b.minutes, 0);
-  const peak = WEEKLY_BARS.reduce(
+  const totalMinutes = totals.minutes;
+  const totalCalories = totals.calories;
+  const totalWorkouts = totals.workouts;
+  const peak = bars.reduce(
     (best, bar) => (bar.minutes > best.minutes ? bar : best),
-    WEEKLY_BARS[0]
+    bars[0] ?? { day: '-', minutes: 0 }
   );
-  const avgPerDay = Math.round(totalMinutes / WEEKLY_BARS.length);
+  const avgPerDay = bars.length ? Math.round(totalMinutes / bars.length) : 0;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -40,7 +46,7 @@ export default function ActivityDetail() {
             iconColor={COLORS.primary}
             iconBg={COLORS.primarySoft}
             label="Total minutes"
-            value={`${ACTIVITY_TOTALS.minutes}`}
+            value={`${totalMinutes}`}
             COLORS={COLORS}
           />
           <Tile
@@ -48,7 +54,7 @@ export default function ActivityDetail() {
             iconColor="#FF5A64"
             iconBg="#FFE1E1"
             label="Calories burned"
-            value={`${(ACTIVITY_TOTALS.calories / 1000).toFixed(1)}k`}
+            value={formatK(totalCalories)}
             COLORS={COLORS}
           />
         </View>
@@ -58,15 +64,15 @@ export default function ActivityDetail() {
             iconColor="#0C7A8A"
             iconBg="#E8E3E1"
             label="Workouts"
-            value={`${ACTIVITY_TOTALS.workouts}`}
+            value={`${totalWorkouts}`}
             COLORS={COLORS}
           />
           <Tile
-            icon="walk-outline"
+            icon="trophy-outline"
             iconColor="#E0B400"
             iconBg="#FFF3E0"
-            label="Distance"
-            value={`${ACTIVITY_TOTALS.distanceKm} km`}
+            label="All-time"
+            value={`${profile.stats?.totalWorkouts ?? 0}`}
             COLORS={COLORS}
           />
         </View>
@@ -75,25 +81,40 @@ export default function ActivityDetail() {
         <View style={styles.streakCard}>
           <View style={styles.streakItem}>
             <MaterialCommunityIcons name="fire" size={26} color="#FF5A64" />
-            <Text style={styles.streakValue}>{ACTIVITY_TOTALS.activeDays}</Text>
-            <Text style={styles.streakLabel}>Active days</Text>
+            <Text style={styles.streakValue}>{currentStreak}</Text>
+            <Text style={styles.streakLabel}>Current streak</Text>
           </View>
           <View style={[styles.streakDivider, { backgroundColor: COLORS.divider }]} />
           <View style={styles.streakItem}>
             <Ionicons name="ribbon-outline" size={26} color={COLORS.primary} />
-            <Text style={styles.streakValue}>{ACTIVITY_TOTALS.longestStreak}</Text>
+            <Text style={styles.streakValue}>{longestStreak}</Text>
             <Text style={styles.streakLabel}>Longest streak</Text>
+          </View>
+          <View style={[styles.streakDivider, { backgroundColor: COLORS.divider }]} />
+          <View style={styles.streakItem}>
+            <MaterialCommunityIcons
+              name="check-decagram"
+              size={26}
+              color={COLORS.success}
+            />
+            <Text style={styles.streakValue}>{activeDays}</Text>
+            <Text style={styles.streakLabel}>Active days</Text>
           </View>
         </View>
 
         <Text style={[styles.sectionLabel, { marginTop: 22 }]}>LAST 7 DAYS</Text>
         <View style={styles.chartCard}>
           <View style={styles.chart}>
-            {WEEKLY_BARS.map((bar, idx) => (
-              <View key={`${bar.day}-${idx}`} style={styles.barColumn}>
+            {bars.map((bar, idx) => (
+              <View key={`${bar.dateIso}-${idx}`} style={styles.barColumn}>
                 <View style={styles.barTrack}>
                   <View
-                    style={[styles.barFill, { height: `${bar.value * 100}%` }]}
+                    style={[
+                      styles.barFill,
+                      {
+                        height: `${Math.max(bar.value * 100, bar.minutes > 0 ? 10 : 0)}%`,
+                      },
+                    ]}
                   />
                 </View>
                 <Text style={styles.barLabel}>{bar.day}</Text>
@@ -103,13 +124,22 @@ export default function ActivityDetail() {
           </View>
           <View style={styles.summaryRow}>
             <Summary label="Avg / day" value={`${avgPerDay} min`} COLORS={COLORS} />
-            <Summary label="Best day" value={`${peak.day} · ${peak.minutes}m`} COLORS={COLORS} />
+            <Summary
+              label="Best day"
+              value={`${peak.day} · ${peak.minutes}m`}
+              COLORS={COLORS}
+            />
             <Summary label="Total" value={`${totalMinutes} min`} COLORS={COLORS} />
           </View>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function formatK(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return `${n}`;
 }
 
 function Tile({

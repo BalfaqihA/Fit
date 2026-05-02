@@ -12,20 +12,26 @@ import {
 } from 'react-native';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
+import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import { useWeeklyStats } from '@/hooks/use-weekly-stats';
 import { useDerivedRecords } from '@/hooks/use-derived-records';
 import { useMeasurements } from '@/hooks/use-measurements';
+import { LEVEL_XP, levelFromXp } from '@/lib/gamification';
 import { bmiFromKg } from '@/lib/measurements';
 
 export default function DashboardTab() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  const { user } = useAuth();
   const { profile } = useUserProfile();
   const { bars, totals, currentStreak } = useWeeklyStats();
   const records = useDerivedRecords();
   const { latestWeight, measurements } = useMeasurements();
+
+  const totalXp = profile.stats?.totalXp ?? 0;
+  const { level, currentLevelXp, progress, remainingXp } = levelFromXp(totalXp);
 
   const topPRs = records.slice(0, 3);
 
@@ -76,6 +82,39 @@ export default function DashboardTab() {
           <Text style={styles.title}>Dashboard</Text>
           <Text style={styles.subtitle}>Track your progress</Text>
         </View>
+
+        <Pressable
+          onPress={() =>
+            user &&
+            router.push(`/community/achievements/${user.uid}` as never)
+          }
+          style={({ pressed }) => [styles.levelCard, pressed && { opacity: 0.9 }]}
+        >
+          <View style={styles.levelHeaderRow}>
+            <View style={styles.levelBadge}>
+              <Ionicons name="flash" size={14} color={COLORS.primary} />
+              <Text style={styles.levelBadgeText}>Lv {level}</Text>
+            </View>
+            <Text style={styles.levelXp}>{totalXp.toLocaleString()} XP</Text>
+            <Ionicons name="chevron-forward" size={16} color={COLORS.muted} />
+          </View>
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${Math.round(progress * 100)}%` },
+              ]}
+            />
+          </View>
+          <View style={styles.progressMetaRow}>
+            <Text style={styles.progressMetaText}>
+              {currentLevelXp} / {LEVEL_XP}
+            </Text>
+            <Text style={styles.progressMetaText}>
+              {remainingXp} XP to Lv {level + 1}
+            </Text>
+          </View>
+        </Pressable>
 
         <Pressable
           onPress={() => router.push('/dashboard/activity' as never)}
@@ -246,6 +285,47 @@ const makeStyles = (COLORS: Palette) =>
     header: { marginBottom: 18 },
     title: { fontSize: 26, fontWeight: '800', color: COLORS.text },
     subtitle: { fontSize: 14, color: COLORS.muted, marginTop: 2 },
+    levelCard: {
+      backgroundColor: COLORS.card,
+      borderRadius: RADIUS.lg,
+      padding: 16,
+      marginBottom: 14,
+      ...SHADOWS.card,
+    },
+    levelHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 10,
+    },
+    levelBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: COLORS.primarySoft,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: RADIUS.pill,
+    },
+    levelBadgeText: { color: COLORS.primary, fontSize: 12, fontWeight: '800' },
+    levelXp: { flex: 1, fontSize: 14, fontWeight: '800', color: COLORS.text },
+    progressTrack: {
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: COLORS.primarySoft,
+      overflow: 'hidden',
+    },
+    progressFill: {
+      height: '100%',
+      backgroundColor: COLORS.primary,
+      borderRadius: 4,
+    },
+    progressMetaRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: 6,
+    },
+    progressMetaText: { fontSize: 11, color: COLORS.muted, fontWeight: '700' },
     overviewCard: {
       borderRadius: RADIUS.lg,
       padding: 20,

@@ -1,9 +1,11 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+import { captureException } from '@/lib/observability';
 import { loadJSON, saveJSON } from '@/lib/storage';
 
 const PERM_FLAG_KEY = '@fitlife:notifPermAsked';
+const SOFT_PROMPT_KEY = '@fitlife:notifSoftPromptDismissed';
 const SCHEDULED_FLAG_KEY = '@fitlife:weighInScheduledId';
 const WEIGH_IN_CHANNEL = 'weigh-in';
 
@@ -25,6 +27,28 @@ async function ensureChannel() {
 }
 
 /**
+ * Returns true if the app has not yet asked the user for notification
+ * permission AND the OS will let us ask. Used to decide whether to show the
+ * in-app soft prompt before the irreversible system dialog.
+ */
+export async function shouldShowNotificationSoftPrompt(): Promise<boolean> {
+  try {
+    const dismissed = await loadJSON<boolean>(SOFT_PROMPT_KEY, false);
+    if (dismissed) return false;
+    const status = await Notifications.getPermissionsAsync();
+    if (status.granted) return false;
+    return status.canAskAgain;
+  } catch (e) {
+    captureException(e, { tags: { area: 'notifications', op: 'shouldShowSoftPrompt' } });
+    return false;
+  }
+}
+
+export async function dismissNotificationSoftPrompt(): Promise<void> {
+  await saveJSON(SOFT_PROMPT_KEY, true);
+}
+
+/**
  * Request notification permission once per install. Subsequent calls are no-ops
  * unless the user has revoked permission via OS settings.
  */
@@ -37,7 +61,8 @@ export async function requestNotificationPermissionOnce(): Promise<boolean> {
     const next = await Notifications.requestPermissionsAsync();
     await saveJSON(PERM_FLAG_KEY, true);
     return next.granted;
-  } catch {
+  } catch (e) {
+    captureException(e, { tags: { area: 'notifications', op: 'requestPermission' } });
     return false;
   }
 }
@@ -70,7 +95,8 @@ export async function scheduleWeeklyWeighIn(
     });
     await saveJSON(SCHEDULED_FLAG_KEY, id);
     return id;
-  } catch {
+  } catch (e) {
+    captureException(e, { tags: { area: 'notifications', op: 'scheduleWeighIn' } });
     return null;
   }
 }
@@ -84,7 +110,7 @@ export async function cancelWeeklyWeighIn(): Promise<void> {
       );
       await saveJSON(SCHEDULED_FLAG_KEY, null);
     }
-  } catch {
-    // ignore
+  } catch (e) {
+    captureException(e, { tags: { area: 'notifications', op: 'cancelWeighIn' } });
   }
 }

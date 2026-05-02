@@ -105,6 +105,11 @@ export default function SettingsHub() {
       icon: 'refresh-outline',
       onPress: startChangePlan,
     },
+    {
+      label: 'Delete Account',
+      icon: 'trash-outline',
+      onPress: () => router.push('/settings/delete-account' as never),
+    },
   ];
 
   const preferenceRows: SettingsRow[] = [

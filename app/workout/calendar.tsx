@@ -16,6 +16,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import { useWorkoutHistory } from '@/hooks/use-workout-history';
 import { usePlan } from '@/hooks/use-plan';
+import { captureException } from '@/lib/observability';
 import { computeStreak, isoToLocalDayStart } from '@/lib/plan-day';
 import { updatePlanDaysPerWeek } from '@/lib/plans';
 
@@ -138,8 +139,11 @@ export default function WorkoutCalendar() {
     if (!user || !plan?.id || n === daysPerWeek) return;
     try {
       await updatePlanDaysPerWeek(user.uid, plan.id, n);
-    } catch {
-      // best-effort; the snapshot listener will reflect on success
+    } catch (e) {
+      captureException(e, {
+        tags: { area: 'plan', op: 'updateDaysPerWeek' },
+        context: { planId: plan.id, daysPerWeek: n },
+      });
     }
   };
 

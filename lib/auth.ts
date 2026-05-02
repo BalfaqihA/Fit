@@ -1,6 +1,7 @@
 import {
   EmailAuthProvider,
   createUserWithEmailAndPassword,
+  deleteUser,
   onAuthStateChanged,
   reauthenticateWithCredential,
   sendPasswordResetEmail,
@@ -11,8 +12,9 @@ import {
   type User,
 } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 
-import { auth, db } from '@/lib/firebase';
+import { auth, db, functions } from '@/lib/firebase';
 import type { UserProfile } from '@/types/community';
 
 export type SignUpInput = {
@@ -89,6 +91,21 @@ export async function changePassword({
 
 export function subscribeToAuthState(cb: (user: User | null) => void) {
   return onAuthStateChanged(auth, cb);
+}
+
+export async function deleteAccount(currentPassword: string) {
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    throw new Error('No user is currently signed in.');
+  }
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+
+  const callable = httpsCallable(functions, 'delete_account');
+  await callable({});
+
+  await deleteUser(user);
+  await firebaseSignOut(auth);
 }
 
 export async function fetchProfile(uid: string): Promise<UserProfile | null> {

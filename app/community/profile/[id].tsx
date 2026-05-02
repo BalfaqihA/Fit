@@ -15,9 +15,13 @@ import { BackButton } from '@/components/back-button';
 import { FollowButton } from '@/components/follow-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { GOAL_META } from '@/constants/goals';
+import { useAchievements } from '@/hooks/use-achievements';
+import { useAuth } from '@/hooks/use-auth';
 import { useCommunity } from '@/hooks/use-community';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
+import { getAchievement } from '@/lib/achievements';
+import { levelFromXp } from '@/lib/gamification';
 
 const COVER_FALLBACK =
   'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80';
@@ -27,11 +31,18 @@ export default function ProfileView() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { profile } = useUserProfile();
+  const { user: authUser } = useAuth();
   const { getUserById, getPostsByUser, getFollowerCount, getFollowingCount } =
     useCommunity();
 
   const user = id ? getUserById(id) : undefined;
   const isCurrentUser = !!user && user.id === profile.id;
+  const { unlocked } = useAchievements(
+    isCurrentUser && authUser ? authUser.uid : undefined,
+  );
+  const totalXp = isCurrentUser ? profile.stats?.totalXp ?? 0 : 0;
+  const { level } = levelFromXp(totalXp);
+  const recentUnlocks = unlocked.slice(0, 5);
 
   if (!user) {
     return (
@@ -102,7 +113,15 @@ export default function ProfileView() {
             )}
           </View>
 
-          <Text style={styles.name}>{user.displayName}</Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name}>{user.displayName}</Text>
+            {isCurrentUser && (
+              <View style={styles.levelChip}>
+                <Ionicons name="flash" size={12} color={COLORS.primary} />
+                <Text style={styles.levelChipText}>Lv {level}</Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.handle}>@{user.handle}</Text>
           {!!user.bio && <Text style={styles.bio}>{user.bio}</Text>}
 
@@ -151,6 +170,62 @@ export default function ProfileView() {
                   );
                 })}
               </View>
+            </View>
+          )}
+
+          {isCurrentUser && (
+            <View style={styles.section}>
+              <View style={styles.achievementsHeader}>
+                <Text style={styles.sectionTitle}>Achievements</Text>
+                <Pressable
+                  hitSlop={8}
+                  onPress={() =>
+                    authUser &&
+                    router.push(
+                      `/community/achievements/${authUser.uid}` as never,
+                    )
+                  }
+                >
+                  <Text style={styles.sectionLink}>See all</Text>
+                </Pressable>
+              </View>
+              {recentUnlocks.length === 0 ? (
+                <Text style={styles.emptyText}>
+                  Train consistently to unlock your first badge.
+                </Text>
+              ) : (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 10 }}
+                >
+                  {recentUnlocks.map((u) => {
+                    const a = getAchievement(u.id);
+                    if (!a) return null;
+                    const Icon =
+                      a.iconLib === 'material-community'
+                        ? MaterialCommunityIcons
+                        : Ionicons;
+                    return (
+                      <View key={u.id} style={styles.achievementBadge}>
+                        <View style={styles.achievementBadgeIcon}>
+                          <Icon
+                            name={a.icon as never}
+                            size={22}
+                            color={COLORS.primary}
+                          />
+                        </View>
+                        <Text
+                          style={styles.achievementBadgeTitle}
+                          numberOfLines={2}
+                        >
+                          {a.title}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              )}
             </View>
           )}
 
@@ -277,7 +352,23 @@ const makeStyles = (COLORS: Palette) =>
       backgroundColor: COLORS.card,
     },
     editProfileText: { fontSize: 13, fontWeight: '800', color: COLORS.text },
-    name: { fontSize: 22, fontWeight: '800', color: COLORS.text, marginTop: 12 },
+    nameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginTop: 12,
+    },
+    name: { fontSize: 22, fontWeight: '800', color: COLORS.text },
+    levelChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: RADIUS.pill,
+      backgroundColor: COLORS.primarySoft,
+    },
+    levelChipText: { color: COLORS.primary, fontSize: 12, fontWeight: '800' },
     handle: { fontSize: 13, color: COLORS.muted, marginTop: 2 },
     bio: { fontSize: 14, color: COLORS.text, lineHeight: 20, marginTop: 10 },
     statsRow: {
@@ -297,6 +388,32 @@ const makeStyles = (COLORS: Palette) =>
       color: COLORS.muted,
       letterSpacing: 0.6,
       marginBottom: 10,
+    },
+    achievementsHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    sectionLink: { fontSize: 13, color: COLORS.primary, fontWeight: '700' },
+    achievementBadge: {
+      width: 86,
+      alignItems: 'center',
+      gap: 6,
+    },
+    achievementBadgeIcon: {
+      width: 56,
+      height: 56,
+      borderRadius: 18,
+      backgroundColor: COLORS.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    achievementBadgeTitle: {
+      fontSize: 11,
+      color: COLORS.text,
+      fontWeight: '700',
+      textAlign: 'center',
     },
     goalGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     goalCard: {

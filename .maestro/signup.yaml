@@ -1,0 +1,18 @@
+appId: host.exp.Exponent  # change to your release bundle id once you have one
+name: Sign up + reach onboarding
+---
+- launchApp:
+    clearState: true
+- tapOn: "Get Started"
+- tapOn: "Sign Up"
+# Inputs are matched by their placeholder text; adjust if you rename them.
+- tapOn: "Enter your full name"
+- inputText: "Maestro Tester"
+- tapOn: "Enter your email"
+- inputText: "e2e+${output.timestamp}@example.com"
+- tapOn: "Create a password"
+- inputText: "TestPass1!"
+- tapOn: "Re-enter your password"
+- inputText: "TestPass1!"
+- tapOn: "Sign Up"
+- assertVisible: "Welcome"      # onboarding entry — adjust to whatever the first onboarding screen shows

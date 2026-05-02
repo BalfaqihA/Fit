@@ -1,13 +1,38 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, create, update: if isOwner(uid);
+      allow delete: if false;
+
+      match /workouts/{workoutId} {
+        allow read, create: if isOwner(uid);
+        allow update, delete: if false;
+      }
+
+      match /measurements/{measurementId} {
+        allow read, create: if isOwner(uid);
+        allow update, delete: if false;
+      }
+
+      match /xp_events/{eventId} {
+        allow read, create: if isOwner(uid);
+        allow update, delete: if false;
+      }
+
+      match /achievements/{achievementId} {
+        allow read, create: if isOwner(uid);
+        allow update, delete: if false;
+      }
 
       match /plans/{planId} {
-        allow read: if request.auth != null && request.auth.uid == uid;
-        // Plans are written only by the Cloud Function (admin SDK).
-        allow write: if false;
+        allow read, update: if isOwner(uid);
+        allow create, delete: if false;
       }
     }
   }

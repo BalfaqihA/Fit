@@ -17,10 +17,17 @@ import pathlib
 import random
 from typing import Any, Dict, List
 
-from firebase_admin import firestore, initialize_app
+from firebase_admin import auth as admin_auth, firestore, initialize_app
 from firebase_functions import https_fn, options
 
 initialize_app()
+
+# Restrict CORS to first-party web origins. Native app calls go through the
+# Firebase Functions client SDK and are not subject to CORS.
+_ALLOWED_ORIGINS = [
+    "https://fitness-874c3.web.app",
+    "https://fitness-874c3.firebaseapp.com",
+]
 
 _DATA: List[Dict[str, Any]] = json.loads(
     (pathlib.Path(__file__).parent / "data" / "exercises.json").read_text("utf-8")
@@ -92,7 +99,7 @@ def _default_reps(goal: str, level: str) -> int:
 
 @https_fn.on_call(
     region="us-central1",
-    cors=options.CorsOptions(cors_origins="*", cors_methods=["POST"]),
+    cors=options.CorsOptions(cors_origins=_ALLOWED_ORIGINS, cors_methods=["POST"]),
 )
 def generate_plan(req: https_fn.CallableRequest) -> Dict[str, Any]:
     if req.auth is None:
@@ -190,3 +197,55 @@ def generate_plan(req: https_fn.CallableRequest) -> Dict[str, Any]:
     )
 
     return {"planId": plan_ref.id}
+
+
+_USER_SUBCOLLECTIONS = (
+    "workouts",
+    "measurements",
+    "plans",
+    "xp_events",
+    "achievements",
+)
+
+
+def _delete_collection(coll_ref, batch_size: int = 200) -> int:
+    """Delete every document in a collection in batches. Returns count deleted."""
+    deleted = 0
+    while True:
+        docs = list(coll_ref.limit(batch_size).stream())
+        if not docs:
+            return deleted
+        for doc in docs:
+            doc.reference.delete()
+            deleted += 1
+        if len(docs) < batch_size:
+            return deleted
+
+
+@https_fn.on_call(
+    region="us-central1",
+    cors=options.CorsOptions(cors_origins=_ALLOWED_ORIGINS, cors_methods=["POST"]),
+)
+def delete_account(req: https_fn.CallableRequest) -> Dict[str, Any]:
+    """Permanently delete the calling user's Firestore subtree.
+
+    The client is expected to call `auth.currentUser.delete()` after this
+    succeeds. This function only handles the Firestore-side cleanup.
+    """
+    if req.auth is None:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Sign in required."
+        )
+
+    uid = req.auth.uid
+    db = firestore.client()
+    user_ref = db.collection("users").document(uid)
+
+    deleted = 0
+    for sub in _USER_SUBCOLLECTIONS:
+        deleted += _delete_collection(user_ref.collection(sub))
+
+    user_ref.delete()
+    deleted += 1
+
+    return {"deleted": deleted}

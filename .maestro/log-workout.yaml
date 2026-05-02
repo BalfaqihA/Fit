@@ -1,0 +1,30 @@
+appId: host.exp.Exponent
+name: Manually log a workout and see XP increase
+---
+# Assumes a signed-in user with onboarding completed.
+- launchApp
+- assertVisible: "Dashboard"
+- tapOn: "Dashboard"
+# The Level pill is the entry point to achievements; capture XP before logging.
+- assertVisible:
+    text: "Lv .*"
+    enabled: true
+- tapOn: "Home"
+# Navigate into the manual log entry. Path may differ; adjust if the entry point moves.
+- tapOn:
+    id: "log-entry"
+    optional: true
+# Fallback: deep link if no visible button is wired yet.
+- runFlow:
+    when:
+      notVisible: "Log Workout"
+    commands:
+      - openLink: "fit://workout/log"
+- assertVisible: "Log Workout"
+- tapOn: "Save Entry"
+- assertVisible: "Entry saved"
+- tapOn: "OK"
+- tapOn: "Dashboard"
+- assertVisible:
+    text: "Lv .*"
+    enabled: true

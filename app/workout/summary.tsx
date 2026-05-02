@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -14,11 +14,22 @@ import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useWorkoutSession } from '@/contexts/workout-session';
 import { useAuth } from '@/hooks/use-auth';
+import { useMeasurements } from '@/hooks/use-measurements';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
+import { useWeeklyStats } from '@/hooks/use-weekly-stats';
+import {
+  type Achievement,
+  checkAndUnlockAchievements,
+} from '@/lib/achievements';
+import {
+  COMPLETION_BONUS_XP,
+  LEVEL_XP,
+  XP_PER_MINUTE,
+  levelFromXp,
+} from '@/lib/gamification';
+import { captureException } from '@/lib/observability';
 import { recordCompletedWorkout } from '@/lib/workouts';
-
-const LEVEL_XP = 1000;
 
 export default function WorkoutSummary() {
   const { COLORS } = useTheme();
@@ -26,6 +37,9 @@ export default function WorkoutSummary() {
   const { reset, completedExercises } = useWorkoutSession();
   const { user } = useAuth();
   const { profile } = useUserProfile();
+  const { longestStreak } = useWeeklyStats();
+  const { measurements } = useMeasurements();
+  const [unlocked, setUnlocked] = useState<Achievement[]>([]);
 
   const params = useLocalSearchParams<{
     duration?: string;
@@ -46,6 +60,9 @@ export default function WorkoutSummary() {
     if (persisted.current) return;
     persisted.current = true;
     const exercisesSnapshot = completedExercises;
+    const prevStats = profile.stats;
+    const measurementCount = measurements.length;
+    const streakAtCompletion = longestStreak;
     const run = async () => {
       if (user) {
         try {
@@ -59,8 +76,20 @@ export default function WorkoutSummary() {
             exercises: exercisesSnapshot.length > 0 ? exercisesSnapshot : undefined,
             setPlanStartDate: !profile.planStartDate,
           });
-        } catch {
-          // non-blocking; UI is already shown
+
+          const newly = await checkAndUnlockAchievements(user.uid, {
+            totalWorkouts: (prevStats?.totalWorkouts ?? 0) + 1,
+            totalMinutes: (prevStats?.totalMinutes ?? 0) + duration,
+            totalXp: (prevStats?.totalXp ?? 0) + xp,
+            longestStreak: streakAtCompletion,
+            weightLogCount: measurementCount,
+          });
+          if (newly.length > 0) setUnlocked(newly);
+        } catch (e) {
+          captureException(e, {
+            tags: { area: 'workout', op: 'recordSummary' },
+            context: { uid: user.uid, durationMin: duration },
+          });
         }
       }
       reset();
@@ -76,21 +105,26 @@ export default function WorkoutSummary() {
     params.planId,
     params.dayNum,
     profile.planStartDate,
+    profile.stats,
     completedExercises,
+    longestStreak,
+    measurements.length,
   ]);
 
-  const baseExp = 50;
-  const durationBonus = duration * 3;
+  const baseExp = COMPLETION_BONUS_XP;
+  const durationBonus = duration * XP_PER_MINUTE;
   const exerciseExp = Math.max(0, xp - baseExp - durationBonus);
 
   // Live profile.stats.totalXp already includes this workout's xp once Firestore
   // confirms the write — until then we project the post-workout value locally.
   const persistedXp = profile.stats?.totalXp ?? 0;
   const totalXp = Math.max(persistedXp, xp);
-  const level = Math.floor(totalXp / LEVEL_XP) + 1;
-  const currentLevelExp = totalXp % LEVEL_XP;
-  const progress = Math.min(1, currentLevelExp / LEVEL_XP);
-  const remaining = Math.max(0, LEVEL_XP - currentLevelExp);
+  const {
+    level,
+    currentLevelXp: currentLevelExp,
+    progress,
+    remainingXp: remaining,
+  } = levelFromXp(totalXp);
 
   const stats = [
     { icon: 'time-outline', label: 'Duration', value: `${duration}m` },
@@ -181,6 +215,36 @@ export default function WorkoutSummary() {
             </Text>
           </View>
         </View>
+
+        {unlocked.length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Achievements Unlocked</Text>
+            {unlocked.map((a) => (
+              <View key={a.id} style={styles.achievementRow}>
+                <View style={styles.achievementIconWrap}>
+                  {a.iconLib === 'material-community' ? (
+                    <MaterialCommunityIcons
+                      name={a.icon as never}
+                      size={22}
+                      color={COLORS.primary}
+                    />
+                  ) : (
+                    <Ionicons
+                      name={a.icon as never}
+                      size={22}
+                      color={COLORS.primary}
+                    />
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.achievementTitle}>{a.title}</Text>
+                  <Text style={styles.achievementDesc}>{a.description}</Text>
+                </View>
+                <Text style={styles.achievementXp}>+{a.xpReward} XP</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         <PrimaryButton
           label="Back to Home"
@@ -343,4 +407,21 @@ const makeStyles = (COLORS: Palette) =>
       marginTop: 8,
     },
     progressMeta: { fontSize: 12, color: COLORS.muted, fontWeight: '600' },
+    achievementRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 10,
+    },
+    achievementIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: COLORS.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    achievementTitle: { fontSize: 14, fontWeight: '800', color: COLORS.text },
+    achievementDesc: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
+    achievementXp: { fontSize: 13, fontWeight: '800', color: COLORS.primary },
   });

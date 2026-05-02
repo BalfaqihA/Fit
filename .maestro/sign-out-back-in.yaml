@@ -1,0 +1,19 @@
+appId: host.exp.Exponent
+name: Sign out and back in preserves history
+---
+# Assumes a signed-in user with at least one logged workout.
+- launchApp
+- assertVisible: "Dashboard"
+- tapOn: "Settings"
+- tapOn: "Log out"
+- tapOn: "Log out"           # confirm in the alert
+- assertVisible: "Welcome back"  # login screen — adjust if your hero copy differs
+- tapOn: "Email"
+- inputText: "e2e@example.com"   # replace with a real test account
+- tapOn: "Password"
+- inputText: "TestPass1!"
+- tapOn: "Sign In"
+- assertVisible: "Dashboard"
+- assertVisible:
+    text: "Lv .*"  # XP/level survived sign-out
+    enabled: true

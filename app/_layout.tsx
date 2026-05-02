@@ -1,7 +1,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Alert, View } from 'react-native';
 import 'react-native-reanimated';
 
 import { AuthProvider } from '@/contexts/auth';
@@ -15,8 +15,10 @@ import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import {
+  dismissNotificationSoftPrompt,
   requestNotificationPermissionOnce,
   scheduleWeeklyWeighIn,
+  shouldShowNotificationSoftPrompt,
 } from '@/lib/notifications';
 
 function ThemedStatusBar() {
@@ -33,9 +35,41 @@ function WeighInScheduler() {
     if (!user || !hydrated || armed.current) return;
     if (!profile.weightKg) return; // wait for onboarding to set baseline
     armed.current = true;
-    (async () => {
+
+    const enable = async () => {
       const granted = await requestNotificationPermissionOnce();
       if (granted) await scheduleWeeklyWeighIn();
+    };
+
+    (async () => {
+      const showSoftPrompt = await shouldShowNotificationSoftPrompt();
+      if (!showSoftPrompt) {
+        // Either previously granted, previously asked, or OS won't allow asking again.
+        // Still try the no-op path in case permission was granted out-of-band.
+        await enable();
+        return;
+      }
+
+      Alert.alert(
+        'Stay on track',
+        'Get a weekly nudge to log your weight so your dashboard stays accurate. You can turn this off anytime in Settings.',
+        [
+          {
+            text: 'Not now',
+            style: 'cancel',
+            onPress: () => {
+              dismissNotificationSoftPrompt();
+            },
+          },
+          {
+            text: 'Enable',
+            onPress: async () => {
+              await dismissNotificationSoftPrompt();
+              await enable();
+            },
+          },
+        ],
+      );
     })();
   }, [user, hydrated, profile.weightKg]);
 

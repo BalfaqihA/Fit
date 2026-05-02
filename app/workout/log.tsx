@@ -17,8 +17,20 @@ import {
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { EXERCISES, type Exercise } from '@/constants/workout-data';
+import {
+  CALORIES_PER_MINUTE,
+  EXERCISES,
+  type Exercise,
+} from '@/constants/workout-data';
+import { useAuth } from '@/hooks/use-auth';
+import { useMeasurements } from '@/hooks/use-measurements';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserProfile } from '@/hooks/use-user-profile';
+import { useWeeklyStats } from '@/hooks/use-weekly-stats';
+import { checkAndUnlockAchievements } from '@/lib/achievements';
+import { xpForExercise, xpForWorkout } from '@/lib/gamification';
+import { captureException } from '@/lib/observability';
+import { recordCompletedWorkout } from '@/lib/workouts';
 
 const RPE = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
@@ -37,6 +49,11 @@ export default function WorkoutLog() {
     []
   );
 
+  const { user } = useAuth();
+  const { profile } = useUserProfile();
+  const { longestStreak } = useWeeklyStats();
+  const { measurements } = useMeasurements();
+
   const [exercise, setExercise] = useState<Exercise>(EXERCISES[0]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [sets, setSets] = useState(3);
@@ -45,13 +62,72 @@ export default function WorkoutLog() {
   const [duration, setDuration] = useState('30');
   const [rpe, setRpe] = useState(7);
   const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const onSave = () => {
-    Alert.alert(
-      'Entry saved',
-      `${exercise.name}\n${sets} × ${reps} @ ${weight} kg · RPE ${rpe} · ${duration} min`,
-      [{ text: 'OK', onPress: () => router.back() }]
-    );
+  const onSave = async () => {
+    if (!user) {
+      Alert.alert('Sign in required', 'Please sign in to save your entry.');
+      return;
+    }
+    if (saving) return;
+    const durationMin = Math.max(0, Math.round(Number(duration) || 0));
+    const exerciseXpSum = xpForExercise(sets, reps);
+    const workoutXp = xpForWorkout({ exerciseXpSum, durationMin });
+    const caloriesKcal = Math.round(durationMin * CALORIES_PER_MINUTE);
+
+    setSaving(true);
+    try {
+      await recordCompletedWorkout(user.uid, {
+        durationMin,
+        caloriesKcal,
+        exercisesCompleted: 1,
+        xp: workoutXp,
+        exercises: [
+          {
+            name: exercise.name,
+            primaryMuscle: exercise.muscle,
+            plannedSets: sets,
+            plannedReps: reps,
+            actualSets: sets,
+          },
+        ],
+        source: 'manual_log',
+        setPlanStartDate: !profile.planStartDate,
+      });
+
+      const prevStats = profile.stats ?? {
+        totalWorkouts: 0,
+        totalMinutes: 0,
+        totalCaloriesKcal: 0,
+        totalXp: 0,
+      };
+      const unlocked = await checkAndUnlockAchievements(user.uid, {
+        totalWorkouts: (prevStats.totalWorkouts ?? 0) + 1,
+        totalMinutes: (prevStats.totalMinutes ?? 0) + durationMin,
+        totalXp: (prevStats.totalXp ?? 0) + workoutXp,
+        longestStreak,
+        weightLogCount: measurements.length,
+      });
+
+      const unlockedLine =
+        unlocked.length > 0
+          ? `\n\nUnlocked: ${unlocked.map((a) => a.title).join(', ')}`
+          : '';
+
+      Alert.alert(
+        'Entry saved',
+        `${exercise.name}\n${sets} × ${reps} @ ${weight} kg · RPE ${rpe} · ${durationMin} min\n+${workoutXp} XP${unlockedLine}`,
+        [{ text: 'OK', onPress: () => router.back() }],
+      );
+    } catch (e) {
+      captureException(e, {
+        tags: { area: 'workout', op: 'manualLog' },
+        context: { uid: user.uid, exerciseId: exercise.id },
+      });
+      Alert.alert('Could not save', 'Try again in a moment.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const Stepper = ({
@@ -188,7 +264,7 @@ export default function WorkoutLog() {
 
         <View style={{ height: 8 }} />
         <PrimaryButton
-          label="Save Entry"
+          label={saving ? 'Saving…' : 'Save Entry'}
           onPress={onSave}
           icon={<Ionicons name="checkmark-circle" size={18} color="#fff" />}
         />

@@ -8,7 +8,7 @@ export const SEED_USERS: SeedUser[] = [
     bio: 'Marathon runner. Coffee first, training second.',
     avatarUri: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=400',
     coverUri:
-      'https://images.unsplash.com/photo-1546483875-ad9014c88eba?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80',
     goals: ['increase_endurance', 'stay_fit'],
   },
   {
@@ -125,7 +125,7 @@ export const SEED_STORIES: Story[] = [
     id: 's_seed_1',
     authorId: 'u_sara',
     imageUri:
-      'https://images.unsplash.com/photo-1546483875-ad9014c88eba?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=900&q=80',
     caption: 'Sunrise run',
     createdAt: NOW - 3 * HOUR,
     expiresAt: NOW + 21 * HOUR,

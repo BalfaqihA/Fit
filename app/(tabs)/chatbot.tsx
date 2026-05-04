@@ -14,6 +14,8 @@ import {
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
+import { sendChat } from '@/lib/chatbot';
+import { captureException } from '@/lib/observability';
 
 type Message = {
   id: string;
@@ -21,19 +23,11 @@ type Message = {
   from: 'bot' | 'user';
 };
 
-const seed: Message[] = [
-  { id: 'm1', from: 'bot', text: "Hi! I'm your FitLife coach. How can I help today?" },
-  { id: 'm2', from: 'user', text: 'I want to build more upper body strength.' },
+const initialMessages: Message[] = [
   {
-    id: 'm3',
+    id: 'greeting',
     from: 'bot',
-    text: 'Great goal! Aim for 3 sessions per week: push, pull, and shoulders. Want me to build a 4-week plan?',
-  },
-  { id: 'm4', from: 'user', text: "Yes please, I've got dumbbells at home." },
-  {
-    id: 'm5',
-    from: 'bot',
-    text: "Got it — dumbbell-only upper body plan coming right up. I'll include sets, reps, and rest times.",
+    text: "Hi! I'm your FitLife coach. Ask me about your plan, nutrition, motivation, or recovery.",
   },
 ];
 
@@ -41,27 +35,51 @@ export default function ChatbotTab() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
 
-  const [messages, setMessages] = useState<Message[]>(seed);
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [draft, setDraft] = useState('');
+  const [pending, setPending] = useState(false);
+  const [lastIntent, setLastIntent] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
-  const send = () => {
+  const send = async () => {
     const text = draft.trim();
-    if (!text) return;
-    const userMsg: Message = { id: `u-${Date.now()}`, from: 'user', text };
+    if (!text || pending) return;
+
+    const userMsg: Message = {
+      id: `u-${Date.now()}`,
+      from: 'user',
+      text,
+    };
     setMessages((prev) => [...prev, userMsg]);
     setDraft('');
-    setTimeout(() => {
+    setPending(true);
+
+    try {
+      const res = await sendChat({
+        message: text,
+        previousIntent: lastIntent ?? undefined,
+      });
+      setMessages((prev) => [
+        ...prev,
+        { id: `b-${Date.now()}`, from: 'bot', text: res.reply },
+      ]);
+      setLastIntent(res.intent);
+    } catch (err) {
+      captureException(err, {
+        tags: { area: 'chatbot', op: 'sendChat' },
+      });
       setMessages((prev) => [
         ...prev,
         {
           id: `b-${Date.now()}`,
           from: 'bot',
-          text: "Thanks! I'll factor that in and update your plan shortly.",
+          text: "Sorry, I couldn't reach the coach service. Try again in a moment.",
         },
       ]);
+    } finally {
+      setPending(false);
       scrollRef.current?.scrollToEnd({ animated: true });
-    }, 600);
+    }
   };
 
   return (
@@ -120,6 +138,16 @@ export default function ChatbotTab() {
               </View>
             </View>
           ))}
+
+          {pending && (
+            <View style={[styles.bubbleRow, styles.rowStart]}>
+              <View style={[styles.bubble, styles.botBubble]}>
+                <Text style={[styles.bubbleText, { color: COLORS.muted }]}>
+                  Coach is typing…
+                </Text>
+              </View>
+            </View>
+          )}
         </ScrollView>
 
         <View style={styles.inputBar}>
@@ -133,14 +161,18 @@ export default function ChatbotTab() {
             placeholderTextColor={COLORS.muted}
             style={styles.input}
             multiline
+            editable={!pending}
           />
           <Pressable style={styles.iconBtn}>
             <Ionicons name="mic-outline" size={20} color={COLORS.muted} />
           </Pressable>
           <Pressable
-            style={[styles.sendBtn, !draft.trim() && { opacity: 0.4 }]}
+            style={[
+              styles.sendBtn,
+              (!draft.trim() || pending) && { opacity: 0.4 },
+            ]}
             onPress={send}
-            disabled={!draft.trim()}
+            disabled={!draft.trim() || pending}
           >
             <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
           </Pressable>

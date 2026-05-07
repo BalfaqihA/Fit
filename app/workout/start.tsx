@@ -61,9 +61,9 @@ export default function StartSession() {
           <View style={styles.restIcon}>
             <Ionicons name="sparkles" size={42} color={COLORS.primary} />
           </View>
-          <Text style={styles.emptyTitle}>Generate your plan</Text>
+          <Text style={styles.emptyTitle}>No plan yet</Text>
           <Text style={styles.emptyMeta}>
-            Finish onboarding to get a personalized plan.
+            Complete onboarding to generate your plan.
           </Text>
           <View style={{ height: 20 }} />
           <PrimaryButton

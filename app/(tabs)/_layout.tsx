@@ -3,10 +3,12 @@ import { Tabs } from 'expo-router';
 import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
+import { useOwnPostActivity } from '@/hooks/use-own-post-activity';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function TabLayout() {
   const { COLORS } = useTheme();
+  useOwnPostActivity();
 
   return (
     <Tabs
@@ -26,6 +28,7 @@ export default function TabLayout() {
           fontSize: 11,
           fontWeight: '700',
         },
+        tabBarHideOnKeyboard: false,
       }}>
       <Tabs.Screen
         name="index"

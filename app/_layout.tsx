@@ -10,6 +10,7 @@ import { OnboardingProvider } from '@/contexts/onboarding';
 import { PlanProvider } from '@/contexts/plan';
 import { ThemeProvider } from '@/contexts/theme';
 import { UserProfileProvider } from '@/contexts/user-profile';
+import { WorkoutHistoryProvider } from '@/contexts/workout-history';
 import { WorkoutSessionProvider } from '@/contexts/workout-session';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
@@ -127,28 +128,30 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthProvider>
         <UserProfileProvider>
-          <PlanProvider>
-            <OnboardingProvider>
-              <CommunityProvider>
-                <WorkoutSessionProvider>
-                  <AuthGate>
-                    <WeighInScheduler />
-                    <Stack screenOptions={{ headerShown: false }}>
-                      <Stack.Screen name="index" />
-                      <Stack.Screen name="auth" />
-                      <Stack.Screen name="onboarding" />
-                      <Stack.Screen name="workout" />
-                      <Stack.Screen name="community" />
-                      <Stack.Screen name="dashboard" />
-                      <Stack.Screen name="(tabs)" />
-                      <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-                    </Stack>
-                  </AuthGate>
-                  <ThemedStatusBar />
-                </WorkoutSessionProvider>
-              </CommunityProvider>
-            </OnboardingProvider>
-          </PlanProvider>
+          <WorkoutHistoryProvider>
+            <PlanProvider>
+              <OnboardingProvider>
+                <CommunityProvider>
+                  <WorkoutSessionProvider>
+                    <AuthGate>
+                      <WeighInScheduler />
+                      <Stack screenOptions={{ headerShown: false }}>
+                        <Stack.Screen name="index" />
+                        <Stack.Screen name="auth" />
+                        <Stack.Screen name="onboarding" />
+                        <Stack.Screen name="workout" />
+                        <Stack.Screen name="community" />
+                        <Stack.Screen name="dashboard" />
+                        <Stack.Screen name="(tabs)" />
+                        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                      </Stack>
+                    </AuthGate>
+                    <ThemedStatusBar />
+                  </WorkoutSessionProvider>
+                </CommunityProvider>
+              </OnboardingProvider>
+            </PlanProvider>
+          </WorkoutHistoryProvider>
         </UserProfileProvider>
       </AuthProvider>
     </ThemeProvider>

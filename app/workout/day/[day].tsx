@@ -18,7 +18,9 @@ import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useWorkoutSession } from '@/contexts/workout-session';
 import { usePlan } from '@/hooks/use-plan';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserProfile } from '@/hooks/use-user-profile';
 import { exerciseImageUrl, getExerciseById } from '@/lib/exercises';
+import { computeDayNumber } from '@/lib/plan-day';
 import type { Plan, PlanDay, PlanExercise } from '@/types/plan';
 
 function titleCase(s: string): string {
@@ -35,6 +37,7 @@ export default function DayDetail() {
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { startSession } = useWorkoutSession();
   const { plan } = usePlan();
+  const { profile } = useUserProfile();
 
   const { day } = useLocalSearchParams<{ day: string }>();
   const dayNum = Number(day ?? '1');
@@ -45,6 +48,13 @@ export default function DayDetail() {
       ? plan.days[dayNum - 1]
       : null;
 
+  const isToday = useMemo(() => {
+    if (!plan || plan.days.length === 0) return false;
+    const todayDayNum = computeDayNumber(profile.planStartDate);
+    const todayPlanDay = ((todayDayNum - 1) % plan.days.length) + 1;
+    return dayNum === todayPlanDay;
+  }, [plan, profile.planStartDate, dayNum]);
+
   if (planDay) {
     return (
       <PlanDayView
@@ -52,6 +62,7 @@ export default function DayDetail() {
         COLORS={COLORS}
         planDay={planDay}
         plan={plan}
+        isToday={isToday}
         startSession={startSession}
       />
     );
@@ -61,7 +72,7 @@ export default function DayDetail() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Day {dayNum}</Text>
+        <Text style={styles.headerTitle}>Plan Day {dayNum}</Text>
         <View style={{ width: 40 }} />
       </View>
       <View style={styles.empty}>
@@ -88,12 +99,14 @@ function PlanDayView({
   COLORS,
   planDay,
   plan,
+  isToday,
   startSession,
 }: {
   styles: ReturnType<typeof makeStyles>;
   COLORS: Palette;
   planDay: PlanDay;
   plan: Plan | null;
+  isToday: boolean;
   startSession: (day: PlanDay, planId?: string) => void;
 }) {
   const focusMuscles = useMemo(() => {
@@ -185,7 +198,7 @@ function PlanDayView({
                 <View style={styles.bannerDivider} />
                 <Item value={`${planDay.estimatedMinutes}m`} label="Estimated" />
                 <View style={styles.bannerDivider} />
-                <Item value={`Day ${planDay.day}`} label="Today" />
+                <Item value={`Day ${planDay.day}`} label={isToday ? 'Today' : 'Plan Day'} />
               </View>
               {focusMuscles.length > 0 && (
                 <View style={styles.focusRow}>
@@ -197,7 +210,9 @@ function PlanDayView({
                 </View>
               )}
             </LinearGradient>
-            <Text style={styles.sectionTitle}>Today&apos;s exercises</Text>
+            <Text style={styles.sectionTitle}>
+              {isToday ? "Today's exercises" : 'Plan day exercises'}
+            </Text>
           </View>
         }
         ListFooterComponent={

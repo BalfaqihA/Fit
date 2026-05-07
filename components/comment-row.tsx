@@ -6,19 +6,22 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { type Palette } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTime } from '@/lib/format';
-import type { Comment, SeedUser, UserProfile } from '@/types/community';
 
 type CommentRowProps = {
-  comment: Comment;
-  author: SeedUser | UserProfile | undefined;
+  authorName: string;
+  authorAvatarUrl: string | null;
+  text: string;
+  createdAtMs: number;
   isOwn: boolean;
   onPressAuthor?: () => void;
   onDelete?: () => void;
 };
 
 export function CommentRow({
-  comment,
-  author,
+  authorName,
+  authorAvatarUrl,
+  text,
+  createdAtMs,
   isOwn,
   onPressAuthor,
   onDelete,
@@ -29,8 +32,8 @@ export function CommentRow({
   return (
     <View style={styles.row}>
       <Pressable onPress={onPressAuthor} hitSlop={4}>
-        {author?.avatarUri ? (
-          <Image source={{ uri: author.avatarUri }} style={styles.avatar} />
+        {authorAvatarUrl ? (
+          <Image source={{ uri: authorAvatarUrl }} style={styles.avatar} />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback]}>
             <Ionicons name="person" size={14} color={COLORS.primary} />
@@ -39,11 +42,11 @@ export function CommentRow({
       </Pressable>
       <View style={{ flex: 1 }}>
         <View style={styles.bubble}>
-          <Text style={styles.name}>{author?.displayName ?? 'Unknown'}</Text>
-          <Text style={styles.text}>{comment.text}</Text>
+          <Text style={styles.name}>{authorName}</Text>
+          <Text style={styles.text}>{text}</Text>
         </View>
         <View style={styles.meta}>
-          <Text style={styles.time}>{relativeTime(comment.createdAt)}</Text>
+          <Text style={styles.time}>{relativeTime(createdAtMs)}</Text>
           {isOwn && onDelete && (
             <Pressable onPress={onDelete} hitSlop={4}>
               <Text style={styles.delete}>Delete</Text>

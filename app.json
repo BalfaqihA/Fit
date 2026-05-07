@@ -19,7 +19,12 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "pan",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.ahmed_balfaqih.Fit"
     },
     "web": {
       "output": "static",
@@ -44,11 +49,19 @@
         {
           "photosPermission": "Allow Fit to access your photos so you can post images and stories."
         }
-      ]
+      ],
+      "@sentry/react-native",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "54bac2ef-aae5-436c-8a77-3d77eb050d48"
+      }
     }
   }
 }

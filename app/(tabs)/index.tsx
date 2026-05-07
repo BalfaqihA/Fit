@@ -1,8 +1,10 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useMemo } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -18,7 +20,10 @@ import { usePlan } from '@/hooks/use-plan';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import { useWeeklyStats } from '@/hooks/use-weekly-stats';
-import { useTodayWorkout } from '@/hooks/use-workout-history';
+import {
+  useTodayWorkout,
+  useWorkoutHistory,
+} from '@/hooks/use-workout-history';
 import { computeDayNumber, planDayIndex } from '@/lib/plan-day';
 
 const primaryActions: {
@@ -34,7 +39,7 @@ const primaryActions: {
     icon: 'play-circle',
   },
   {
-    label: 'Library',
+    label: 'Exercise Library',
     subtitle: 'Browse all exercises',
     route: '/workout/plan',
     icon: 'book-open-variant',
@@ -45,13 +50,22 @@ const secondaryShortcuts: { label: string; route: string; icon: string }[] = [
   { label: 'Week Plan', route: '/workout/week-plan', icon: 'calendar-week' },
   { label: 'Calendar', route: '/workout/calendar', icon: 'calendar-month-outline' },
   { label: 'History', route: '/workout/history', icon: 'history' },
-  { label: 'Log', route: '/workout/log', icon: 'notebook-outline' },
+  { label: 'Log Workout', route: '/workout/log', icon: 'notebook-edit-outline' },
 ];
+
+function titleCase(s: string): string {
+  if (!s) return s;
+  return s
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
 
 export default function HomeTab() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
-  const { profile } = useUserProfile();
+  const { profile, hydrated } = useUserProfile();
   const { user } = useAuth();
   const firstName = useMemo(
     () => profile.displayName.split(' ')[0] || profile.displayName,
@@ -59,6 +73,7 @@ export default function HomeTab() {
   );
 
   const { plan } = usePlan();
+  const { sessions, loading: historyLoading } = useWorkoutHistory();
 
   const dayNumber = useMemo(
     () => computeDayNumber(profile.planStartDate),
@@ -92,7 +107,7 @@ export default function HomeTab() {
     ? "Today's workout is complete!"
     : personalizedDay
       ? personalizedDay.title
-      : 'Generate your plan';
+      : 'Create Your Workout Plan';
   const heroMeta = isDoneToday
     ? `${todays!.durationMin} min · ${todays!.caloriesKcal} kcal · +${todays!.xp} XP · ${motivation}`
     : personalizedDay
@@ -100,21 +115,62 @@ export default function HomeTab() {
       : 'Finish onboarding to begin';
   const heroRoute = personalizedDay ? '/workout/start' : '/onboarding';
 
+  // Derive Home stats from the same sessions list that History/Calendar use,
+  // so the numbers always agree. Falls back to profile.stats only while the
+  // sessions snapshot is still loading on first paint.
   const quickStats = useMemo(() => {
-    const s = profile.stats ?? {
+    const fmtK = (n: number) =>
+      n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
+
+    const useFallback = historyLoading && sessions.length === 0;
+    const fallback = profile.stats ?? {
       totalWorkouts: 0,
       totalCaloriesKcal: 0,
       totalMinutes: 0,
     };
-    const fmtK = (n: number) =>
-      n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
+    const totals = useFallback
+      ? fallback
+      : sessions.reduce(
+          (acc, s) => ({
+            totalWorkouts: acc.totalWorkouts + 1,
+            totalMinutes: acc.totalMinutes + s.durationMin,
+            totalCaloriesKcal: acc.totalCaloriesKcal + s.caloriesKcal,
+          }),
+          { totalWorkouts: 0, totalMinutes: 0, totalCaloriesKcal: 0 }
+        );
+
     return [
-      { label: 'Workouts', value: `${s.totalWorkouts}`, icon: 'run' },
-      { label: 'Calories', value: fmtK(s.totalCaloriesKcal), icon: 'fire' },
-      { label: 'Minutes', value: `${s.totalMinutes}`, icon: 'timer-outline' },
+      { label: 'Workouts', value: `${totals.totalWorkouts}`, icon: 'run' },
+      { label: 'Calories', value: fmtK(totals.totalCaloriesKcal), icon: 'fire' },
+      { label: 'Minutes', value: `${totals.totalMinutes}`, icon: 'timer-outline' },
       { label: 'Streak', value: `${currentStreak}d`, icon: 'flame' },
     ];
-  }, [profile.stats, currentStreak]);
+  }, [sessions, historyLoading, profile.stats, currentStreak]);
+
+  const previewMuscles = useMemo(() => {
+    if (!personalizedDay) return [] as string[];
+    const set = new Set<string>();
+    personalizedDay.exercises.forEach((e) =>
+      e.primaryMuscles.forEach((m) => set.add(titleCase(m)))
+    );
+    return Array.from(set).slice(0, 3);
+  }, [personalizedDay]);
+
+  const previewTopExercises = useMemo(() => {
+    if (!personalizedDay) return '';
+    return personalizedDay.exercises
+      .slice(0, 2)
+      .map((e) => e.name)
+      .join(', ');
+  }, [personalizedDay]);
+
+  if (!hydrated || (historyLoading && sessions.length === 0)) {
+    return (
+      <SafeAreaView style={[styles.safeArea, styles.loadingScreen]}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -137,7 +193,16 @@ export default function HomeTab() {
             ]}
             hitSlop={8}
           >
-            <Ionicons name="person" size={20} color={COLORS.primary} />
+            {profile.avatarUri ? (
+              <Image
+                source={{ uri: profile.avatarUri }}
+                style={styles.avatarImage}
+                contentFit="cover"
+                transition={120}
+              />
+            ) : (
+              <Ionicons name="person" size={20} color={COLORS.primary} />
+            )}
           </Pressable>
         </View>
 
@@ -176,6 +241,63 @@ export default function HomeTab() {
             </Pressable>
           )}
         </LinearGradient>
+
+        {!personalizedDay && !isDoneToday && (
+          <Pressable
+            onPress={() => router.push('/onboarding' as never)}
+            style={({ pressed }) => [
+              styles.onboardingCta,
+              pressed && styles.pressed,
+            ]}
+          >
+            <View style={styles.onboardingCtaIcon}>
+              <Ionicons name="sparkles" size={20} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.onboardingCtaLabel}>Complete Onboarding</Text>
+              <Text style={styles.onboardingCtaMeta}>
+                Answer a few questions to unlock your plan.
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+          </Pressable>
+        )}
+
+        {personalizedDay && !isDoneToday && (
+          <View style={styles.previewCard}>
+            <View style={styles.previewHeaderRow}>
+              <Text style={styles.previewTitle}>Next workout preview</Text>
+              <View style={styles.previewBadge}>
+                <Ionicons
+                  name="flash-outline"
+                  size={12}
+                  color={COLORS.primary}
+                />
+                <Text style={styles.previewBadgeText}>
+                  Day {dayNumber}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.previewMeta}>
+              {personalizedDay.exercises.length} exercises ·{' '}
+              {personalizedDay.estimatedMinutes} min
+            </Text>
+            {previewTopExercises ? (
+              <Text style={styles.previewExercises} numberOfLines={1}>
+                {previewTopExercises}
+              </Text>
+            ) : null}
+            {previewMuscles.length > 0 && (
+              <View style={styles.previewPillRow}>
+                {previewMuscles.map((m) => (
+                  <View key={m} style={styles.previewPill}>
+                    <Text style={styles.previewPillText}>{m}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
         <View style={styles.statsGrid}>
           {quickStats.map((stat) => (
@@ -252,6 +374,10 @@ const makeStyles = (COLORS: Palette) =>
       flex: 1,
       backgroundColor: COLORS.bg,
     },
+    loadingScreen: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     scroll: {
       padding: 20,
       paddingBottom: 40,
@@ -279,6 +405,11 @@ const makeStyles = (COLORS: Palette) =>
       backgroundColor: COLORS.primarySoft,
       alignItems: 'center',
       justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    avatarImage: {
+      width: 44,
+      height: 44,
     },
     heroCard: {
       flexDirection: 'row',
@@ -423,5 +554,94 @@ const makeStyles = (COLORS: Palette) =>
     pressed: {
       opacity: 0.85,
       transform: [{ scale: 0.98 }],
+    },
+    onboardingCta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: COLORS.primary,
+      borderRadius: RADIUS.md,
+      padding: 14,
+      marginBottom: 22,
+      ...SHADOWS.button,
+    },
+    onboardingCtaIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      backgroundColor: 'rgba(255,255,255,0.18)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    onboardingCtaLabel: {
+      color: '#FFFFFF',
+      fontSize: 15,
+      fontWeight: '800',
+    },
+    onboardingCtaMeta: {
+      color: 'rgba(255,255,255,0.85)',
+      fontSize: 12,
+      fontWeight: '600',
+      marginTop: 2,
+    },
+    previewCard: {
+      backgroundColor: COLORS.card,
+      borderRadius: RADIUS.md,
+      padding: 14,
+      marginBottom: 22,
+      ...SHADOWS.card,
+    },
+    previewHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    previewTitle: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: COLORS.text,
+    },
+    previewBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: RADIUS.pill,
+      backgroundColor: COLORS.primarySoft,
+    },
+    previewBadgeText: {
+      color: COLORS.primary,
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    previewMeta: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: COLORS.muted,
+    },
+    previewExercises: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: COLORS.text,
+      marginTop: 6,
+    },
+    previewPillRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: 10,
+    },
+    previewPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: RADIUS.pill,
+      backgroundColor: COLORS.primarySoft,
+    },
+    previewPillText: {
+      color: COLORS.primary,
+      fontSize: 11,
+      fontWeight: '700',
     },
   });

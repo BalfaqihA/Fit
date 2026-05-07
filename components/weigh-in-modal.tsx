@@ -33,7 +33,12 @@ export function WeighInModal({ visible, onClose }: Props) {
   const { user } = useAuth();
   const { profile } = useUserProfile();
 
-  const initial = profile.weightKg ? String(profile.weightKg) : '';
+  const unit = profile.weightUnit ?? 'kg';
+  const initial = profile.weightKg
+    ? unit === 'lb'
+      ? String(Math.round((profile.weightKg / 0.45359237) * 10) / 10)
+      : String(profile.weightKg)
+    : '';
   const [value, setValue] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,14 +46,17 @@ export function WeighInModal({ visible, onClose }: Props) {
   const onSave = async () => {
     if (!user) return;
     const parsed = Number(value.replace(',', '.'));
-    if (!parsed || parsed < 25 || parsed > 400) {
-      setError('Enter a weight between 25 and 400 kg.');
+    const minDisplay = unit === 'lb' ? 55 : 25;
+    const maxDisplay = unit === 'lb' ? 880 : 400;
+    if (!parsed || parsed < minDisplay || parsed > maxDisplay) {
+      setError(`Enter a weight between ${minDisplay} and ${maxDisplay} ${unit}.`);
       return;
     }
+    const weightKg = unit === 'lb' ? parsed * 0.45359237 : parsed;
     setSaving(true);
     setError(null);
     try {
-      await recordWeight(user.uid, parsed);
+      await recordWeight(user.uid, Math.round(weightKg * 100) / 100);
       // Re-arm the weekly reminder so it fires 7 days from now.
       const granted = await requestNotificationPermissionOnce();
       if (granted) await scheduleWeeklyWeighIn();
@@ -86,7 +94,7 @@ export function WeighInModal({ visible, onClose }: Props) {
             Log your current weight to keep your stats and goals up to date.
           </Text>
 
-          <Text style={styles.fieldLabel}>Weight (kg)</Text>
+          <Text style={styles.fieldLabel}>Weight ({unit})</Text>
           <TextInput
             style={styles.input}
             value={value}

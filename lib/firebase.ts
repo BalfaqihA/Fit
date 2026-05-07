@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions, type Functions } from 'firebase/functions';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 import { Platform } from 'react-native';
 
 // Firebase config is sourced from `process.env.EXPO_PUBLIC_FIREBASE_*` so dev
@@ -55,4 +56,5 @@ if (Platform.OS === 'web') {
 export const auth = _auth;
 export const db = getFirestore(app);
 export const functions: Functions = getFunctions(app, 'us-central1');
+export const storage: FirebaseStorage = getStorage(app);
 export { app };

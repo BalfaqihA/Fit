@@ -5,9 +5,10 @@
     "node": "20"
   },
   "scripts": {
-    "build": "tsc",
+    "copy-intents": "node -e \"require('fs').copyFileSync('src/intents.json','lib/intents.json')\"",
+    "build": "tsc && npm run copy-intents",
     "build:watch": "tsc --watch",
-    "train": "tsc && node lib/train.js",
+    "train": "tsc && npm run copy-intents && node lib/train.js",
     "serve": "npm run build && firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions:chatbot"
   },

@@ -27,6 +27,7 @@ type UserDoc = {
   fitnessLevel?: string;
   stats?: UserStats;
   lastWorkoutAt?: string;
+  health?: { injuries?: string[] };
 };
 
 // Mirrors lib/gamification.ts: level = floor(totalXp / 1000) + 1.
@@ -42,6 +43,26 @@ const GOAL_LABELS: Record<string, string> = {
   increase_endurance: 'endurance',
   improve_flexibility: 'flexibility',
 };
+
+// Total achievements defined in `lib/achievements.ts`.
+const ACHIEVEMENT_TOTAL = 16;
+
+// Static warm-up hint keyed loosely on plan day title.
+const WARMUP_HINTS: { match: RegExp; hint: string }[] = [
+  { match: /push|chest|press|shoulder/i, hint: 'arm circles + push-up to plank' },
+  { match: /pull|back|row/i, hint: 'band pull-aparts + scap pulls' },
+  { match: /leg|squat|lower|hinge|deadlift/i, hint: 'bodyweight squats + hip openers' },
+  { match: /core|abs/i, hint: 'dead bugs + glute bridges' },
+  { match: /full body/i, hint: '5 min easy cardio + dynamic stretches' },
+  { match: /cardio|run|hiit/i, hint: '5 min easy pace, building gradually' },
+];
+
+function warmupHintFor(focus: string): string {
+  for (const { match, hint } of WARMUP_HINTS) {
+    if (match.test(focus)) return hint;
+  }
+  return '5 min easy cardio + dynamic stretches';
+}
 
 function startOfLocalDay(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -77,6 +98,7 @@ export async function fillTemplate(
     firstName: 'there',
     todayFocus: 'rest day',
     todayExerciseCount: '0',
+    nextWorkoutDay: 'your next session',
     level: '1',
     totalWorkouts: '0',
     streak: '0',
@@ -84,6 +106,13 @@ export async function fillTemplate(
     daysPerWeek: '0',
     goal: 'general fitness',
     equipment: 'whatever you have',
+    equipmentList: 'what you have',
+    fitnessLevel: 'intermediate',
+    recentWorkout: 'your last session',
+    lastExercise: 'your last exercise',
+    injuries: '',
+    achievementProgress: `0/${ACHIEVEMENT_TOTAL}`,
+    warmupHint: '5 min easy cardio + dynamic stretches',
   };
 
   const db = getFirestore();
@@ -98,9 +127,16 @@ export async function fillTemplate(
       ctx.firstName = user.displayName.split(' ')[0] || 'there';
     }
     if (user.daysPerWeek) ctx.daysPerWeek = String(user.daysPerWeek);
-    if (user.equipment) ctx.equipment = user.equipment.replace('-', ' ');
+    if (user.equipment) {
+      ctx.equipment = user.equipment.replace('-', ' ');
+      ctx.equipmentList = user.equipment.replace('-', ' ');
+    }
+    if (user.fitnessLevel) ctx.fitnessLevel = user.fitnessLevel;
     if (user.primaryGoal) {
       ctx.goal = GOAL_LABELS[user.primaryGoal] ?? user.primaryGoal;
+    }
+    if (user.health?.injuries?.length) {
+      ctx.injuries = user.health.injuries.join(', ');
     }
 
     const stats = user.stats ?? {};
@@ -114,7 +150,7 @@ export async function fillTemplate(
     console.warn('[chatbot] personalize: user fetch failed', err);
   }
 
-  // ---- Today's plan day ----
+  // ---- Today's + next plan day ----
   try {
     if (user.currentPlanId) {
       const planSnap = await db
@@ -126,16 +162,21 @@ export async function fillTemplate(
         const dayIdx = new Date().getDay() % days.length;
         const today = days[dayIdx];
         if (today) {
-          ctx.todayFocus = today.title || 'training';
+          const focus = today.title || 'training';
+          ctx.todayFocus = focus;
           ctx.todayExerciseCount = String(today.exercises?.length ?? 0);
+          ctx.warmupHint = warmupHintFor(focus);
         }
+        const nextIdx = (dayIdx + 1) % days.length;
+        const nextDay = days[nextIdx];
+        if (nextDay?.title) ctx.nextWorkoutDay = nextDay.title;
       }
     }
   } catch (err) {
     console.warn('[chatbot] personalize: plan fetch failed', err);
   }
 
-  // ---- Streak + weekly minutes from recent workouts ----
+  // ---- Streak + weekly minutes + recent workout name ----
   try {
     const sevenDaysAgo = Timestamp.fromMillis(
       Date.now() - 30 * MS_PER_DAY, // 30 days back to compute streak; weekly is filtered below
@@ -150,6 +191,7 @@ export async function fillTemplate(
     const dates: Date[] = [];
     let weeklyMinutes = 0;
     const oneWeekAgo = Date.now() - 7 * MS_PER_DAY;
+    let firstDocRead = false;
 
     recentSnap.forEach((doc) => {
       const data = doc.data();
@@ -161,12 +203,40 @@ export async function fillTemplate(
       if (ms >= oneWeekAgo && typeof data.durationMin === 'number') {
         weeklyMinutes += data.durationMin;
       }
+      // Pull recentWorkout / lastExercise from the most recent doc only.
+      if (!firstDocRead) {
+        firstDocRead = true;
+        if (typeof data.name === 'string' && data.name.trim()) {
+          ctx.recentWorkout = data.name.trim();
+        } else if (typeof data.title === 'string' && data.title.trim()) {
+          ctx.recentWorkout = data.title.trim();
+        }
+        const exercises = data.exercises;
+        if (Array.isArray(exercises) && exercises.length > 0) {
+          const last = exercises[exercises.length - 1];
+          if (last && typeof last.name === 'string') {
+            ctx.lastExercise = last.name;
+          }
+        }
+      }
     });
 
     ctx.streak = String(computeStreak(dates));
     ctx.weeklyMinutes = String(Math.round(weeklyMinutes));
   } catch (err) {
     console.warn('[chatbot] personalize: workouts fetch failed', err);
+  }
+
+  // ---- Achievement progress ----
+  try {
+    const achSnap = await db
+      .collection(`users/${uid}/achievements`)
+      .count()
+      .get();
+    const unlocked = achSnap.data().count ?? 0;
+    ctx.achievementProgress = `${unlocked}/${ACHIEVEMENT_TOTAL}`;
+  } catch {
+    // count() requires a recent SDK; skip silently if unsupported.
   }
 
   return template.replace(/\{(\w+)\}/g, (_, key: string) => ctx[key] ?? '');

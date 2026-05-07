@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   SafeAreaView,
@@ -19,6 +20,11 @@ import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
+import {
+  MAX_PROFILE_IMAGE_BYTES,
+  buildProfileImagePath,
+  uploadImage,
+} from '@/lib/upload';
 
 export default function CommunityProfileEdit() {
   const { COLORS } = useTheme();
@@ -31,6 +37,7 @@ export default function CommunityProfileEdit() {
   const [avatarUri, setAvatarUri] = useState<string | undefined>(profile.avatarUri);
   const [coverUri, setCoverUri] = useState<string | undefined>(profile.coverUri);
   const [goalsVisible, setGoalsVisible] = useState(profile.goalsVisible);
+  const [saving, setSaving] = useState(false);
 
   const pick = async (
     setter: (uri: string) => void,
@@ -52,16 +59,48 @@ export default function CommunityProfileEdit() {
     }
   };
 
-  const handleSave = () => {
-    updateProfile({
-      displayName: displayName.trim() || profile.displayName,
-      handle: handle.trim().replace(/^@+/, '') || profile.handle,
-      bio: bio.trim(),
-      avatarUri,
-      coverUri,
-      goalsVisible,
-    });
-    Alert.alert('Saved', 'Your community profile has been updated.');
+  const isLocalUri = (uri?: string) =>
+    !!uri && !/^https?:\/\//.test(uri);
+
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      let nextAvatarUri = avatarUri;
+      let nextCoverUri = coverUri;
+
+      if (isLocalUri(avatarUri)) {
+        const path = buildProfileImagePath(profile.id, 'avatar');
+        const { url } = await uploadImage(avatarUri as string, path, {
+          maxBytes: MAX_PROFILE_IMAGE_BYTES,
+        });
+        nextAvatarUri = url;
+      }
+      if (isLocalUri(coverUri)) {
+        const path = buildProfileImagePath(profile.id, 'cover');
+        const { url } = await uploadImage(coverUri as string, path, {
+          maxBytes: MAX_PROFILE_IMAGE_BYTES,
+        });
+        nextCoverUri = url;
+      }
+
+      await updateProfile({
+        displayName: displayName.trim() || profile.displayName,
+        handle: handle.trim().replace(/^@+/, '') || profile.handle,
+        bio: bio.trim(),
+        avatarUri: nextAvatarUri,
+        coverUri: nextCoverUri,
+        goalsVisible,
+      });
+      setAvatarUri(nextAvatarUri);
+      setCoverUri(nextCoverUri);
+      Alert.alert('Saved', 'Your community profile has been updated.');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not save profile.';
+      Alert.alert('Error', msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -143,7 +182,12 @@ export default function CommunityProfileEdit() {
         </View>
 
         <View style={{ height: 16 }} />
-        <PrimaryButton label="Save Changes" onPress={handleSave} />
+        <PrimaryButton
+          label={saving ? 'Saving...' : 'Save Changes'}
+          onPress={handleSave}
+          disabled={saving}
+          icon={saving ? <ActivityIndicator size="small" color="#FFFFFF" /> : undefined}
+        />
       </ScrollView>
     </SafeAreaView>
   );

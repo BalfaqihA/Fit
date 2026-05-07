@@ -2,8 +2,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
     function isOwner(uid) {
-      return request.auth != null && request.auth.uid == uid;
+      return isSignedIn() && request.auth.uid == uid;
     }
 
     match /users/{uid} {
@@ -34,6 +38,62 @@ service cloud.firestore {
         allow read, update: if isOwner(uid);
         allow create, delete: if false;
       }
+    }
+
+    // Community: posts visible to all signed-in users.
+    match /communityPosts/{postId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.caption is string
+        && request.resource.data.caption.size() <= 500
+        && request.resource.data.likeCount == 0
+        && request.resource.data.commentCount == 0;
+
+      // Owner edits caption/image; any signed-in user can adjust counters
+      // (the actual like/comment write is gated by the like/comment rules).
+      allow update: if isSignedIn() && (
+        (resource.data.authorId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['caption', 'imageUrl', 'imagePath', 'updatedAt']))
+        || request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['likeCount', 'commentCount'])
+      );
+
+      allow delete: if isOwner(resource.data.authorId);
+    }
+
+    match /comments/{commentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() >= 1
+        && request.resource.data.text.size() <= 500;
+      allow update: if false;
+      allow delete: if isOwner(resource.data.authorId);
+    }
+
+    // Composite id `{postId}_{uid}` makes one-like-per-user a structural property.
+    match /likes/{likeId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && likeId == request.resource.data.postId + '_' + request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
+      allow update: if false;
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // Reports are write-only for users; moderation reads via the Firebase Console.
+    match /reports/{reportId} {
+      allow read: if false;
+      allow create: if isSignedIn()
+        && request.resource.data.reportedBy == request.auth.uid
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() >= 1
+        && request.resource.data.reason.size() <= 300;
+      allow update, delete: if false;
     }
   }
 }

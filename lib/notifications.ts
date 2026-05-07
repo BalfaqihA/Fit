@@ -101,6 +101,24 @@ export async function scheduleWeeklyWeighIn(
   }
 }
 
+/**
+ * Fire a local notification immediately. Used by community activity (like /
+ * comment on the user's own post). No-ops silently if permission is missing or
+ * the OS rejects the schedule call.
+ */
+export async function notifyLocally(title: string, body: string): Promise<void> {
+  try {
+    const status = await Notifications.getPermissionsAsync();
+    if (!status.granted) return;
+    await Notifications.scheduleNotificationAsync({
+      content: { title, body },
+      trigger: null,
+    });
+  } catch (e) {
+    captureException(e, { tags: { area: 'notifications', op: 'notifyLocally' } });
+  }
+}
+
 export async function cancelWeeklyWeighIn(): Promise<void> {
   try {
     const prev = await loadJSON<string | null>(SCHEDULED_FLAG_KEY, null);

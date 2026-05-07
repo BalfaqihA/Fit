@@ -4,7 +4,9 @@ import React, { useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -64,6 +66,8 @@ export default function WorkoutLog() {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const weightUnit = profile.weightUnit ?? 'kg';
+
   const onSave = async () => {
     if (!user) {
       Alert.alert('Sign in required', 'Please sign in to save your entry.');
@@ -74,6 +78,11 @@ export default function WorkoutLog() {
     const exerciseXpSum = xpForExercise(sets, reps);
     const workoutXp = xpForWorkout({ exerciseXpSum, durationMin });
     const caloriesKcal = Math.round(durationMin * CALORIES_PER_MINUTE);
+
+    const rawWeight = Number(weight) || 0;
+    // Store weight canonically in kg regardless of the user's display unit.
+    const weightKg = weightUnit === 'lb' ? rawWeight * 0.45359237 : rawWeight;
+    const trimmedNotes = notes.trim();
 
     setSaving(true);
     try {
@@ -89,8 +98,13 @@ export default function WorkoutLog() {
             plannedSets: sets,
             plannedReps: reps,
             actualSets: sets,
+            rpe,
+            ...(rawWeight > 0
+              ? { weightKg: Math.round(weightKg * 100) / 100 }
+              : {}),
           },
         ],
+        ...(trimmedNotes ? { notes: trimmedNotes } : {}),
         source: 'manual_log',
         setPlanStartDate: !profile.planStartDate,
       });
@@ -116,7 +130,7 @@ export default function WorkoutLog() {
 
       Alert.alert(
         'Entry saved',
-        `${exercise.name}\n${sets} × ${reps} @ ${weight} kg · RPE ${rpe} · ${durationMin} min\n+${workoutXp} XP${unlockedLine}`,
+        `${exercise.name}\n${sets} × ${reps} @ ${weight} ${weightUnit} · RPE ${rpe} · ${durationMin} min\n+${workoutXp} XP${unlockedLine}`,
         [{ text: 'OK', onPress: () => router.back() }],
       );
     } catch (e) {
@@ -168,6 +182,10 @@ export default function WorkoutLog() {
         <View style={{ width: 40 }} />
       </View>
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -205,7 +223,7 @@ export default function WorkoutLog() {
 
         <View style={styles.rowFields}>
           <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.fieldLabel}>Weight (kg)</Text>
+            <Text style={styles.fieldLabel}>Weight ({weightUnit})</Text>
             <TextInput
               value={weight}
               onChangeText={setWeight}
@@ -269,6 +287,7 @@ export default function WorkoutLog() {
           icon={<Ionicons name="checkmark-circle" size={18} color="#fff" />}
         />
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <Modal
         visible={pickerOpen}

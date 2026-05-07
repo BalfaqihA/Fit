@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -19,16 +20,24 @@ import {
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { useCommunity } from '@/hooks/use-community';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserProfile } from '@/hooks/use-user-profile';
+import { MAX_CAPTION_LEN, createPost } from '@/lib/community';
+import { MAX_POST_IMAGE_BYTES, buildPostImagePath, uploadImage } from '@/lib/upload';
 
 export default function ComposePost() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
-  const { createPost } = useCommunity();
+  const { profile } = useUserProfile();
 
   const [caption, setCaption] = useState('');
   const [imageUri, setImageUri] = useState<string | undefined>();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const trimmedLen = caption.trim().length;
+  const overLimit = trimmedLen > MAX_CAPTION_LEN;
+  const canPost = !submitting && !overLimit && (trimmedLen > 0 || !!imageUri);
 
   const pickImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -45,16 +54,44 @@ export default function ComposePost() {
       allowsEditing: false,
     });
     if (!result.canceled && result.assets[0]) {
-      setImageUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > MAX_POST_IMAGE_BYTES) {
+        Alert.alert('Image too large', 'Please pick an image under 5 MB.');
+        return;
+      }
+      setImageUri(asset.uri);
     }
   };
 
-  const canPost = caption.trim().length > 0 || !!imageUri;
-
-  const handlePost = () => {
+  const handlePost = async () => {
     if (!canPost) return;
-    createPost({ caption, imageUri });
-    router.back();
+    setSubmitting(true);
+    setError(null);
+    try {
+      let imageUrl: string | null = null;
+      let imagePath: string | null = null;
+      if (imageUri) {
+        const path = buildPostImagePath(profile.id);
+        const result = await uploadImage(imageUri, path, {
+          maxBytes: MAX_POST_IMAGE_BYTES,
+        });
+        imageUrl = result.url;
+        imagePath = result.path;
+      }
+      await createPost({
+        caption,
+        imageUrl,
+        imagePath,
+        authorName: profile.displayName,
+        authorAvatarUrl: profile.avatarUri ?? null,
+      });
+      router.back();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not post.';
+      setError(msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -82,7 +119,17 @@ export default function ComposePost() {
             multiline
             style={styles.textInput}
             textAlignVertical="top"
+            maxLength={MAX_CAPTION_LEN + 50}
+            editable={!submitting}
           />
+          <Text
+            style={[
+              styles.counter,
+              { color: overLimit ? COLORS.accent : COLORS.muted },
+            ]}
+          >
+            {trimmedLen} / {MAX_CAPTION_LEN}
+          </Text>
 
           {imageUri ? (
             <View style={styles.imagePreviewWrap}>
@@ -91,19 +138,29 @@ export default function ComposePost() {
                 style={styles.removeBtn}
                 onPress={() => setImageUri(undefined)}
                 hitSlop={6}
+                disabled={submitting}
               >
                 <Ionicons name="close" size={18} color="#FFFFFF" />
               </Pressable>
             </View>
           ) : (
-            <Pressable style={styles.addPhoto} onPress={pickImage}>
+            <Pressable style={styles.addPhoto} onPress={pickImage} disabled={submitting}>
               <Ionicons name="image-outline" size={22} color={COLORS.primary} />
               <Text style={styles.addPhotoText}>Add a photo</Text>
             </Pressable>
           )}
 
+          {error && <Text style={styles.error}>{error}</Text>}
+
           <View style={{ height: 24 }} />
-          <PrimaryButton label="Post" onPress={handlePost} disabled={!canPost} />
+          {submitting ? (
+            <View style={styles.submittingRow}>
+              <ActivityIndicator color={COLORS.primary} />
+              <Text style={styles.submittingText}>Posting...</Text>
+            </View>
+          ) : (
+            <PrimaryButton label="Post" onPress={handlePost} disabled={!canPost} />
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -138,6 +195,12 @@ const makeStyles = (COLORS: Palette) =>
       color: COLORS.text,
       ...SHADOWS.card,
     },
+    counter: {
+      alignSelf: 'flex-end',
+      marginTop: 6,
+      fontSize: 11,
+      fontWeight: '700',
+    },
     addPhoto: {
       marginTop: 14,
       flexDirection: 'row',
@@ -170,4 +233,18 @@ const makeStyles = (COLORS: Palette) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
+    error: {
+      marginTop: 14,
+      fontSize: 13,
+      color: COLORS.accent,
+      fontWeight: '600',
+    },
+    submittingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 14,
+    },
+    submittingText: { fontSize: 14, color: COLORS.muted, fontWeight: '600' },
   });

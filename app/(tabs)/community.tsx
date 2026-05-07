@@ -1,8 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -15,125 +18,247 @@ import { PostCard } from '@/components/post-card';
 import { StoryRing } from '@/components/story-ring';
 import { type Palette, SHADOWS } from '@/constants/design';
 import { useCommunity } from '@/hooks/use-community';
+import { usePosts } from '@/hooks/use-posts';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
+import {
+  deletePost,
+  likePost,
+  reportPost,
+  unlikePost,
+  type FeedPost,
+} from '@/lib/community';
 
 export default function CommunityTab() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { profile } = useUserProfile();
+  const { getStoriesGrouped, unreadNotificationCount } = useCommunity();
   const {
-    getPostsForFeed,
-    getStoriesGrouped,
-    getCommentsForPost,
-    getUserById,
-    hasLiked,
-    toggleLike,
-    unreadNotificationCount,
-  } = useCommunity();
+    posts,
+    loading,
+    error,
+    likedIds,
+    loadMore,
+    loadingMore,
+    hasMore,
+    retry,
+  } = usePosts();
 
-  const feedPosts = getPostsForFeed();
   const storyGroups = getStoriesGrouped();
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.title}>Community</Text>
-            <Text style={styles.subtitle}>See what friends are up to</Text>
-          </View>
-          <View style={styles.headerIcons}>
-            <Pressable
-              style={styles.headerIconBtn}
-              onPress={() => router.push('/community/search' as never)}
-            >
-              <Ionicons name="search" size={20} color={COLORS.text} />
-            </Pressable>
-            <Pressable
-              style={styles.headerIconBtn}
-              onPress={() => router.push('/community/notifications' as never)}
-            >
-              <Ionicons name="notifications-outline" size={20} color={COLORS.text} />
-              {unreadNotificationCount > 0 && <View style={styles.badge} />}
-            </Pressable>
-            <Pressable
-              style={styles.headerAvatarBtn}
-              onPress={() => router.push(`/community/profile/${profile.id}` as never)}
-            >
-              {profile.avatarUri ? (
-                <Image source={{ uri: profile.avatarUri }} style={styles.headerAvatarImage} />
-              ) : (
-                <Ionicons name="person" size={18} color={COLORS.primary} />
-              )}
-            </Pressable>
-          </View>
+  const handleLikeToggle = useCallback(
+    async (post: FeedPost) => {
+      try {
+        if (likedIds.has(post.id)) {
+          await unlikePost(post.id);
+        } else {
+          await likePost({ id: post.id, authorId: post.authorId });
+        }
+      } catch {
+        // Error captured upstream; UI just stays in current state.
+      }
+    },
+    [likedIds]
+  );
+
+  const handlePromptReport = useCallback((post: FeedPost) => {
+    Alert.prompt(
+      'Report this post',
+      'Tell us briefly what is wrong.',
+      async (reason) => {
+        if (!reason) return;
+        try {
+          await reportPost(post.id, reason);
+          Alert.alert('Thanks', 'Your report has been submitted.');
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Could not report.';
+          Alert.alert('Error', msg);
+        }
+      },
+      'plain-text',
+      ''
+    );
+  }, []);
+
+  const handleConfirmDelete = useCallback((post: FeedPost) => {
+    Alert.alert('Delete post', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deletePost(post.id);
+          } catch {
+            Alert.alert('Error', 'Could not delete the post.');
+          }
+        },
+      },
+    ]);
+  }, []);
+
+  const handleOpenMenu = useCallback(
+    (post: FeedPost) => {
+      const isOwn = post.authorId === profile.id;
+      if (isOwn) {
+        Alert.alert('Post actions', undefined, [
+          { text: 'Delete post', style: 'destructive', onPress: () => handleConfirmDelete(post) },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      } else {
+        Alert.alert('Post actions', undefined, [
+          { text: 'Report post', style: 'destructive', onPress: () => handlePromptReport(post) },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      }
+    },
+    [profile.id, handleConfirmDelete, handlePromptReport]
+  );
+
+  const renderHeader = () => (
+    <View>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.title}>Community</Text>
+          <Text style={styles.subtitle}>See what friends are up to</Text>
         </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.storiesRow}
-        >
+        <View style={styles.headerIcons}>
           <Pressable
-            style={styles.addStoryTile}
-            onPress={() => router.push('/community/story-compose' as never)}
+            style={styles.headerIconBtn}
+            onPress={() => router.push('/community/search' as never)}
           >
-            <View style={[styles.addStoryRing, { borderColor: COLORS.primary }]}>
-              <View style={[styles.addStoryInner, { backgroundColor: COLORS.primarySoft }]}>
-                <Ionicons name="add" size={26} color={COLORS.primary} />
-              </View>
-            </View>
-            <Text style={styles.addStoryLabel} numberOfLines={1}>
-              Add Story
-            </Text>
+            <Ionicons name="search" size={20} color={COLORS.text} />
           </Pressable>
-          {storyGroups.map((group) => {
-            const isOwn = group.user.id === profile.id;
-            return (
-              <StoryRing
-                key={group.user.id}
-                name={isOwn ? 'Your Story' : group.user.displayName}
-                avatarUri={group.user.avatarUri}
-                own={isOwn}
-                hasStory
-                onPress={() => router.push(`/community/story/${group.user.id}` as never)}
-              />
-            );
-          })}
-        </ScrollView>
+          <Pressable
+            style={styles.headerIconBtn}
+            onPress={() => router.push('/community/notifications' as never)}
+          >
+            <Ionicons name="notifications-outline" size={20} color={COLORS.text} />
+            {unreadNotificationCount > 0 && <View style={styles.badge} />}
+          </Pressable>
+          <Pressable
+            style={styles.headerAvatarBtn}
+            onPress={() => router.push(`/community/profile/${profile.id}` as never)}
+          >
+            {profile.avatarUri ? (
+              <Image source={{ uri: profile.avatarUri }} style={styles.headerAvatarImage} />
+            ) : (
+              <Ionicons name="person" size={18} color={COLORS.primary} />
+            )}
+          </Pressable>
+        </View>
+      </View>
 
-        {feedPosts.length === 0 && (
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>No posts yet</Text>
-            <Text style={styles.emptySub}>
-              Tap the + button below to share your first post.
-            </Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.storiesRow}
+      >
+        <Pressable
+          style={styles.addStoryTile}
+          onPress={() => router.push('/community/story-compose' as never)}
+        >
+          <View style={[styles.addStoryRing, { borderColor: COLORS.primary }]}>
+            <View style={[styles.addStoryInner, { backgroundColor: COLORS.primarySoft }]}>
+              <Ionicons name="add" size={26} color={COLORS.primary} />
+            </View>
           </View>
-        )}
-
-        {feedPosts.map((post) => {
-          const author = getUserById(post.authorId);
-          if (!author) return null;
+          <Text style={styles.addStoryLabel} numberOfLines={1}>
+            Add Story
+          </Text>
+        </Pressable>
+        {storyGroups.map((group) => {
+          const isOwn = group.user.id === profile.id;
           return (
-            <PostCard
-              key={post.id}
-              post={post}
-              author={author}
-              liked={hasLiked(post.id)}
-              likeCount={post.likeIds.length}
-              commentCount={getCommentsForPost(post.id).length}
-              onLike={() => toggleLike(post.id)}
-              onComment={() => router.push(`/community/post/${post.id}` as never)}
-              onPressAuthor={() => router.push(`/community/profile/${author.id}` as never)}
-              onPressMenu={() => router.push(`/community/post/${post.id}` as never)}
+            <StoryRing
+              key={group.user.id}
+              name={isOwn ? 'Your Story' : group.user.displayName}
+              avatarUri={group.user.avatarUri}
+              own={isOwn}
+              hasStory
+              onPress={() => router.push(`/community/story/${group.user.id}` as never)}
             />
           );
         })}
       </ScrollView>
+    </View>
+  );
+
+  const renderEmpty = () => {
+    if (loading) {
+      return (
+        <View style={styles.statePane}>
+          <ActivityIndicator color={COLORS.primary} />
+          <Text style={styles.stateSub}>Loading feed...</Text>
+        </View>
+      );
+    }
+    if (error) {
+      return (
+        <View style={styles.statePane}>
+          <Ionicons name="cloud-offline-outline" size={32} color={COLORS.muted} />
+          <Text style={styles.stateTitle}>Could not load feed</Text>
+          <Text style={styles.stateSub}>Check your connection and try again.</Text>
+          <Pressable style={styles.retryBtn} onPress={retry}>
+            <Text style={styles.retryBtnText}>Retry</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.statePane}>
+        <Text style={styles.stateTitle}>No posts yet</Text>
+        <Text style={styles.stateSub}>Tap the + button to share your first post.</Text>
+      </View>
+    );
+  };
+
+  const renderFooter = () => {
+    if (!loadingMore) return null;
+    return (
+      <View style={styles.footer}>
+        <ActivityIndicator color={COLORS.primary} />
+      </View>
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <FlatList
+        data={posts}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmpty}
+        ListFooterComponent={renderFooter}
+        onEndReached={() => {
+          if (hasMore && !loadingMore && !loading && !error) loadMore();
+        }}
+        onEndReachedThreshold={0.4}
+        showsVerticalScrollIndicator={false}
+        renderItem={({ item }) => (
+          <PostCard
+            postId={item.id}
+            authorId={item.authorId}
+            authorName={item.authorName}
+            authorAvatarUrl={item.authorAvatarUrl}
+            caption={item.caption}
+            imageUrl={item.imageUrl}
+            createdAtMs={item.createdAtMs}
+            liked={likedIds.has(item.id)}
+            likeCount={item.likeCount}
+            commentCount={item.commentCount}
+            isOwn={item.authorId === profile.id}
+            onLike={() => handleLikeToggle(item)}
+            onComment={() => router.push(`/community/post/${item.id}` as never)}
+            onPressAuthor={() =>
+              router.push(`/community/profile/${item.authorId}` as never)
+            }
+            onPressMenu={() => handleOpenMenu(item)}
+          />
+        )}
+      />
 
       <Pressable
         style={({ pressed }) => [styles.fab, pressed && { opacity: 0.85 }]}
@@ -148,7 +273,7 @@ export default function CommunityTab() {
 const makeStyles = (COLORS: Palette) =>
   StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: COLORS.bg },
-    scroll: { paddingBottom: 120 },
+    listContent: { paddingBottom: 120 },
     header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -219,18 +344,28 @@ const makeStyles = (COLORS: Palette) =>
       fontWeight: '600',
       color: COLORS.text,
     },
-    empty: {
+    statePane: {
       marginHorizontal: 20,
       marginTop: 40,
       alignItems: 'center',
+      gap: 8,
     },
-    emptyTitle: {
+    stateTitle: {
       fontSize: 16,
       fontWeight: '800',
       color: COLORS.text,
-      marginBottom: 4,
+      marginTop: 6,
     },
-    emptySub: { fontSize: 13, color: COLORS.muted, textAlign: 'center' },
+    stateSub: { fontSize: 13, color: COLORS.muted, textAlign: 'center' },
+    retryBtn: {
+      marginTop: 14,
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+      borderRadius: 999,
+      backgroundColor: COLORS.primary,
+    },
+    retryBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+    footer: { paddingVertical: 18, alignItems: 'center' },
     fab: {
       position: 'absolute',
       right: 20,

@@ -1,742 +1,1570 @@
 {
   "softThreshold": 0.40,
-  "hardThreshold": 0.70,
+  "hardThreshold": 0.65,
   "threshold": 0.45,
+  "styleRouting": {
+    "beginner": "beginner",
+    "intermediate": "step",
+    "advanced": "advanced"
+  },
   "intents": [
     {
       "tag": "greeting",
       "patterns": [
-        "hi",
-        "hello",
-        "hey",
-        "hey coach",
-        "hi coach",
-        "yo",
-        "yo coach",
-        "good morning",
-        "good afternoon",
-        "good evening",
-        "howdy",
-        "hi there",
-        "hello there",
-        "hey there",
-        "what's up",
-        "sup",
-        "morning",
-        "afternoon",
-        "evening",
-        "hiya",
-        "greetings",
-        "hello fitlife",
-        "hey fitlife",
-        "hi fitlife",
-        "good day",
-        "hey buddy",
-        "hi friend"
+        "hi", "hello", "hey", "hey coach", "hi coach", "yo", "yo coach",
+        "good morning", "good afternoon", "good evening", "howdy",
+        "hi there", "hello there", "hey there", "what's up", "sup",
+        "morning", "afternoon", "evening", "hiya", "greetings",
+        "hello fitlife", "hey fitlife", "hi fitlife", "good day",
+        "hey buddy", "hi friend", "hi bot", "hello bot", "hi assistant"
       ],
       "responses": [
-        "Hey {firstName}! Ready to train today?",
-        "Hi {firstName} — what can I help with?",
-        "Hello {firstName}! How can I support your training today?",
-        "Hey there! What's on your mind — workout, nutrition, or motivation?",
-        "Hi {firstName}! You're on a {streak}-day streak. Let's keep it going.",
-        "Hey {firstName}! Today is {todayFocus} day — how can I help?",
-        "Hello! Ask me about your plan, food, recovery, or how to use the app."
+        {
+          "style": "beginner",
+          "shortAnswer": "Hey {firstName}! Welcome back.",
+          "explanation": "I'm your in-app coach — ask me anything about today's workout, food, recovery, or how the app works.",
+          "actionSteps": [
+            "Type a question in plain words — \"what should I eat after a workout?\"",
+            "Or tap one of the quick suggestions below",
+            "I'll give a short answer, then a fuller explanation"
+          ],
+          "suggestion": "What would you like to start with — workout, nutrition, or motivation?",
+          "followUpQuestion": "What would you like to start with?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Hey {firstName} — what are we tackling?",
+          "explanation": "Plan, programming, macros, recovery, or app navigation — pick a thread and let's go.",
+          "suggestion": "Want a quick rundown of today's session?"
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "Hey {firstName}! {streak}-day streak and counting. Let's keep building.",
+          "explanation": "You've banked {totalWorkouts} workouts so far. Momentum is your biggest asset right now.",
+          "suggestion": "Ready to lock in today's session?",
+          "action": { "label": "Open today's workout", "type": "navigate", "route": "/(tabs)/" }
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Hi {firstName}! Today is **{todayFocus}** day.",
+          "actionSteps": [
+            "Open today's workout from the Home tab",
+            "Run the warm-up + main lifts",
+            "Log it when you're done"
+          ],
+          "action": { "label": "Open today's workout", "type": "navigate", "route": "/(tabs)/" }
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Hello {firstName}! How's training going?",
+          "suggestion": "Ask me anything — even if it sounds basic, that's exactly what I'm here for."
+        }
       ]
     },
     {
       "tag": "ask_plan_today",
       "patterns": [
-        "what's my workout today",
-        "what should i train today",
-        "today's plan",
-        "what's on the plan",
-        "show me today's workout",
-        "what am i doing today",
-        "today's session",
-        "what's my session today",
-        "give me today's plan",
-        "what exercises today",
-        "what's the focus today",
-        "what muscle group today",
-        "today plan please",
-        "plan for today",
-        "what do i train today",
-        "what's the workout for today",
-        "current workout",
-        "today exercises",
-        "today's training",
-        "what am i lifting today",
-        "what are we training",
-        "what are we doing today",
-        "is today a workout day",
-        "do i have a workout today",
-        "workout please",
-        "show plan",
-        "today",
-        "what about today"
+        "what's my workout today", "what should i train today", "today's plan",
+        "what's on the plan", "show me today's workout", "what am i doing today",
+        "today's session", "what's my session today", "give me today's plan",
+        "what exercises today", "what's the focus today", "what muscle group today",
+        "today plan please", "plan for today", "what do i train today",
+        "what's the workout for today", "current workout", "today exercises",
+        "today's training", "what am i lifting today", "what are we training",
+        "what are we doing today", "is today a workout day", "do i have a workout today",
+        "workout please", "show plan", "today", "what about today",
+        "what's the routine today", "what's my routine", "today's routine",
+        "what training today", "what's today's workout", "show me my plan",
+        "what's the schedule today", "today's schedule"
       ],
       "responses": [
-        "Today's focus is {todayFocus} with {todayExerciseCount} exercises queued up.",
-        "You're on {todayFocus} today — {todayExerciseCount} exercises waiting for you.",
-        "Today: {todayFocus}. {todayExerciseCount} exercises in the session.",
-        "{firstName}, your {daysPerWeek}-day plan has you on {todayFocus} today ({todayExerciseCount} exercises).",
-        "Today is a {todayFocus} day — open the Home tab to start the session.",
-        "Plan says {todayFocus}. Tap Start Workout on the Home screen when you're ready.",
-        "{todayExerciseCount} exercises today, focus on {todayFocus}. You've got this."
+        {
+          "style": "beginner",
+          "shortAnswer": "Today is **{todayFocus}** day — {todayExerciseCount} exercises queued.",
+          "explanation": "Your {daysPerWeek}-day plan picks {todayFocus} for today because your goal is {goal}. Each exercise has its own sets/reps.",
+          "actionSteps": [
+            "Warm up 5 min ({warmupHint})",
+            "Run the {todayFocus} block at a steady pace",
+            "Cool down 2–3 min and log the session"
+          ],
+          "suggestion": "Want me to open today's session?",
+          "followUpQuestion": "Open the workout now?",
+          "action": { "label": "Open today's workout", "type": "navigate", "route": "/(tabs)/" }
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "**{todayFocus}** · {todayExerciseCount} exercises.",
+          "explanation": "Goal: {goal}. Match RPE 7–8 on the main lifts, leave 1–2 reps in reserve on accessories.",
+          "actionSteps": [
+            "Activation + warm-up sets on the main lift",
+            "Top set then back-offs at ~85%",
+            "Hit accessories for full ROM, log every set"
+          ],
+          "action": { "label": "Open today's workout", "type": "navigate", "route": "/(tabs)/" }
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "{firstName}, today is **{todayFocus}** — and your {streak}-day streak is on the line.",
+          "explanation": "You've trained {weeklyMinutes} minutes this week already. One more session keeps the chain alive.",
+          "suggestion": "Tap below to start — past you would be proud.",
+          "action": { "label": "Start the session", "type": "navigate", "route": "/(tabs)/" }
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Today's session: **{todayFocus}**.",
+          "actionSteps": [
+            "Open the Home tab",
+            "Tap Start Workout",
+            "Follow the {todayExerciseCount} exercises in order"
+          ],
+          "action": { "label": "Start Workout", "type": "navigate", "route": "/(tabs)/" }
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "{todayFocus} day — {todayExerciseCount} exercises.",
+          "explanation": "Don't worry about lifting heavy on day one — focus on movement quality. Reps in good form beat heavy reps in bad form, every time.",
+          "suggestion": "Want pointers on the warm-up?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "{todayFocus}, {todayExerciseCount} lifts. Last session: {recentWorkout}.",
+          "suggestion": "Looking to progressively overload from {recentWorkout}?"
+        }
       ]
     },
     {
       "tag": "ask_workout_advice",
       "patterns": [
-        "how do i build muscle",
-        "best way to get stronger",
-        "how to gain strength",
-        "tips for hypertrophy",
-        "should i lift heavy or light",
-        "how many reps for muscle",
-        "what's a good rep range",
-        "how to progress in lifting",
-        "advice for getting stronger",
-        "how often should i train",
-        "is full body or split better",
-        "how to do progressive overload",
-        "what's the best workout split",
-        "how many sets per exercise",
-        "how long should a workout be",
-        "what's the best way to train",
-        "how to add muscle mass",
-        "how to get bigger",
-        "how to get stronger fast",
-        "training tips",
-        "what makes muscles grow",
-        "how to lift better",
-        "form tips",
-        "training advice",
-        "how to structure my workouts",
-        "are 3 sets enough",
-        "how heavy should i lift",
-        "what's a good workout routine"
+        "how do i build muscle", "best way to get stronger", "how to gain strength",
+        "tips for hypertrophy", "should i lift heavy or light", "how many reps for muscle",
+        "what's a good rep range", "how to progress in lifting", "advice for getting stronger",
+        "how often should i train", "is full body or split better", "how to do progressive overload",
+        "what's the best workout split", "how many sets per exercise", "how long should a workout be",
+        "what's the best way to train", "how to add muscle mass", "how to get bigger",
+        "how to get stronger fast", "training tips", "what makes muscles grow",
+        "how to lift better", "form tips", "training advice", "how to structure my workouts",
+        "are 3 sets enough", "how heavy should i lift", "what's a good workout routine",
+        "how should i train", "give me a program", "best routine for chest",
+        "best routine for back", "best routine for legs", "how to train for size",
+        "how to train for strength", "workout routine advice", "exercise advice",
+        "how to plan workouts", "training program advice"
       ],
       "responses": [
-        "For strength, stick to 3–6 reps with heavier loads. For muscle size, 8–12 reps with moderate loads works best. Add a little weight or a rep each week — that's progressive overload.",
-        "Train each muscle group 2x per week, do 3–4 working sets per exercise, and chase progressive overload week to week. Quality reps beat junk volume every time.",
-        "Stay consistent with 3–5 sessions a week, prioritize compound lifts (squat, deadlift, press, row), and add weight or reps gradually. Sleep and food do half the work.",
-        "Form first, then load. Slow eccentric, controlled concentric, full range of motion. Add weight only when reps stay clean.",
-        "{firstName}, your plan already structures this for you. Focus on hitting today's exercises with good form and adding 1 rep or a small weight bump each week.",
-        "Compound lifts (squats, deadlifts, presses, rows) build the most muscle. Spend 70% of your time there, 30% on accessories.",
-        "Train, eat, sleep. Skip any of those three and progress stalls. Aim for 7–9h of sleep on training days."
+        {
+          "style": "beginner",
+          "shortAnswer": "**Pick 3–4 sessions a week** and stick to compound lifts.",
+          "explanation": "Compound lifts (squat, deadlift, press, row) hit lots of muscle per minute. As a beginner, just adding weight or one rep each week is enough — that's progressive overload.",
+          "actionSteps": [
+            "3–4 sessions/week, 45–60 min each",
+            "3 sets of 8–12 reps for hypertrophy",
+            "Add a small bump (weight or rep) every week"
+          ],
+          "suggestion": "Want me to open your current plan?",
+          "action": { "label": "View my plan", "type": "navigate", "route": "/workout/week-plan" }
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Cycle intensity: **3–6 reps for strength, 8–12 for size, 12–20 for endurance**.",
+          "explanation": "Periodise volume across 4–6 week blocks. Push the main lift to RPE 8–9, keep accessories at RPE 7. Track e1RM weekly.",
+          "actionSteps": [
+            "Block 1: hypertrophy (10–12 reps, RPE 7)",
+            "Block 2: strength (3–5 reps, RPE 8–9)",
+            "Deload week, then test/repeat"
+          ],
+          "suggestion": "Want a deload primer?"
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "Consistency > perfection.",
+          "explanation": "{firstName}, you've already done {totalWorkouts} sessions. Most people quit before this point — you didn't. Keep showing up and the results compound.",
+          "suggestion": "Need help making the next session easier to start?"
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Here's a clean weekly template you can start with.",
+          "actionSteps": [
+            "**Day 1**: Push (chest, shoulders, triceps)",
+            "**Day 2**: Pull (back, biceps)",
+            "**Day 3**: Legs (quads, hamstrings, glutes)",
+            "**Day 4**: Rest or active recovery",
+            "**Day 5–6**: Repeat or full-body",
+            "**Day 7**: Rest"
+          ],
+          "suggestion": "Want me to regenerate your plan to match?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "**Volume × intensity × frequency** — pick two to push, third stays moderate.",
+          "explanation": "10–20 working sets/muscle/week is the sweet spot for hypertrophy. Frequency 2x/week per muscle beats 1x. Form quality non-negotiable past RPE 8.",
+          "actionSteps": [
+            "Track sets per muscle weekly",
+            "Hit each muscle 2x with 5–10 sets each",
+            "Use AMRAP top sets to gauge progress"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Train, eat, sleep — all three or none of them.",
+          "explanation": "Training is the spark. Food is the fuel. Sleep is when you actually grow. Aim for 7–9h sleep on training days.",
+          "suggestion": "Want nutrition or recovery tips next?"
+        }
       ]
     },
     {
       "tag": "nutrition_question",
       "patterns": [
-        "what should i eat",
-        "how much protein do i need",
-        "nutrition advice",
-        "diet tips",
-        "what to eat before workout",
-        "what to eat after workout",
-        "best foods for muscle gain",
-        "how many calories should i eat",
-        "should i eat carbs",
-        "what's a good post workout meal",
-        "pre workout meal ideas",
-        "how to lose fat",
-        "do i need supplements",
-        "is creatine good",
-        "meal prep ideas",
-        "what about my diet",
-        "food advice",
-        "calories needed",
-        "macro split",
-        "should i count calories",
-        "carbs or protein",
-        "is intermittent fasting good",
-        "best protein sources",
-        "fat loss diet",
-        "muscle gain diet",
-        "what should i eat for breakfast",
-        "snacks for fitness",
-        "is rice okay"
+        "what should i eat", "how much protein do i need", "nutrition advice",
+        "diet tips", "what to eat before workout", "what to eat after workout",
+        "best foods for muscle gain", "how many calories should i eat",
+        "should i eat carbs", "what's a good post workout meal",
+        "pre workout meal ideas", "how to lose fat", "do i need supplements",
+        "is creatine good", "meal prep ideas", "what about my diet",
+        "food advice", "calories needed", "macro split", "should i count calories",
+        "carbs or protein", "is intermittent fasting good", "best protein sources",
+        "fat loss diet", "muscle gain diet", "what should i eat for breakfast",
+        "snacks for fitness", "is rice okay", "what should my diet look like",
+        "nutrition tips for training", "what to eat to build muscle",
+        "what to eat to lose weight", "foods to eat", "foods to avoid",
+        "is keto good", "vegan diet for fitness", "high protein meals",
+        "what are good carbs", "what are good fats"
       ],
       "responses": [
-        "Aim for around 1.6–2.2g of protein per kg of bodyweight, eat enough carbs to fuel your sessions, and don't be afraid of healthy fats. Whole foods first.",
-        "Pre-workout: carbs + a little protein 1–2 hours before. Post-workout: protein + carbs within a couple hours. Hit your daily protein target and the rest sorts itself out.",
-        "For fat loss, run a small calorie deficit (~300–500 kcal) and keep protein high to protect muscle. For muscle gain, a small surplus + progressive overload is the recipe.",
-        "Creatine monohydrate (3–5g/day) is the most evidence-backed supplement. Whey protein is convenient if you struggle to hit protein from food. Most other supplements aren't necessary.",
-        "Build meals around: a protein (chicken, fish, eggs, tofu, beans), a carb (rice, oats, potato, bread), veggies, and a fat (oil, nuts, avocado). Repeat with variety.",
-        "{firstName}, your goal is {goal} — match your calories to that. Fat loss = small deficit, muscle gain = small surplus, maintenance = match expenditure.",
-        "Hydration matters too — aim for 30–40 ml of water per kg of bodyweight on training days."
+        {
+          "style": "beginner",
+          "shortAnswer": "**Protein with every meal**, eat real food, drink water.",
+          "explanation": "For your goal ({goal}), aim for 1.6–2.2 g of protein per kg of bodyweight per day. Build meals around a protein, a carb, veggies, and a fat.",
+          "actionSteps": [
+            "Pick a protein: chicken, fish, eggs, tofu, beans",
+            "Add a carb: rice, oats, potato, bread",
+            "Add veggies and a fat: oil, nuts, avocado",
+            "Repeat with variety"
+          ],
+          "suggestion": "Want a quick macro target?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Pin **protein**, then dial calories.",
+          "explanation": "Goal {goal}: fat loss = ~300–500 kcal deficit, muscle gain = ~200–300 kcal surplus, maintenance = match TDEE. Carbs scale with training volume.",
+          "actionSteps": [
+            "Set calories from goal + activity",
+            "Lock protein at 1.8–2.2 g/kg",
+            "Carbs 3–6 g/kg on training days",
+            "Fat fills the rest (≥0.8 g/kg)"
+          ]
+        },
+        {
+          "style": "step",
+          "shortAnswer": "**Pre + post workout** = simple wins.",
+          "actionSteps": [
+            "**Pre (1–2h before)**: carbs + a little protein (oats + Greek yogurt)",
+            "**Post (within 2h)**: protein + carbs (chicken + rice)",
+            "Throughout day: hit your protein target",
+            "Hydrate 30–40 ml/kg on training days"
+          ],
+          "suggestion": "Want supplement guidance too?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Only **two supplements** are worth it: creatine + whey if needed.",
+          "explanation": "Creatine monohydrate (3–5 g/day) — most studied legal performance supplement. Whey protein only if you struggle to hit protein from food.",
+          "actionSteps": [
+            "Creatine: 5 g daily, any time, with water",
+            "Whey: 1 scoop = ~25 g protein, use to fill gaps",
+            "Skip pre-workouts unless you really want one"
+          ]
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "Food is half the result, {firstName}.",
+          "explanation": "Training without nutrition is paddling against the current. Get one thing right this week — protein in every meal — and watch what happens.",
+          "suggestion": "Want a 1-week beginner meal template?"
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "**Hydration matters too** — aim for 30–40 ml/kg on training days.",
+          "explanation": "Most people undereat protein and underdrink water. Fix those two first before worrying about anything fancy.",
+          "actionSteps": [
+            "Carry a water bottle (1L+)",
+            "Pee should be pale yellow, not dark",
+            "Add electrolytes if training >60 min"
+          ]
+        }
       ]
     },
     {
       "tag": "motivation",
       "patterns": [
-        "i don't feel like working out",
-        "i'm tired",
-        "no motivation today",
-        "i want to skip today",
-        "feeling lazy",
-        "can't be bothered",
-        "motivate me",
-        "i need motivation",
-        "i feel demotivated",
-        "convince me to work out",
-        "give me a pep talk",
-        "i'm losing motivation",
-        "feel like quitting",
-        "having a bad day",
-        "help me get going",
-        "i'm too tired to train",
-        "should i skip today",
-        "i feel like quitting",
-        "talk me into it",
-        "i don't want to",
-        "i'm not feeling it",
-        "i feel weak",
-        "everything is hard",
-        "i want to give up",
-        "i hate training",
-        "burned out",
-        "i'm struggling",
-        "encourage me"
+        "i don't feel like working out", "i'm tired", "no motivation today",
+        "i want to skip today", "feeling lazy", "can't be bothered", "motivate me",
+        "i need motivation", "i feel demotivated", "convince me to work out",
+        "give me a pep talk", "i'm losing motivation", "feel like quitting",
+        "having a bad day", "help me get going", "i'm too tired to train",
+        "should i skip today", "i feel like quitting", "talk me into it",
+        "i don't want to", "i'm not feeling it", "i feel weak", "everything is hard",
+        "i want to give up", "i hate training", "burned out", "i'm struggling",
+        "encourage me", "lost motivation", "feel lazy", "i feel exhausted",
+        "no energy", "don't want to train", "tell me to keep going",
+        "pep talk please", "need encouragement", "feeling unmotivated",
+        "feel like giving up", "tired of working out"
       ],
       "responses": [
-        "You don't have to feel like it — you just have to start. Promise yourself 10 minutes; you'll usually finish the session.",
-        "Future you is already proud of present you for showing up. Even a light session beats zero. Let's go, {firstName}.",
-        "Discipline beats motivation. Lace up, do the warm-up, and decide afterwards. You've got this.",
-        "{firstName}, you've already done {totalWorkouts} workouts — momentum is yours. Don't break the chain.",
-        "Your {streak}-day streak is on the line. Even a 15-minute session keeps it alive.",
-        "Hard days build the most. Show up, do less than usual if you must, but show up.",
-        "Pick the easiest exercise on today's list and just start there. Most of the time the rest follows."
+        {
+          "style": "motivational",
+          "shortAnswer": "**You don't have to feel like it. You just have to start.**",
+          "explanation": "Most days the motivation comes after the warm-up, not before. Promise yourself 10 minutes — most of the time the rest follows.",
+          "actionSteps": [
+            "Put your gym clothes on",
+            "Do the warm-up only",
+            "Decide after that — most days you'll keep going"
+          ],
+          "suggestion": "Want to open today's session?",
+          "action": { "label": "Start now", "type": "navigate", "route": "/(tabs)/" }
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "{firstName}, your **{streak}-day streak** is on the line.",
+          "explanation": "Even a 15-min easy session keeps the chain alive. Future you remembers what past you did when it was hard.",
+          "suggestion": "Just press start — the hard part is the first rep.",
+          "action": { "label": "Start the session", "type": "navigate", "route": "/(tabs)/" }
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Tired and lazy aren't the same thing — figure out which.",
+          "explanation": "If you slept badly or trained yesterday, take real rest. If it's just a bad mood, the easiest exercise on the list usually fixes it.",
+          "actionSteps": [
+            "Ask: did I sleep <6 hours?",
+            "Ask: am I sore from yesterday?",
+            "If both no → start with one easy lift"
+          ]
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "You've banked **{totalWorkouts} workouts**. Don't break the chain.",
+          "explanation": "Discipline beats motivation. Showing up on the bad days is what separates progress from plateaus.",
+          "suggestion": "Open the session — 10 minutes is all I'm asking."
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Here's the no-think starter routine.",
+          "actionSteps": [
+            "**Step 1**: Drink a glass of water",
+            "**Step 2**: Put on workout clothes",
+            "**Step 3**: Open the workout tab",
+            "**Step 4**: Tap Start — you're past the hardest part"
+          ],
+          "action": { "label": "Open Workout", "type": "navigate", "route": "/(tabs)/" }
+        },
+        {
+          "style": "warning",
+          "shortAnswer": "If it's been 3+ days of fatigue, **rest** — don't push.",
+          "explanation": "Real burnout needs real rest. A forced session on top of exhaustion sets you back. Take 1–2 days off, then ease in.",
+          "suggestion": "Want recovery tips for a real rest day?"
+        }
       ]
     },
     {
       "tag": "rest_day_advice",
       "patterns": [
-        "should i take a rest day",
-        "rest day advice",
-        "do i need a rest day",
-        "is rest important",
-        "how often should i rest",
-        "what to do on rest days",
-        "active recovery ideas",
-        "how many rest days per week",
-        "is it okay to skip a workout",
-        "should i train every day",
-        "how to recover faster",
-        "tips for recovery",
-        "feeling sore should i train",
-        "i'm super sore",
-        "what counts as active recovery",
-        "rest tips",
-        "do rest days help",
-        "deload week",
-        "should i deload",
-        "i'm sore everywhere",
-        "i need a break",
-        "stretching on rest days",
-        "yoga on rest days",
-        "walking as recovery",
-        "is sore good",
-        "how to reduce muscle soreness",
-        "ice or heat for recovery",
-        "is sleep important for recovery"
+        "should i take a rest day", "rest day advice", "do i need a rest day",
+        "is rest important", "how often should i rest", "what to do on rest days",
+        "active recovery ideas", "how many rest days per week",
+        "is it okay to skip a workout", "should i train every day",
+        "how to recover faster", "tips for recovery", "feeling sore should i train",
+        "i'm super sore", "what counts as active recovery", "rest tips",
+        "do rest days help", "deload week", "should i deload",
+        "i'm sore everywhere", "i need a break", "stretching on rest days",
+        "yoga on rest days", "walking as recovery", "is sore good",
+        "how to reduce muscle soreness", "ice or heat for recovery",
+        "is sleep important for recovery", "how to recover", "recovery advice",
+        "do i need to rest", "muscle soreness tips"
       ],
       "responses": [
-        "Rest is where the gains happen. Aim for at least 1–2 full rest days per week. On those days, light walking or mobility work is great.",
-        "If you're really sore or sleep was poor, take the day off or do active recovery — easy walk, stretching, mobility. Your next session will be better for it.",
-        "Recovery hinges on sleep (7–9h), protein, hydration, and easy movement on off days. Don't grind through real fatigue.",
-        "Soreness is normal up to ~48h. Sharp or one-sided pain is not — that's a stop sign.",
-        "Active recovery: 20–30 min easy walk, foam rolling, mobility flow. Skip anything that spikes your heart rate.",
-        "Every 6–8 weeks consider a deload — drop weights to ~60% for a week. You'll come back stronger.",
-        "{firstName}, your {daysPerWeek}-day plan already has rest built in. Trust it."
+        {
+          "style": "beginner",
+          "shortAnswer": "**Yes — 1 to 2 full rest days/week** is the sweet spot.",
+          "explanation": "Muscle grows during recovery, not the workout. Hard training without rest = injury or plateau.",
+          "actionSteps": [
+            "Take 1–2 rest days/week (more if very sore)",
+            "Easy walk, stretch, or yoga is fine",
+            "Skip anything that spikes heart rate"
+          ],
+          "suggestion": "Want active recovery ideas?"
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Here's a perfect rest day.",
+          "actionSteps": [
+            "20–30 min easy walk outdoors",
+            "10 min mobility flow / stretching",
+            "Hydrate well, hit protein target",
+            "Sleep 7–9 hours"
+          ],
+          "suggestion": "Need stretching or mobility ideas?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Sore ≠ injured. Sharp/one-sided = stop sign.",
+          "explanation": "DOMS up to ~48h is normal. Sharp, sudden, or asymmetric pain isn't — that's a red flag for injury.",
+          "actionSteps": [
+            "Rate pain 1–10. >5 sharp = stop",
+            "Compare left/right — asymmetric = caution",
+            "Persistent >72h = book a physio"
+          ]
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "Rest is a tool, not a cheat.",
+          "explanation": "{firstName}, your {daysPerWeek}-day plan already builds in rest. Trust it. Rest days protect every other day.",
+          "suggestion": "Want a deload-week plan?"
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Every 6–8 weeks, **deload** — drop weights to ~60% for one week.",
+          "explanation": "A planned light week lets joints, tendons, and your nervous system catch up. You'll come back stronger.",
+          "actionSteps": [
+            "Same exercises, ~60% of working weight",
+            "Cut sets by 30–50%",
+            "Resume normal loads the next week"
+          ]
+        }
       ]
     },
     {
       "tag": "injury_concern",
       "patterns": [
-        "i pulled my hamstring",
-        "my back hurts",
-        "i think i hurt my shoulder",
-        "knee pain after squats",
-        "my elbow is sore",
-        "i tweaked my back",
-        "should i train through pain",
-        "i strained a muscle",
-        "i think i'm injured",
-        "wrist hurts when pressing",
-        "got injured working out",
-        "shoulder pain on bench",
-        "i hurt myself",
-        "is this an injury",
-        "my knee feels weird",
-        "lower back pain",
-        "neck pain after workout",
-        "ache in my elbow",
-        "pulled muscle",
-        "tight calf",
-        "stiff back",
-        "ankle hurts",
-        "hip pain",
-        "should i ice it",
-        "should i stretch it",
-        "rest or train when injured",
-        "minor strain advice",
-        "muscle ache won't go away"
+        "i pulled my hamstring", "my back hurts", "i think i hurt my shoulder",
+        "knee pain after squats", "my elbow is sore", "i tweaked my back",
+        "should i train through pain", "i strained a muscle", "i think i'm injured",
+        "wrist hurts when pressing", "got injured working out", "shoulder pain on bench",
+        "i hurt myself", "is this an injury", "my knee feels weird",
+        "lower back pain", "neck pain after workout", "ache in my elbow",
+        "pulled muscle", "tight calf", "stiff back", "ankle hurts", "hip pain",
+        "should i ice it", "should i stretch it", "rest or train when injured",
+        "minor strain advice", "muscle ache won't go away", "knee hurts",
+        "shoulder is acting up", "lower back tight", "feels off",
+        "is this normal pain", "training hurts", "pain when lifting",
+        "soreness or injury"
       ],
       "responses": [
-        "Sorry to hear that. I'm not qualified to diagnose injuries — please pause training the affected area and consult a doctor or physiotherapist before pushing through.",
-        "That sounds like something to get checked by a professional. Rest it, ice if it's acute, and book a physio. Don't train through pain.",
-        "I can't give medical advice. The safe move is to stop loading the area, see a qualified physio or doctor, and ease back in only when they clear you.",
-        "Ache is one thing, sharp pain is another. If it's sharp, swelling, or affects daily life — see a professional ASAP.",
-        "Train around it, not through it. Pick exercises that don't load the painful area and book a physio for proper diagnosis.",
-        "I'm not a doctor. For anything beyond mild post-workout soreness, please get professional input before training the area again."
+        {
+          "style": "warning",
+          "shortAnswer": "**Stop loading the area and book a physio or doctor.**",
+          "explanation": "I'm not qualified to diagnose injuries. Sharp, sudden, or persistent pain needs a real professional eye. Pushing through can turn a 1-week issue into a 3-month one.",
+          "actionSteps": [
+            "Stop the exercise causing pain",
+            "Ice if acute and swelling (10–15 min)",
+            "Book a physiotherapist if pain >48h",
+            "Train around it, not through it"
+          ],
+          "suggestion": "Want exercises that avoid that area?"
+        },
+        {
+          "style": "warning",
+          "shortAnswer": "**Sharp pain ≠ DOMS.** Treat it seriously.",
+          "explanation": "Dull soreness fades in 24–72h. Sharp, swelling, or pain that affects daily life means see a professional ASAP.",
+          "actionSteps": [
+            "Rate pain 1–10",
+            "If >5, sharp, or one-sided — stop",
+            "Track what movement triggers it",
+            "Bring that info to a physio"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Train around it. Pick exercises that don't load the painful area.",
+          "explanation": "If your shoulder hurts on bench, try push-ups on dumbbells or work legs/back instead. Don't lose the habit — just adapt the lifts.",
+          "actionSteps": [
+            "Identify what hurts and when",
+            "Swap that lift for a pain-free alternative",
+            "Keep training other body parts",
+            "Re-test the lift in 7–10 days"
+          ],
+          "suggestion": "Need exercise swaps for a specific area?"
+        },
+        {
+          "style": "warning",
+          "shortAnswer": "I can't give medical advice — please see a qualified physio or doctor.",
+          "explanation": "Your safety matters more than any training plan. Get a real diagnosis, follow their plan, and ease back in only when cleared.",
+          "suggestion": "Want a guide to finding a sports physio?"
+        },
+        {
+          "style": "step",
+          "shortAnswer": "First-aid checklist for a fresh injury.",
+          "actionSteps": [
+            "**Stop** the activity",
+            "**Ice** if acute and swelling (10–15 min)",
+            "**Compress** with a bandage if appropriate",
+            "**Elevate** if a limb",
+            "**See a physio** if pain >48h"
+          ]
+        }
       ]
     },
     {
       "tag": "equipment_swap",
       "patterns": [
-        "i don't have a barbell",
-        "what if i only have dumbbells",
-        "no equipment at home",
-        "alternative for bench press",
-        "swap exercise",
-        "no gym access",
-        "can i do this at home",
-        "replacement for pull ups",
-        "i only have bands",
-        "no kettlebell",
-        "substitute for squats",
-        "alternative exercise without weights",
-        "what to do with just bodyweight",
-        "i don't have a machine",
-        "replace barbell with dumbbells",
-        "can i swap an exercise",
-        "swap this exercise",
-        "different exercise for chest",
-        "no dumbbells what now",
-        "can i do this without weights",
-        "bodyweight alternative",
-        "home version of this",
-        "no rack what to do",
-        "missing equipment",
-        "machine broken alternative",
-        "replace bench press",
-        "alternative for deadlift",
-        "swap leg press"
+        "i don't have a barbell", "what if i only have dumbbells",
+        "no equipment at home", "alternative for bench press", "swap exercise",
+        "no gym access", "can i do this at home", "replacement for pull ups",
+        "i only have bands", "no kettlebell", "substitute for squats",
+        "alternative exercise without weights", "what to do with just bodyweight",
+        "i don't have a machine", "replace barbell with dumbbells",
+        "can i swap an exercise", "swap this exercise", "different exercise for chest",
+        "no dumbbells what now", "can i do this without weights",
+        "bodyweight alternative", "home version of this", "no rack what to do",
+        "missing equipment", "machine broken alternative", "replace bench press",
+        "alternative for deadlift", "swap leg press", "i have only bands",
+        "no gym today", "what if i don't have x", "different equipment"
       ],
       "responses": [
-        "Most barbell lifts have solid dumbbell or bodyweight versions. Push-ups for bench, goblet squats for back squats, single-leg RDLs for deadlifts, rows with bands or dumbbells for pulls.",
-        "Update your equipment in onboarding and I'll regenerate a plan that fits what you actually have. In the meantime, bodyweight + dumbbells covers 90% of the basics.",
-        "Adapt freely: swap the lift for one that hits the same primary muscle with the gear you've got. The pattern (push, pull, hinge, squat, carry) matters more than the tool.",
-        "{firstName}, your equipment is set to {equipment}. Want to change it? Update it in Settings and I'll suggest matching exercises.",
-        "Push-ups, pike push-ups, dips, rows, rear-delt flies with bands — you can hit every upper body muscle without a barbell. Want me to walk through it?",
-        "Bodyweight squats, lunges, single-leg work, glute bridges, and Nordic curls cover lower body without any equipment."
+        {
+          "style": "beginner",
+          "shortAnswer": "Swap the **pattern**, not the tool.",
+          "explanation": "Push-ups for bench, goblet squats for back squats, single-leg RDLs for deadlifts, band rows for cable rows. The movement matters more than the equipment.",
+          "actionSteps": [
+            "Identify the pattern (push, pull, hinge, squat, carry)",
+            "Pick a version with what you have",
+            "Aim for similar reps/sets"
+          ],
+          "suggestion": "Want me to swap a specific exercise?"
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Common swaps for {equipment}.",
+          "actionSteps": [
+            "**Bench press** → push-ups or dumbbell press",
+            "**Back squat** → goblet squat or split squat",
+            "**Deadlift** → single-leg RDL with dumbbells",
+            "**Pull-ups** → band-assisted rows or inverted rows",
+            "**Overhead press** → dumbbell press or pike push-ups"
+          ]
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Bodyweight + tempo + unilateral = surprisingly hard.",
+          "explanation": "Slow eccentrics (4–5 sec down), pause reps, single-leg variations all spike difficulty without adding load.",
+          "actionSteps": [
+            "Add 4-second negatives",
+            "Add 2-second pauses at the bottom",
+            "Switch to single-side variations",
+            "Increase reps to 15–25 if needed"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Update your equipment in Settings → Edit Profile.",
+          "explanation": "When I regenerate your plan, it'll only pick exercises that match what you have.",
+          "action": { "label": "Edit profile", "type": "navigate", "route": "/(tabs)/dashboard" }
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "**The barrier is mental, not equipment.**",
+          "explanation": "{firstName}, every basic pattern can be hit with bodyweight alone. Don't let \"I don't have X\" become a quit excuse.",
+          "suggestion": "Want a no-equipment full-body session?"
+        }
       ]
     },
     {
       "tag": "log_question",
       "patterns": [
-        "how do i log a workout",
-        "where do i log my session",
-        "how to track workouts",
-        "log my workout",
-        "how to record a workout",
-        "where to enter my session",
-        "track my training",
-        "how to mark a workout done",
-        "did my workout save",
-        "how do i save my session",
-        "log cardio",
-        "log a manual workout",
-        "where's the log button",
-        "save today's workout",
-        "how to track progress",
-        "where do i save workouts",
-        "manual log",
-        "track yoga",
-        "log run",
-        "how to add a session",
-        "save my run",
-        "how to log a class",
-        "log spin class",
-        "log swimming",
-        "where is workout history",
-        "view past workouts",
-        "log strength session manually",
-        "how to record cardio"
+        "how do i log a workout", "where do i log my session", "how to track workouts",
+        "log my workout", "how to record a workout", "where to enter my session",
+        "track my training", "how to mark a workout done", "did my workout save",
+        "how do i save my session", "log cardio", "log a manual workout",
+        "where's the log button", "save today's workout", "how to track progress",
+        "where do i save workouts", "manual log", "track yoga", "log run",
+        "how to add a session", "save my run", "how to log a class",
+        "log spin class", "log swimming", "where is workout history",
+        "view past workouts", "log strength session manually", "how to record cardio",
+        "i did a workout outside the app", "log an off-plan session",
+        "track an external workout", "how to enter a workout"
       ],
       "responses": [
-        "Open the Workout tab, tap Log, fill in duration, and hit Save — it'll write to your history and award XP.",
-        "From the Home or Workout tab you can run today's session, or use Log to add a manual entry. Both update your dashboard.",
-        "Use the Log screen for manual entries (cardio, classes, anything off-plan). Sessions you run from the plan log themselves on completion.",
-        "Tap the Log button on the Workout tab to add anything — runs, classes, yoga, anything. It all earns XP and counts toward your streak.",
-        "Sessions you complete via the Run screen save automatically. For manual entries (off-plan stuff), use the Log button.",
-        "Past workouts live on the Dashboard tab — scroll down for the history list."
+        {
+          "style": "step",
+          "shortAnswer": "**Workout tab → Log → fill in duration → Save.**",
+          "actionSteps": [
+            "Open the Workout tab",
+            "Tap **Log**",
+            "Enter duration, type, calories",
+            "Tap **Save** — XP awarded automatically"
+          ],
+          "suggestion": "Want me to open the log screen?",
+          "action": { "label": "Open Log screen", "type": "navigate", "route": "/workout/log" }
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Two ways: from the plan (auto) or manual.",
+          "explanation": "If you ran today's plan from the Home tab, it logs itself when you finish. For anything off-plan (run, yoga, class), use the manual Log screen.",
+          "actionSteps": [
+            "**On-plan**: Home → Start Workout → finish → auto-logs",
+            "**Off-plan**: Workout tab → Log → fill in → Save"
+          ]
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Manual log = `/workout/log`. Past sessions = Dashboard.",
+          "explanation": "All XP events live in `users/{uid}/xp_events`. Workouts under `users/{uid}/workouts`. Streak/level recompute from these on the dashboard.",
+          "action": { "label": "Open history", "type": "navigate", "route": "/workout/history" }
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Lost a workout? Recover via manual log.",
+          "actionSteps": [
+            "Open Workout tab → Log",
+            "Estimate duration from memory",
+            "Pick the type (strength/cardio/yoga)",
+            "Save — your streak and XP catch up"
+          ]
+        }
       ]
     },
     {
       "tag": "progress_question",
       "patterns": [
-        "how am i progressing",
-        "show my progress",
-        "am i improving",
-        "how's my progress",
-        "what's my level",
-        "how much xp do i have",
-        "how many workouts have i done",
-        "how's my streak",
-        "what's my current streak",
-        "how much have i lifted",
-        "show stats",
-        "track my improvement",
-        "weekly progress",
-        "monthly progress",
-        "am i getting better",
-        "what level am i",
-        "how many xp",
-        "total workouts",
-        "my stats",
-        "current level",
-        "streak status",
-        "progress report",
-        "weekly summary",
-        "how much have i trained",
-        "minutes this week",
-        "show streak",
-        "am i on a streak",
-        "show my level"
+        "how am i progressing", "show my progress", "am i improving",
+        "how's my progress", "what's my level", "how much xp do i have",
+        "how many workouts have i done", "how's my streak", "what's my current streak",
+        "how much have i lifted", "show stats", "track my improvement",
+        "weekly progress", "monthly progress", "am i getting better",
+        "what level am i", "how many xp", "total workouts", "my stats",
+        "current level", "streak status", "progress report", "weekly summary",
+        "how much have i trained", "minutes this week", "show streak",
+        "am i on a streak", "show my level", "results so far", "improvement",
+        "am i getting stronger", "how am i doing", "my numbers", "show my numbers",
+        "my achievements", "achievement progress"
       ],
       "responses": [
-        "Level {level}, {totalWorkouts} workouts done, {streak}-day streak, {weeklyMinutes} minutes this week. Solid progress, {firstName}.",
-        "You're on Level {level} with {totalWorkouts} total workouts. Keep the {streak}-day streak alive!",
-        "{firstName}, this week you've trained {weeklyMinutes} minutes. Lifetime: {totalWorkouts} sessions and Level {level}.",
-        "Check the Dashboard tab — it shows your level, total workouts, weekly minutes, and streak. Achievements live there too.",
-        "Stats: Level {level}, {totalWorkouts} workouts, {streak}-day streak. You're moving forward.",
-        "Open the Dashboard for the full breakdown. Quick version: Level {level}, {streak}-day streak."
+        {
+          "style": "step",
+          "shortAnswer": "**Level {level}** · {totalWorkouts} workouts · {streak}-day streak.",
+          "explanation": "This week: {weeklyMinutes} minutes. Achievements: {achievementProgress} unlocked.",
+          "actionSteps": [
+            "Open the Dashboard tab for the full breakdown",
+            "Tap your Level pill to see all achievements",
+            "Scroll for the workout history"
+          ],
+          "suggestion": "Want to see your achievements?",
+          "action": { "label": "Open Dashboard", "type": "navigate", "route": "/(tabs)/dashboard" }
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "{firstName}, you're **Level {level}** with a **{streak}-day streak**.",
+          "explanation": "{totalWorkouts} workouts banked. {weeklyMinutes} minutes this week. The numbers don't lie — you're moving.",
+          "suggestion": "Keep the streak alive — open today's session?",
+          "action": { "label": "Open today's workout", "type": "navigate", "route": "/(tabs)/" }
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Stats: L{level} · {totalWorkouts}w · {streak}d streak · {weeklyMinutes} min/wk.",
+          "explanation": "Last logged session: {recentWorkout}. Next: {nextWorkoutDay}.",
+          "action": { "label": "Full breakdown", "type": "navigate", "route": "/(tabs)/dashboard" }
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "You're doing well — Level {level}, {streak}-day streak.",
+          "explanation": "Progress in fitness is rarely linear. Trust the trend, not single weeks.",
+          "suggestion": "Want tips for breaking through plateaus?"
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Track three things weekly.",
+          "actionSteps": [
+            "Sessions completed (target: {daysPerWeek}/wk)",
+            "Total minutes (target: 150+)",
+            "Streak length (don't break it)"
+          ]
+        }
       ]
     },
     {
       "tag": "goodbye",
       "patterns": [
-        "bye",
-        "goodbye",
-        "see you later",
-        "talk to you later",
-        "see ya",
-        "later",
-        "good night",
-        "i'm done",
-        "that's all",
-        "thanks bye",
-        "ok bye",
-        "see you tomorrow",
-        "catch you later",
-        "i'm out",
-        "gotta go",
-        "peace",
-        "ciao",
-        "talk later",
-        "got to run",
-        "have to go",
-        "goodbye coach",
-        "later coach",
-        "night",
-        "going now",
-        "signing off",
-        "ttyl",
-        "cya",
-        "i'm leaving"
+        "bye", "goodbye", "see you later", "talk to you later", "see ya",
+        "later", "good night", "i'm done", "that's all", "thanks bye",
+        "ok bye", "see you tomorrow", "catch you later", "i'm out",
+        "gotta go", "peace", "ciao", "talk later", "got to run", "have to go",
+        "goodbye coach", "later coach", "night", "going now", "signing off",
+        "ttyl", "cya", "i'm leaving"
       ],
       "responses": [
-        "Take care, {firstName}! Train hard and rest harder.",
-        "See you next session, {firstName}. Stay consistent.",
-        "Later! Hydrate, eat well, and I'll be here next time.",
-        "Bye {firstName} — keep the {streak}-day streak alive!",
-        "Catch you later. Don't forget to log today's session if you trained.",
-        "Until next time. Sleep well, {firstName}."
+        {
+          "style": "motivational",
+          "shortAnswer": "Take care, {firstName}! Train hard, rest harder.",
+          "suggestion": "Don't break the {streak}-day streak."
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "See you next session, {firstName}.",
+          "suggestion": "Hydrate and sleep well."
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Catch you later. Quick reminder before you go:",
+          "actionSteps": [
+            "Hydrate well today",
+            "Hit your protein target",
+            "Aim for 7–9h of sleep"
+          ]
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Until next time. Keep the streak alive."
+        }
       ]
     },
     {
       "tag": "thanks",
       "patterns": [
-        "thanks",
-        "thank you",
-        "thanks coach",
-        "thx",
-        "ty",
-        "appreciate it",
-        "much appreciated",
-        "thanks for the help",
-        "you're helpful",
-        "great advice",
-        "good info",
-        "helpful thanks",
-        "thanks a lot",
-        "cheers",
-        "many thanks",
-        "you're the best",
-        "awesome thanks",
-        "perfect thanks",
-        "ok thanks",
-        "got it thanks",
-        "appreciate the advice",
-        "thanks for that",
-        "great help",
-        "you helped a lot",
-        "love this app",
-        "you rock",
-        "nice one"
+        "thanks", "thank you", "thanks coach", "thx", "ty", "appreciate it",
+        "much appreciated", "thanks for the help", "you're helpful", "great advice",
+        "good info", "helpful thanks", "thanks a lot", "cheers", "many thanks",
+        "you're the best", "awesome thanks", "perfect thanks", "ok thanks",
+        "got it thanks", "appreciate the advice", "thanks for that",
+        "great help", "you helped a lot", "love this app", "you rock", "nice one"
       ],
       "responses": [
-        "Anytime, {firstName}! Glad to help.",
-        "You got it. Now go put the work in.",
-        "Happy to help. Ping me whenever.",
-        "No problem at all — that's what I'm here for.",
-        "Glad it was useful. Lock in and let's keep building.",
-        "Anytime. Enjoy your session, {firstName}."
+        {
+          "style": "motivational",
+          "shortAnswer": "Anytime, {firstName}!",
+          "suggestion": "Now go put the work in."
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Glad it helped.",
+          "suggestion": "Ping me whenever — I'm always here."
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "You got it.",
+          "suggestion": "Anything else?"
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "Happy to help. Lock in and keep building, {firstName}."
+        }
       ]
     },
     {
       "tag": "confusion",
       "patterns": [
-        "what",
-        "huh",
-        "i don't understand",
-        "what do you mean",
-        "explain that",
-        "what are you talking about",
-        "i don't get it",
-        "what does that mean",
-        "say again",
-        "rephrase that",
-        "i'm confused",
-        "didn't catch that",
-        "could you explain",
-        "explain please",
-        "what's that",
-        "say what",
-        "doesn't make sense",
-        "elaborate",
-        "more details",
-        "what for",
-        "why",
-        "how come",
-        "you lost me"
+        "what", "huh", "i don't understand", "what do you mean", "explain that",
+        "what are you talking about", "i don't get it", "what does that mean",
+        "say again", "rephrase that", "i'm confused", "didn't catch that",
+        "could you explain", "explain please", "what's that", "say what",
+        "doesn't make sense", "elaborate", "more details", "what for",
+        "why", "how come", "you lost me", "i don't follow", "come again",
+        "more info please"
       ],
       "responses": [
-        "Let me rephrase — I can help with: today's workout, training advice, nutrition basics, motivation, recovery, or how to use the app. What do you need?",
-        "Sorry if I was unclear. Try asking something specific like 'what's my plan today?' or 'how much protein do i need?'",
-        "I'm a fitness coach bot — I answer training, nutrition, recovery, and motivation questions. What would you like to know?",
-        "Try a more specific question — for example: 'show me today's workout', 'how do i log a run', or 'should i take a rest day?'",
-        "Happy to clarify. What part is unclear — the training advice or how to use the app?"
+        {
+          "style": "step",
+          "shortAnswer": "Let me try again.",
+          "explanation": "I can help with: today's workout, training advice, nutrition basics, motivation, recovery, or how to use the app.",
+          "actionSteps": [
+            "Ask: \"what's my workout today\"",
+            "Ask: \"how much protein do I need\"",
+            "Ask: \"should I take a rest day\"",
+            "Or: \"how do I log a session\""
+          ],
+          "followUpQuestion": "Which area would you like to dig into?"
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Sorry if I was unclear.",
+          "explanation": "Try a more specific question — \"how do I get stronger?\" or \"what's a good post-workout meal?\" works better than \"explain that\".",
+          "followUpQuestion": "What part is unclear?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "I'm a fitness coach bot — training, nutrition, recovery, app help.",
+          "followUpQuestion": "Which of those is the question about?"
+        }
       ]
     },
     {
       "tag": "affirmation",
       "patterns": [
-        "yes",
-        "yeah",
-        "yep",
-        "yup",
-        "sure",
-        "ok",
-        "okay",
-        "alright",
-        "go ahead",
-        "sounds good",
-        "let's do it",
-        "yes please",
-        "definitely",
-        "of course",
-        "absolutely",
-        "i agree",
-        "right",
-        "correct",
-        "true",
-        "for sure",
-        "yep that's right",
-        "uh huh",
-        "mhm",
-        "fine"
+        "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "alright",
+        "go ahead", "sounds good", "let's do it", "yes please", "definitely",
+        "of course", "absolutely", "i agree", "right", "correct", "true",
+        "for sure", "yep that's right", "uh huh", "mhm", "fine", "yes please go",
+        "that works", "good idea"
       ],
       "responses": [
-        "Got it.",
-        "Cool — what would you like next?",
-        "Great. Anything else I can help with?",
-        "Noted. Let me know what you'd like to tackle next."
+        { "style": "step", "shortAnswer": "Got it." },
+        { "style": "step", "shortAnswer": "Cool — what would you like next?" },
+        { "style": "beginner", "shortAnswer": "Great. Anything else I can help with?" },
+        { "style": "advanced", "shortAnswer": "Noted." }
       ]
     },
     {
       "tag": "negation",
       "patterns": [
-        "no",
-        "nope",
-        "nah",
-        "not really",
-        "skip",
-        "no thanks",
-        "not now",
-        "negative",
-        "i don't want to",
-        "skip that",
-        "next",
-        "no way",
-        "definitely not",
-        "not interested",
-        "rather not",
-        "cancel",
-        "never mind",
-        "nevermind",
-        "forget it",
-        "drop it",
-        "leave it",
-        "not today"
+        "no", "nope", "nah", "not really", "skip", "no thanks", "not now",
+        "negative", "i don't want to", "skip that", "next", "no way",
+        "definitely not", "not interested", "rather not", "cancel",
+        "never mind", "nevermind", "forget it", "drop it", "leave it", "not today"
       ],
       "responses": [
-        "No problem.",
-        "Got it — let me know if you change your mind.",
-        "All good. What else can I help with?",
-        "Okay. Skipping that."
+        { "style": "step", "shortAnswer": "No problem." },
+        { "style": "beginner", "shortAnswer": "Got it — let me know if you change your mind." },
+        { "style": "advanced", "shortAnswer": "Skipping that." },
+        { "style": "step", "shortAnswer": "All good. What else can I help with?" }
       ]
     },
     {
       "tag": "app_help",
       "patterns": [
-        "how do i change my goal",
-        "where's the calendar",
-        "i can't find my plan",
-        "settings",
-        "where is settings",
-        "how do i edit my profile",
-        "change my password",
-        "how to change my name",
-        "where do i find achievements",
-        "how to delete my account",
-        "where is the dashboard",
-        "how do i see my workouts",
-        "where is the community",
-        "how to update equipment",
-        "edit weight",
-        "log my weight",
-        "where do i see my level",
-        "where to update my goal",
-        "how do i change my plan",
-        "regenerate plan",
-        "how to start a new plan",
-        "where do i see notifications",
-        "how to enable notifications",
-        "how to disable reminders",
-        "where is my profile",
-        "how to add a profile picture",
-        "edit my bio"
+        "how do i change my goal", "where's the calendar", "i can't find my plan",
+        "settings", "where is settings", "how do i edit my profile",
+        "change my password", "how to change my name", "where do i find achievements",
+        "how to delete my account", "where is the dashboard", "how do i see my workouts",
+        "where is the community", "how to update equipment", "edit weight",
+        "log my weight", "where do i see my level", "where to update my goal",
+        "how do i change my plan", "regenerate plan", "how to start a new plan",
+        "where do i see notifications", "how to enable notifications",
+        "how to disable reminders", "where is my profile", "how to add a profile picture",
+        "edit my bio", "how do i use this app", "app guide", "where is x in the app"
       ],
       "responses": [
-        "Most account/profile stuff lives in the Settings tab. Tap your avatar at the top-right or use the Settings tab in the bottom bar.",
-        "Goals and equipment can be updated in Settings → Edit Profile. Changes feed into your next plan regeneration.",
-        "Your achievements are on the Dashboard tab — tap the Level pill to see all unlocks.",
-        "Plan regeneration: Settings → Regenerate Plan. Or change goal/equipment first and the next plan picks them up.",
-        "Calendar is on the Workout tab — scroll down to see your planned days.",
-        "Notifications: Settings → Notifications. Soft prompts ask you first, then iOS/Android dialogs."
+        {
+          "style": "step",
+          "shortAnswer": "**Settings tab** has most account options.",
+          "actionSteps": [
+            "Tap your avatar (top-right) or the Settings tab",
+            "Edit Profile → goal, equipment, days/week",
+            "Notifications → reminders + push prefs",
+            "Achievements → tap your Level pill on Dashboard"
+          ],
+          "suggestion": "Want me to open Settings?",
+          "action": { "label": "Open Dashboard", "type": "navigate", "route": "/(tabs)/dashboard" }
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Quick map of the app.",
+          "actionSteps": [
+            "**Home** — today's workout",
+            "**Dashboard** — stats, level, achievements",
+            "**Community** — posts and friends",
+            "**Coach** (here) — questions and help"
+          ]
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Plan regeneration: Settings → Regenerate Plan.",
+          "explanation": "Change goal/equipment first if you want them reflected. The next plan picks them up automatically.",
+          "action": { "label": "Open Settings", "type": "navigate", "route": "/(tabs)/dashboard" }
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Notifications setup.",
+          "actionSteps": [
+            "Settings → Notifications",
+            "Toggle workout reminders",
+            "Toggle community alerts",
+            "Allow at OS level if blocked"
+          ]
+        }
       ]
     },
     {
       "tag": "share_progress",
       "patterns": [
-        "how do i share my workout",
-        "post to community",
-        "share my streak",
-        "share my level",
-        "post my achievement",
-        "share progress",
-        "show off my workout",
-        "tell my friends",
-        "brag about my streak",
-        "share to feed",
-        "post my session",
-        "how to share",
-        "post photo",
-        "share workout",
-        "create a post",
-        "make a post",
-        "feed",
-        "share with community",
-        "tell people"
+        "how do i share my workout", "post to community", "share my streak",
+        "share my level", "post my achievement", "share progress",
+        "show off my workout", "tell my friends", "brag about my streak",
+        "share to feed", "post my session", "how to share", "post photo",
+        "share workout", "create a post", "make a post", "feed",
+        "share with community", "tell people", "share my achievement",
+        "post achievement", "share level"
       ],
       "responses": [
-        "Open the Community tab and tap the + button to create a post. You can attach a photo and caption.",
-        "Achievements show up on your community profile automatically — friends can see your latest unlocks.",
-        "Community tab → New Post. Add a photo, write a caption, and hit Share.",
-        "Your level and streak are visible on your community profile if you have it set to public."
+        {
+          "style": "step",
+          "shortAnswer": "**Community tab → New Post.**",
+          "actionSteps": [
+            "Open the Community tab",
+            "Tap **+** (top right)",
+            "Add a photo + caption",
+            "Hit **Share**"
+          ],
+          "action": { "label": "Open Community", "type": "navigate", "route": "/(tabs)/community" }
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Your achievements show up automatically on your community profile.",
+          "explanation": "Friends see your latest unlocks without you needing to post manually.",
+          "suggestion": "Want to make a manual post?"
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "Sharing the win = doubling the win.",
+          "explanation": "Posting holds you accountable and gives someone else the nudge they need today.",
+          "action": { "label": "Create a post", "type": "navigate", "route": "/community/compose" }
+        }
+      ]
+    },
+    {
+      "tag": "ask_set_rep_scheme",
+      "patterns": [
+        "how many sets", "how many reps", "best rep range", "rep range for hypertrophy",
+        "how many sets per exercise", "rep scheme", "best set scheme",
+        "how many reps for strength", "how many reps for fat loss",
+        "how many sets for muscle", "sets and reps", "rep range for strength",
+        "set and rep advice", "should i do more sets", "should i do more reps",
+        "how many sets for beginners", "rep range for beginners",
+        "how many reps to build muscle", "best rep range for size"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "Match reps to your **goal**.",
+          "actionSteps": [
+            "**Strength**: 3–6 reps × 3–5 sets, heavy load",
+            "**Hypertrophy (size)**: 8–12 reps × 3–4 sets, moderate load",
+            "**Endurance**: 12–20 reps × 2–3 sets, lighter load"
+          ],
+          "suggestion": "Want me to tailor it to your goal?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "**Volume = sets × reps × frequency.**",
+          "explanation": "10–20 working sets per muscle group per week is the hypertrophy sweet spot. Spread across 2 sessions/muscle.",
+          "actionSteps": [
+            "Count working sets per muscle/week",
+            "Stay between 10–20",
+            "Frequency 2x beats 1x at same volume"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "**3 sets of 10** is a great starting default.",
+          "explanation": "Stop sets ~2 reps before failure (RPE 8). Form > load > volume.",
+          "suggestion": "Want a starter routine?"
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Goal {goal} → here's the spec.",
+          "actionSteps": [
+            "Compound lifts: 3–4 sets",
+            "Accessories: 2–3 sets",
+            "Isolation/finishers: 2 sets",
+            "Rest 2–3 min on big lifts, 60–90s on others"
+          ]
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Periodise: hypertrophy block → strength block → deload.",
+          "explanation": "Cycle 4–6 week blocks. Avoid grinding the same scheme forever — adaptation stalls.",
+          "actionSteps": [
+            "Block A: 4×8–10 (size)",
+            "Block B: 4×4–6 (strength)",
+            "Week 13: deload to 60%"
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "form_check",
+      "patterns": [
+        "how do i squat", "how to do a deadlift", "is my squat form ok",
+        "how to bench press", "form for pull ups", "how do i do a row",
+        "how to overhead press", "deadlift form", "squat form", "bench form",
+        "form for deadlift", "how to do squats properly", "proper deadlift technique",
+        "form check", "how to do pushups", "how to do lunges", "lunge form",
+        "form for rows", "press form", "form for overhead press",
+        "how to do a hip hinge", "how to brace core", "form tips for squat"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "**Squat** form fundamentals.",
+          "actionSteps": [
+            "Feet shoulder-width, toes slightly out",
+            "Brace core, neutral spine",
+            "Hips back + knees out, descend",
+            "Drive through mid-foot, stand tall",
+            "Depth: thighs parallel or just below"
+          ],
+          "suggestion": "Need form on a different lift?"
+        },
+        {
+          "style": "step",
+          "shortAnswer": "**Deadlift** form fundamentals.",
+          "actionSteps": [
+            "Bar over mid-foot, shins close",
+            "Hips back, neutral spine, lats engaged",
+            "Push the floor away (don't yank)",
+            "Lock out hips and knees together",
+            "Lower with control — don't drop"
+          ]
+        },
+        {
+          "style": "step",
+          "shortAnswer": "**Bench press** form fundamentals.",
+          "actionSteps": [
+            "Feet planted, slight arch, shoulder blades retracted",
+            "Grip just outside shoulder-width",
+            "Bar to lower-mid chest, elbows ~45°",
+            "Drive feet, press straight up",
+            "Wrists stacked over elbows"
+          ]
+        },
+        {
+          "style": "warning",
+          "shortAnswer": "**Form > load. Always.**",
+          "explanation": "If you can't keep neutral spine or full ROM, the weight is too heavy. Strip it back, fix the pattern, then add weight.",
+          "actionSteps": [
+            "Drop weight 20–30%",
+            "Film a side-on video",
+            "Compare to a tutorial",
+            "Re-build load over 2–3 weeks"
+          ]
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Cue stack for the big 3.",
+          "actionSteps": [
+            "**Squat**: knees track toes, chest tall, drive through midfoot",
+            "**Deadlift**: lats tight, push the floor, hips/shoulders rise together",
+            "**Bench**: tuck shoulder blades, elbows ~45°, leg drive"
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "swap_exercise",
+      "patterns": [
+        "replace bench press", "swap bench press", "alternative to bench",
+        "replace squat", "alternative to squats", "swap deadlift",
+        "alternative to deadlift", "replace pull ups", "alternative to lunges",
+        "swap overhead press", "alternative to row", "replace this exercise",
+        "i don't want to do bench", "swap leg press", "replace leg press",
+        "alternative for shoulder press", "replace this lift", "alternative lift",
+        "different exercise for chest", "different exercise for back",
+        "different exercise for legs", "swap an exercise", "change exercise"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "Match the **movement pattern**, then swap.",
+          "actionSteps": [
+            "**Bench press** → push-up, dumbbell press, dip",
+            "**Back squat** → goblet squat, split squat, leg press",
+            "**Deadlift** → RDL, single-leg RDL, kettlebell swing",
+            "**Pull-up** → inverted row, lat pulldown, band-assisted pull-up",
+            "**Overhead press** → dumbbell press, pike push-up"
+          ],
+          "suggestion": "Want me to swap one for you?"
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Tell me the lift and I'll suggest a swap.",
+          "explanation": "Or open Settings → Edit Profile to update your equipment, and I'll regenerate a plan that already fits.",
+          "action": { "label": "Edit equipment", "type": "navigate", "route": "/(tabs)/dashboard" }
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Pattern → load → equipment hierarchy.",
+          "explanation": "Pick a swap that hits the same primary mover at similar mechanical tension. Avoid swapping a compound for an isolation if you're short on time.",
+          "actionSteps": [
+            "Identify primary mover",
+            "Pick a swap with same range of motion",
+            "Match rep range, not necessarily weight"
+          ]
+        },
+        {
+          "style": "step",
+          "shortAnswer": "In-app exercise swap.",
+          "actionSteps": [
+            "Open today's session",
+            "Tap the exercise",
+            "Tap **Swap** to see alternatives matching your equipment"
+          ],
+          "action": { "label": "Open today's workout", "type": "navigate", "route": "/(tabs)/" }
+        }
+      ]
+    },
+    {
+      "tag": "nutrition_macros",
+      "patterns": [
+        "how much protein", "how much carbs", "how much fat",
+        "protein per kg", "macro split", "macro target", "what's my protein target",
+        "protein per pound", "macros for muscle gain", "macros for fat loss",
+        "carb timing", "when to eat carbs", "should i eat carbs at night",
+        "high protein", "low carb", "carb cycling", "macros for cutting",
+        "macros for bulking", "protein intake", "calorie target",
+        "tdee calculation", "how many calories should i eat",
+        "macros for {goal}"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "Macro targets for **{goal}**.",
+          "actionSteps": [
+            "**Protein**: 1.6–2.2 g/kg bodyweight",
+            "**Carbs**: 3–6 g/kg on training days",
+            "**Fat**: ≥0.8 g/kg (the rest of calories)",
+            "Hit protein first, then calories, then split"
+          ],
+          "suggestion": "Want a meal template that hits these?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Calories first, protein second, distribution third.",
+          "explanation": "TDEE estimate = bodyweight (kg) × 30–35. Adjust ±300 for goal. Lock protein, then carbs scale to training volume.",
+          "actionSteps": [
+            "Estimate TDEE",
+            "Apply goal adjustment (±300 kcal)",
+            "Lock protein (2g/kg)",
+            "Carbs 3–6 g/kg, fat fills the rest"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Quick rule: **protein at every meal, carbs around workouts.**",
+          "explanation": "If counting calories feels overwhelming, just do that. Most people who follow this rule alone end up hitting their macros.",
+          "suggestion": "Want a sample day of meals?"
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Carb timing simplified.",
+          "actionSteps": [
+            "Pre-workout (1–2h): carbs + protein",
+            "Post-workout (within 2h): protein + carbs",
+            "Other meals: protein + veg + fat",
+            "No carb fear at night — total daily intake matters more"
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "hydration",
+      "patterns": [
+        "how much water", "am i drinking enough", "hydration tips",
+        "water per day", "how much water should i drink",
+        "water intake", "should i drink electrolytes", "do i need salt",
+        "is sparkling water okay", "water before workout", "water during workout",
+        "drink during workout", "hydration for training", "dehydrated",
+        "signs of dehydration", "is coffee dehydrating"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "Aim for **30–40 ml per kg** of bodyweight on training days.",
+          "actionSteps": [
+            "Carry a 1L+ bottle",
+            "500 ml in the 2 hours before training",
+            "Sip throughout the session",
+            "500 ml after"
+          ],
+          "suggestion": "Want electrolyte guidance for long sessions?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "**Pee colour** is the easiest gauge.",
+          "explanation": "Pale straw yellow = good. Dark = drink more. Clear = a bit too much (electrolytes diluted).",
+          "actionSteps": [
+            "Check colour 2–3 times/day",
+            "Add electrolytes if training >60 min",
+            "Salt + lemon water = cheap homemade option"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Most people are mildly dehydrated and don't know it.",
+          "explanation": "Headaches, low energy, and bad sleep often trace back to under-drinking. Bottle on the desk + bottle by the bed = solved.",
+          "suggestion": "Easy daily target?"
+        }
+      ]
+    },
+    {
+      "tag": "sleep_recovery",
+      "patterns": [
+        "how much sleep", "sleep tips", "i slept badly",
+        "sleep for muscle gain", "sleep importance", "is 6 hours enough",
+        "is 8 hours enough", "how to sleep better", "improve sleep",
+        "sleep advice for athletes", "rest days", "do rest days matter",
+        "active recovery", "i didn't sleep well", "tired all the time",
+        "fatigue", "feeling exhausted", "i feel run down",
+        "sleep and training", "sleep and muscle"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "**7–9 hours** on training days. Non-negotiable.",
+          "explanation": "Sleep is when growth hormone peaks and muscles actually rebuild. Less than 6h tanks training quality and recovery.",
+          "actionSteps": [
+            "Same bedtime ±30 min",
+            "Cool, dark room (18–20°C)",
+            "No screens 30 min before bed",
+            "No caffeine after 2 PM"
+          ],
+          "suggestion": "Want recovery tactics for poor-sleep days?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Sleep > supplements > training tweaks.",
+          "explanation": "Chronic <6h sleep cuts protein synthesis ~18% and raises cortisol. No program out-trains a sleep deficit.",
+          "actionSteps": [
+            "Track sleep for 2 weeks",
+            "Identify your bottleneck (latency, wakeups, total)",
+            "Fix that one thing first"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Slept badly? **Don't go heavy.** Go easy or take a rest day.",
+          "explanation": "Forcing a heavy session on 4h sleep is a fast track to injury. Lighter loads, fewer sets, or full rest is the smart play.",
+          "actionSteps": [
+            "Drop top set by 20%",
+            "Cut accessory sets by half",
+            "Or skip and take a real rest day"
+          ]
+        },
+        {
+          "style": "warning",
+          "shortAnswer": "Constantly exhausted = pull back, not push harder.",
+          "explanation": "{firstName}, if you've been tired multiple days in a row, the answer is rest, not more discipline.",
+          "actionSteps": [
+            "Take 2 full rest days",
+            "Prioritise sleep + food",
+            "Restart at 80% intensity",
+            "If still tired after a week — see a doctor"
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "progression_request",
+      "patterns": [
+        "make it harder", "step it up", "make it tougher", "increase difficulty",
+        "harder version", "more challenging", "level up the workout",
+        "push me harder", "tougher routine", "more intense", "make it easier",
+        "tone it down", "easier version", "less intense", "modify down"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "**Three levers** to make {todayFocus} harder.",
+          "actionSteps": [
+            "**+ Load**: add 2.5–5 kg to the main lift",
+            "**+ Reps**: add 1–2 reps per set",
+            "**+ Tempo**: 3-second negatives on every rep"
+          ],
+          "suggestion": "Pick one lever and apply this week."
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Progressive overload, the cleanest way.",
+          "explanation": "Don't change everything at once — pick one variable per week. Overshooting = form breakdown + injury.",
+          "actionSteps": [
+            "Track this week's reps × weight",
+            "Beat one set next week",
+            "Repeat for 4–6 weeks",
+            "Then deload"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Need it **easier**? That's smart — don't grind hurt.",
+          "explanation": "Drop weight 10–20%, drop a set, or take a real rest day. You can't progress what you can't recover from.",
+          "actionSteps": [
+            "Cut top weight by 10–20%",
+            "Drop one set per exercise",
+            "Or swap for an easier variant (e.g. push-up on knees)"
+          ]
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "Tougher today, stronger tomorrow.",
+          "explanation": "Hard sessions build the most. But \"hard\" doesn't mean \"all-out.\" It means uncomfortable, not unsafe.",
+          "suggestion": "Open today's session?",
+          "action": { "label": "Open today's workout", "type": "navigate", "route": "/(tabs)/" }
+        }
+      ]
+    },
+    {
+      "tag": "quiz_request",
+      "patterns": [
+        "quiz me", "test my knowledge", "ask me a question", "fitness quiz",
+        "nutrition quiz", "training quiz", "give me a quiz", "test me",
+        "ask a question", "quiz", "challenge me", "trivia",
+        "fitness trivia", "test my fitness knowledge", "another one",
+        "one more quiz", "another quiz", "next question"
+      ],
+      "responses": [
+        {
+          "shortAnswer": "Quick quiz!",
+          "quiz": {
+            "id": "macros_chicken_001",
+            "question": "Which macro is heaviest in 100g of chicken breast?",
+            "options": ["Carbs", "Fat", "Protein", "Fiber"],
+            "correctIndex": 2,
+            "explanation": "Chicken breast is ~31g protein per 100g — protein-dominant by a wide margin.",
+            "xpReward": 25,
+            "topic": "nutrition_macros"
+          }
+        },
+        {
+          "shortAnswer": "Here's one for you.",
+          "quiz": {
+            "id": "rep_range_strength_001",
+            "question": "What rep range is best for **pure strength**?",
+            "options": ["12–20 reps", "8–12 reps", "3–6 reps", "1 rep"],
+            "correctIndex": 2,
+            "explanation": "3–6 reps with heavier loads is the sweet spot for strength. 8–12 is more for size.",
+            "xpReward": 25,
+            "topic": "training"
+          }
+        },
+        {
+          "shortAnswer": "Quick one.",
+          "quiz": {
+            "id": "protein_target_001",
+            "question": "How much protein per kg of bodyweight is recommended for muscle gain?",
+            "options": ["0.5–0.8 g/kg", "1.0–1.4 g/kg", "1.6–2.2 g/kg", "3.0+ g/kg"],
+            "correctIndex": 2,
+            "explanation": "1.6–2.2 g/kg is the well-researched range. More than 2.2 g/kg has diminishing returns.",
+            "xpReward": 25,
+            "topic": "nutrition"
+          }
+        },
+        {
+          "shortAnswer": "Test time.",
+          "quiz": {
+            "id": "rest_compound_001",
+            "question": "Best rest between heavy compound sets?",
+            "options": ["15–30 sec", "30–60 sec", "1–2 min", "2–4 min"],
+            "correctIndex": 3,
+            "explanation": "2–4 min of rest lets you recover enough for the next set without losing strength output.",
+            "xpReward": 25,
+            "topic": "training"
+          }
+        },
+        {
+          "shortAnswer": "Quiz!",
+          "quiz": {
+            "id": "sleep_target_001",
+            "question": "How many hours of sleep should an active person aim for on training days?",
+            "options": ["4–5 hours", "5–6 hours", "7–9 hours", "10+ hours"],
+            "correctIndex": 2,
+            "explanation": "7–9 hours is the recovery sweet spot. <6h tanks training quality and recovery.",
+            "xpReward": 25,
+            "topic": "recovery"
+          }
+        },
+        {
+          "shortAnswer": "Got one for you.",
+          "quiz": {
+            "id": "creatine_dose_001",
+            "question": "Standard daily creatine monohydrate dose?",
+            "options": ["1 g", "3–5 g", "10 g", "20 g"],
+            "correctIndex": 1,
+            "explanation": "3–5 g/day is the well-studied maintenance dose. No need to load if you're patient.",
+            "xpReward": 25,
+            "topic": "supplements"
+          }
+        },
+        {
+          "shortAnswer": "Quick check.",
+          "quiz": {
+            "id": "hydration_001",
+            "question": "Roughly how much water per kg of bodyweight on training days?",
+            "options": ["10–15 ml/kg", "20–25 ml/kg", "30–40 ml/kg", "60–80 ml/kg"],
+            "correctIndex": 2,
+            "explanation": "30–40 ml/kg covers most active people. More if you sweat heavily.",
+            "xpReward": 25,
+            "topic": "nutrition"
+          }
+        }
+      ]
+    },
+    {
+      "tag": "app_navigation",
+      "patterns": [
+        "open workout tab", "go to dashboard", "show stats", "open community",
+        "go to plan", "open the plan", "show my plan", "show my workout",
+        "open settings", "go to settings", "show achievements",
+        "open dashboard", "open today's workout", "go to the workout",
+        "show me the dashboard", "open community tab", "navigate to dashboard",
+        "take me to settings", "open log screen", "go to log",
+        "open history", "show history", "show calendar", "open calendar"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "Opening **today's workout**.",
+          "action": { "label": "Open today's workout", "type": "navigate", "route": "/(tabs)/" }
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Heading to **Dashboard**.",
+          "explanation": "Stats, level, achievements, and history live here.",
+          "action": { "label": "Open Dashboard", "type": "navigate", "route": "/(tabs)/dashboard" }
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Opening **Community**.",
+          "action": { "label": "Open Community", "type": "navigate", "route": "/(tabs)/community" }
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Opening the **Log** screen.",
+          "action": { "label": "Open Log", "type": "navigate", "route": "/workout/log" }
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Opening **workout history**.",
+          "action": { "label": "Open history", "type": "navigate", "route": "/workout/history" }
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Opening the **week plan**.",
+          "action": { "label": "Open plan", "type": "navigate", "route": "/workout/week-plan" }
+        }
       ]
     },
     {
       "tag": "unknown_fallback",
       "patterns": [],
       "responses": [
-        "I'm not sure I caught that. Try asking about today's plan, nutrition, motivation, recovery, or how to log a workout.",
-        "Hmm, I don't have a great answer for that. I can help with plans, nutrition basics, motivation, rest days, and progress tracking.",
-        "Could you rephrase? I'm best at workout plans, nutrition tips, motivation, and recovery questions.",
-        "Not sure what you meant — try something like 'what's my workout today' or 'how much protein should i eat'.",
-        "I didn't quite get that. I can help with training, nutrition, recovery, motivation, or app questions."
+        {
+          "style": "step",
+          "shortAnswer": "Could you point me at the right area?",
+          "actionSteps": [
+            "**workout** / training",
+            "**nutrition** / meals",
+            "**recovery** / rest / sleep",
+            "**the app** itself"
+          ],
+          "followUpQuestion": "Which area is your question about?"
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Hmm, I didn't quite get that.",
+          "explanation": "I'm best at training, nutrition, recovery, motivation, and app questions.",
+          "followUpQuestion": "Which of those does your question fit into?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Not sure I followed.",
+          "explanation": "Try a more specific phrasing — \"what's my workout today\" or \"how much protein should I eat\" works better than open-ended questions.",
+          "followUpQuestion": "Want to rephrase?"
+        }
       ]
     },
     {
       "tag": "affirmation_after_equipment_swap",
       "patterns": [],
       "responses": [
-        "Sure — open the Plan tab and tap the exercise you want to swap; alternatives that match your equipment will show up.",
-        "Cool. Update your equipment in Settings, then regenerate the plan and the new exercises will use what you have."
+        {
+          "style": "step",
+          "shortAnswer": "Sure — open today's session and tap the exercise to swap.",
+          "actionSteps": [
+            "Open today's workout",
+            "Tap the exercise you want to swap",
+            "Tap **Swap** for alternatives matching your equipment"
+          ],
+          "action": { "label": "Open today's workout", "type": "navigate", "route": "/(tabs)/" }
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "Cool. Update equipment in Settings, then regenerate the plan.",
+          "action": { "label": "Open Settings", "type": "navigate", "route": "/(tabs)/dashboard" }
+        }
       ]
     },
     {
       "tag": "negation_after_equipment_swap",
       "patterns": [],
       "responses": [
-        "All good — stick with the current plan then.",
-        "Okay, no swap. Let me know if you change your mind."
+        { "style": "beginner", "shortAnswer": "All good — stick with the current plan." },
+        { "style": "advanced", "shortAnswer": "Okay, no swap. Let me know if you change your mind." }
       ]
     },
     {
       "tag": "affirmation_after_motivation",
       "patterns": [],
       "responses": [
-        "Love it. Lace up and start with the warm-up — you'll be deep in the session before you know it.",
-        "Yes! Hit Start Workout on the Home tab. Future you will thank you, {firstName}."
+        {
+          "style": "motivational",
+          "shortAnswer": "Love it. Lace up.",
+          "explanation": "Start with the warm-up — you'll be deep in the session before you know it.",
+          "action": { "label": "Start workout", "type": "navigate", "route": "/(tabs)/" }
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "Yes! Future you thanks present you, {firstName}.",
+          "action": { "label": "Open today's workout", "type": "navigate", "route": "/(tabs)/" }
+        }
       ]
     },
     {
       "tag": "negation_after_motivation",
       "patterns": [],
       "responses": [
-        "That's fair. Take a true rest day — easy walk, hydrate, sleep early. Tomorrow's a new chance.",
-        "Okay. Be honest with yourself though — if it's two days in a row, the streak resets."
+        {
+          "style": "warning",
+          "shortAnswer": "That's fair — take a true rest day.",
+          "explanation": "Easy walk, hydrate, sleep early. Tomorrow's a new chance.",
+          "actionSteps": [
+            "20-min easy walk",
+            "Hydrate 30–40 ml/kg",
+            "Sleep 7–9 hours"
+          ]
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Okay. Two days off in a row resets the streak — be honest with yourself."
+        }
       ]
     },
     {
       "tag": "affirmation_after_rest_day_advice",
       "patterns": [],
       "responses": [
-        "Smart call — rest is part of training. Hydrate, get some easy steps in, sleep well.",
-        "Good choice. A real rest day beats a junk session every time."
+        {
+          "style": "beginner",
+          "shortAnswer": "Smart call — rest is part of training.",
+          "actionSteps": [
+            "Hydrate well",
+            "Get easy steps in",
+            "Sleep 7–9 hours"
+          ]
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Good choice. A real rest day beats a junk session every time."
+        }
       ]
     },
     {
       "tag": "affirmation_after_log_question",
       "patterns": [],
       "responses": [
-        "Great. Workout tab → Log → fill in duration → Save. Two taps and you're done.",
-        "Open the Log screen and add the session details. It'll count toward XP and your streak."
+        {
+          "style": "step",
+          "shortAnswer": "Opening the log screen.",
+          "actionSteps": [
+            "Fill in duration",
+            "Pick the type",
+            "Tap **Save**"
+          ],
+          "action": { "label": "Open Log", "type": "navigate", "route": "/workout/log" }
+        }
       ]
     },
     {
       "tag": "affirmation_after_app_help",
       "patterns": [],
       "responses": [
-        "Cool. Settings tab is where most of that lives — let me know if you can't find a specific option.",
-        "Sounds good. Ping me again if you get stuck navigating."
+        {
+          "style": "step",
+          "shortAnswer": "Cool — opening Settings.",
+          "action": { "label": "Open Settings", "type": "navigate", "route": "/(tabs)/dashboard" }
+        }
       ]
     }
   ]

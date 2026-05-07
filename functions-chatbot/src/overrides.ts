@@ -20,21 +20,22 @@ export const OVERRIDES: Override[] = [
       "I'm really glad you reached out, but I'm not the right help for that. Please contact a crisis line in your country (e.g. 988 in the US, 999 or 03-7956 8144 in Malaysia) or talk to someone you trust right now. You're not alone.",
   },
 
-  // Acute medical emergencies
+  // Acute medical emergencies (chest pain, breathing, fainting, dizziness)
   {
     pattern:
-      /\b(chest pain|can'?t breathe|cannot breathe|passing out|passed out|fainted|severe pain|unconscious)\b/i,
+      /\b(chest pain|can'?t breathe|cannot breathe|passing out|passed out|fainted|severe pain|10\/10 pain|worst pain|unconscious|dizzy|dizziness|light[- ]?headed|lightheaded|black(ed|ing)? out)\b/i,
     intent: 'safety_acute_medical',
     reply:
-      "That sounds urgent — please stop training and seek medical attention right away (call your local emergency number).",
+      "That sounds urgent — please **stop training** and seek medical attention right away (call your local emergency number).\n\nDon't wait it out, and don't try to push through.",
   },
 
-  // Sharp / popping injury during training
+  // Sharp / popping injury during training, plus burning/stabbing/numbness
   {
-    pattern: /\b(sharp pain|heard a pop|popped|tore|snapped|gave out)\b/i,
+    pattern:
+      /\b(sharp pain|heard a pop|popped|tore|snapped|gave out|burning sensation|burning pain|stabbing|shooting pain|numbness|tingling|pins and needles|can'?t feel)\b/i,
     intent: 'safety_injury',
     reply:
-      "Stop the session immediately, ice the area if it's swelling, and book a physio or doctor before training that area again.",
+      "**Stop the session immediately.** That's not normal soreness.\n\n- Ice the area if it's swelling (10–15 min)\n- Rest it — don't load it\n- Book a physiotherapist or doctor before training that area again\n\nI can't diagnose injuries, and pushing through can turn this into a long-term issue.",
   },
 
   // Disordered eating
@@ -53,6 +54,24 @@ export const OVERRIDES: Override[] = [
     intent: 'safety_substances',
     reply:
       "I can't give advice on performance-enhancing substances. Please talk to a qualified medical professional — natural training, food, and recovery will get you 95% of the results safely.",
+  },
+
+  // Pregnancy
+  {
+    pattern:
+      /\b(pregnan|expecting|first trimester|second trimester|third trimester)\b/i,
+    intent: 'safety_pregnancy',
+    reply:
+      "Congrats — but please train under guidance from your OB/GYN or a prenatal-certified coach. I can't tailor a safe plan for pregnancy here.\n\nGeneral pointers (not medical advice): keep intensity moderate, avoid supine positions after the first trimester, and stop anything that feels off.",
+  },
+
+  // Underage users (13 and under)
+  {
+    pattern:
+      /\b(i'?m (\d|1[0-2]) (years?|yrs?|y[ -]?old)|under 13|under thirteen)\b/i,
+    intent: 'safety_underage',
+    reply:
+      "If you're under 13, please ask a parent or in-person coach for training advice — strength training at your age is best supervised by someone who can watch your form. I'd rather be safe than sorry.",
   },
 ];
 

@@ -6,23 +6,34 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTime } from '@/lib/format';
-import type { Post, SeedUser, UserProfile } from '@/types/community';
 
-type PostCardProps = {
-  post: Post;
-  author: SeedUser | UserProfile;
+export type PostCardProps = {
+  postId: string;
+  authorId: string;
+  authorName: string;
+  authorHandle?: string;
+  authorAvatarUrl: string | null;
+  caption: string;
+  imageUrl: string | null;
+  createdAtMs: number;
   liked: boolean;
   likeCount: number;
   commentCount: number;
+  isOwn: boolean;
   onLike: () => void;
   onComment: () => void;
   onPressAuthor: () => void;
+  onOpen?: () => void;
   onPressMenu?: () => void;
 };
 
 export function PostCard({
-  post,
-  author,
+  authorName,
+  authorHandle,
+  authorAvatarUrl,
+  caption,
+  imageUrl,
+  createdAtMs,
   liked,
   likeCount,
   commentCount,
@@ -34,22 +45,24 @@ export function PostCard({
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
 
+  const subtitle = authorHandle
+    ? `@${authorHandle} · ${relativeTime(createdAtMs)}`
+    : relativeTime(createdAtMs);
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <Pressable onPress={onPressAuthor} style={styles.headerLeft} hitSlop={6}>
-          {author.avatarUri ? (
-            <Image source={{ uri: author.avatarUri }} style={styles.avatar} />
+          {authorAvatarUrl ? (
+            <Image source={{ uri: authorAvatarUrl }} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.avatarFallback]}>
               <Ionicons name="person" size={18} color={COLORS.primary} />
             </View>
           )}
           <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{author.displayName}</Text>
-            <Text style={styles.time}>
-              @{author.handle} · {relativeTime(post.createdAt)}
-            </Text>
+            <Text style={styles.name}>{authorName}</Text>
+            <Text style={styles.time}>{subtitle}</Text>
           </View>
         </Pressable>
         {onPressMenu && (
@@ -59,10 +72,10 @@ export function PostCard({
         )}
       </View>
 
-      {!!post.caption && <Text style={styles.caption}>{post.caption}</Text>}
+      {!!caption && <Text style={styles.caption}>{caption}</Text>}
 
-      {post.imageUri && (
-        <Image source={{ uri: post.imageUri }} style={styles.image} contentFit="cover" />
+      {imageUrl && (
+        <Image source={{ uri: imageUrl }} style={styles.image} contentFit="cover" />
       )}
 
       <View style={styles.actions}>
@@ -77,13 +90,6 @@ export function PostCard({
         <Pressable style={styles.action} onPress={onComment} hitSlop={6}>
           <Ionicons name="chatbubble-outline" size={20} color={COLORS.text} />
           <Text style={styles.actionText}>{commentCount}</Text>
-        </Pressable>
-        <Pressable style={styles.action} hitSlop={6}>
-          <Ionicons name="paper-plane-outline" size={20} color={COLORS.text} />
-        </Pressable>
-        <View style={{ flex: 1 }} />
-        <Pressable hitSlop={6}>
-          <Ionicons name="bookmark-outline" size={20} color={COLORS.text} />
         </Pressable>
       </View>
     </View>

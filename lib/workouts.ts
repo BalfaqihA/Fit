@@ -23,6 +23,8 @@ export type CompletedExerciseLog = {
   plannedSets: number;
   plannedReps: number;
   actualSets: number;
+  weightKg?: number;
+  rpe?: number;
 };
 
 export type CompletedWorkoutPayload = {
@@ -33,6 +35,7 @@ export type CompletedWorkoutPayload = {
   exercisesCompleted: number;
   xp: number;
   exercises?: CompletedExerciseLog[];
+  notes?: string;
   /** Origin of the entry — auto-tracked session vs. manual log entry. */
   source?: WorkoutSource;
   /** When provided (the user has no `planStartDate` yet), stamps the user doc with this ISO date. */

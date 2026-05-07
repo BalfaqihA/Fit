@@ -109,6 +109,63 @@ We built a complete Firebase backend for the FitLife Expo/React Native fitness a
 
 ---
 
+## Cycle 4 — Home section cleanup, consistency, reliability
+
+**Goal:** Tighten the Home tab and every page reachable from it (Start Workout, Exercise Library, Week Plan, Calendar, History, Log Workout, Today's Exercises, Plan Day detail). Mix of correctness fixes (broken `firestore.rules`, manual log not persisting weight/RPE/notes, duplicate Firestore listeners), copy/icon/wording consistency, and small UX upgrades (real avatar, loading state, empty-state CTA, next-workout preview).
+
+**Audit findings that drove this cycle:**
+- `firestore.rules` ended with a stray backtick on line 100 — file would fail to deploy.
+- Home created **two parallel `onSnapshot` listeners** on `users/{uid}/workouts`: `useTodayWorkout()` calls `useWorkoutHistory()`, and `useWeeklyStats()` independently calls `useWorkoutHistory()`. Each instance set up its own subscription.
+- Home card said `Library`; destination header said `Exercise Library`.
+- Both Home hero and Start Workout empty state used the same `Generate your plan` text — no clear differentiation.
+- `app/workout/day/[day].tsx` hardcoded `Today` as the banner label and `Today's exercises` as the section title regardless of which plan day was opened.
+- Home avatar was a plain person icon — `profile.avatarUri` already existed in the user doc but was never displayed.
+- `app/workout/log.tsx` collected `weight`, `rpe`, and `notes`, but the `recordCompletedWorkout` payload only included sets/reps/exerciseName. The values appeared in the success Alert and were then lost.
+- `Weight (kg)` was hardcoded in both `app/workout/log.tsx` and `components/weigh-in-modal.tsx` although `profile.weightUnit` already existed.
+- Tab layout had no `tabBarHideOnKeyboard` setting; Log Workout's text inputs could be hidden behind the keyboard on some platforms.
+- Home had no loading state — flashed the empty/no-plan UI for users with a plan during cold start.
+- Home had no visible CTA for new users with no plan beyond the hero card's small play button.
+- Home stats read `profile.stats`; History/Calendar derived from `users/{uid}/workouts` — divergence was possible.
+
+**Decisions:**
+- Single Firestore subscription via a top-level `WorkoutHistoryProvider` (mirrors `UserProfileProvider` pattern). All existing call sites — `useWorkoutHistory`, `useTodayWorkout`, `useWeeklyStats`, History/Calendar/Today's Exercises/Dashboard — keep working unchanged because the hook signature is preserved; only the data source moved into a context.
+- Home stats derived from the shared `sessions` array (single source of truth) so Home, History, and Calendar always agree. Falls back to `profile.stats` only during the first paint while sessions are still loading.
+- For the manual log unit handling, store weight canonically in kg (so existing `weightKg` consumers keep working) and convert from `lb` at the input boundary. Same approach in the weigh-in modal — display in user's unit, validate against the unit's range, persist `weightKg`.
+- For Plan Day labels, compute `isToday` from the user's `planStartDate` modulo plan length and conditionally swap `Today` ↔ `Plan Day` rather than always showing one or the other.
+- Exercise Library search polish (task 12) was already implemented (`autoCorrect={false}`, `returnKeyType="search"`, conditional clear-X icon) — verified, no edit.
+
+**Created:**
+- `Fit/contexts/workout-history.tsx` — `WorkoutHistoryProvider` runs the single `onSnapshot('users/{uid}/workouts')` subscription, exposes `{ sessions, loading }`, carries the new optional `notes` field on each session doc.
+
+**Modified:**
+- `Fit/firestore.rules` — removed stray backtick on line 100; file now ends at the closing `}`.
+- `Fit/hooks/use-workout-history.ts` — replaced its own `useState`/`useEffect`/`onSnapshot` with `useContext(WorkoutHistoryContext)`. `useTodayWorkout` and `useWeeklyStats` now share the same single subscription. Re-exports `WorkoutSessionDoc` so existing imports in `history.tsx` and `use-derived-records.ts` keep working.
+- `Fit/app/_layout.tsx` — mounted `<WorkoutHistoryProvider>` inside the auth/profile provider stack (after `UserProfileProvider`, before `PlanProvider`).
+- `Fit/lib/workouts.ts` — extended `CompletedExerciseLog` with optional `weightKg` + `rpe`; extended `CompletedWorkoutPayload` with optional `notes`. `recordCompletedWorkout` already spreads the session payload so the new fields persist with no DB-side change.
+- `Fit/app/(tabs)/_layout.tsx` — added `tabBarHideOnKeyboard: false` to `screenOptions`.
+- `Fit/app/(tabs)/index.tsx` — comprehensive Home rework:
+  1. `Library` → `Exercise Library`; `Log` → `Log Workout`; icon `notebook-outline` → `notebook-edit-outline`.
+  2. Hero empty title → `Create Your Workout Plan`.
+  3. Real avatar from `profile.avatarUri` via `expo-image`, with the original person icon as fallback.
+  4. Quick stats now derived from the shared `sessions` array (totals match History/Calendar exactly); falls back to `profile.stats` only while the first snapshot is in flight.
+  5. Loading screen (`ActivityIndicator`) shown while `!hydrated || (historyLoading && sessions.length === 0)` — eliminates the empty-state flash on cold start.
+  6. New `Complete Onboarding` CTA card under the hero when no plan exists.
+  7. New `Next workout preview` card showing exercise count, top 2 exercise names, estimated minutes, and up to 3 muscle-focus pills. Renders only when a plan exists and today's session isn't done.
+- `Fit/app/workout/start.tsx` — empty-state copy: title `No plan yet`, meta `Complete onboarding to generate your plan.` (removes the duplicate `Generate your plan` wording shared with Home).
+- `Fit/app/workout/day/[day].tsx` — added `useUserProfile` and `computeDayNumber`. Computes `isToday` from `dayNum === ((computeDayNumber(planStartDate) - 1) % plan.days.length) + 1` and passes it into `PlanDayView`. Banner label now reads `Today` only when actually today, else `Plan Day`. Section title now reads `Today's exercises` only when actually today, else `Plan day exercises`. Fallback (no-plan) header now reads `Plan Day {dayNum}`.
+- `Fit/app/workout/log.tsx` — persistence fix + unit handling + KeyboardAvoidingView:
+  - Per-exercise log now includes `rpe` always and `weightKg` when the user entered a positive number; conditional spread avoids writing `undefined` (Firestore client doesn't have `ignoreUndefinedProperties` on).
+  - `notes` added at the session level (top of payload) only when non-empty.
+  - Weight converted from `lb` → `kg` at the input boundary using factor `0.45359237`, rounded to 2 decimals.
+  - Field label is now `Weight ({unit})` reading `profile.weightUnit ?? 'kg'`.
+  - Success Alert text now uses the user's unit instead of hardcoded `kg`.
+  - Whole `ScrollView` wrapped in `KeyboardAvoidingView` (`behavior='padding'` on iOS).
+- `Fit/components/weigh-in-modal.tsx` — dynamic `Weight ({unit})` label; lb-aware validation range (55–880 lb vs 25–400 kg) with localized error message; converts input lb → kg before calling `recordWeight` so `profile.weightKg` stays canonical; initial input value also converted from stored kg → display unit.
+
+**Status:** TypeScript clean (`npx tsc --noEmit` exit 0). Lint clean (0 errors; only the same pre-existing unused-import warning in `app/onboarding/weight.tsx` carried over from prior cycles).
+
+---
+
 ## What you still need to do manually
 
 1. **Deploy the new rules + Cloud Function:**

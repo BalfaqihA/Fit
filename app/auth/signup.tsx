@@ -18,6 +18,7 @@ import {
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
 import { mapAuthError, signUpWithEmail } from '@/lib/auth';
+import { useGoogleSignIn } from '@/lib/google-auth';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -99,7 +100,24 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { signIn: signInWithGoogle, ready: googleReady } = useGoogleSignIn();
+
+  const handleGoogle = async () => {
+    setError(null);
+    try {
+      setGoogleLoading(true);
+      const result = await signInWithGoogle();
+      if (result.status === 'signed-in' && result.isNewUser) {
+        router.replace('/onboarding' as never);
+      }
+    } catch (e) {
+      setError(mapAuthError(e));
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleSignup = async () => {
     setError(null);
@@ -237,6 +255,30 @@ export default function SignupPage() {
                   <Text style={styles.gradientButtonText}>Create Account</Text>
                 )}
               </LinearGradient>
+            </Pressable>
+
+            <View style={styles.orRow}>
+              <View style={styles.orLine} />
+              <Text style={styles.orText}>or</Text>
+              <View style={styles.orLine} />
+            </View>
+
+            <Pressable
+              style={[
+                styles.googleButton,
+                (!googleReady || googleLoading) && { opacity: 0.7 },
+              ]}
+              onPress={handleGoogle}
+              disabled={!googleReady || googleLoading}
+            >
+              {googleLoading ? (
+                <ActivityIndicator color={COLORS.text} />
+              ) : (
+                <>
+                  <Ionicons name="logo-google" size={18} color={COLORS.text} />
+                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                </>
+              )}
             </Pressable>
 
             <View style={styles.divider} />
@@ -382,6 +424,40 @@ const makeStyles = (COLORS: Palette) =>
       color: '#FFFFFF',
       fontSize: 16,
       fontWeight: '800',
+    },
+    orRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 18,
+      marginBottom: 14,
+      gap: 10,
+    },
+    orLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: COLORS.divider,
+    },
+    orText: {
+      fontSize: 12,
+      color: COLORS.muted,
+      fontWeight: '600',
+    },
+    googleButton: {
+      width: '100%',
+      height: 54,
+      borderRadius: RADIUS.md,
+      borderWidth: 1.5,
+      borderColor: COLORS.border,
+      backgroundColor: COLORS.card,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+    },
+    googleButtonText: {
+      color: COLORS.text,
+      fontSize: 15,
+      fontWeight: '700',
     },
     divider: {
       height: 1,

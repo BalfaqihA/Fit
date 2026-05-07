@@ -3,7 +3,6 @@ import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -18,6 +17,7 @@ import {
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
 import { mapAuthError, signInWithEmail } from '@/lib/auth';
+import { useGoogleSignIn } from '@/lib/google-auth';
 
 type Styles = ReturnType<typeof makeStyles>;
 
@@ -89,7 +89,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { signIn: signInWithGoogle, ready: googleReady } = useGoogleSignIn();
 
   const handleLogin = async () => {
     setError(null);
@@ -108,11 +110,20 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogle = () => {
-    Alert.alert(
-      'Coming soon',
-      'Google sign-in will be available in a future update.'
-    );
+  const handleGoogle = async () => {
+    setError(null);
+    try {
+      setGoogleLoading(true);
+      const result = await signInWithGoogle();
+      if (result.status === 'signed-in' && result.isNewUser) {
+        router.replace('/onboarding' as never);
+      }
+      // Otherwise AuthGate routes the existing user to /(tabs).
+    } catch (e) {
+      setError(mapAuthError(e));
+    } finally {
+      setGoogleLoading(false);
+    }
   };
 
   return (
@@ -198,9 +209,22 @@ export default function LoginPage() {
                 <View style={styles.orLine} />
               </View>
 
-              <Pressable style={styles.googleButton} onPress={handleGoogle}>
-                <Ionicons name="logo-google" size={18} color={COLORS.text} />
-                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              <Pressable
+                style={[
+                  styles.googleButton,
+                  (!googleReady || googleLoading) && { opacity: 0.7 },
+                ]}
+                onPress={handleGoogle}
+                disabled={!googleReady || googleLoading}
+              >
+                {googleLoading ? (
+                  <ActivityIndicator color={COLORS.text} />
+                ) : (
+                  <>
+                    <Ionicons name="logo-google" size={18} color={COLORS.text} />
+                    <Text style={styles.googleButtonText}>Continue with Google</Text>
+                  </>
+                )}
               </Pressable>
             </View>
 

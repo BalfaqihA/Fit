@@ -2,14 +2,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { UserListRow } from '@/components/user-list-row';
@@ -47,6 +49,10 @@ export default function SearchScreen() {
         <View style={{ width: 40 }} />
       </View>
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <View style={styles.searchWrap}>
         <View style={styles.searchBox}>
           <Ionicons name="search" size={18} color={COLORS.muted} />
@@ -65,6 +71,9 @@ export default function SearchScreen() {
             </Pressable>
           )}
         </View>
+        <Text style={styles.demoNotice}>
+          Demo search — results come from sample users only.
+        </Text>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
@@ -102,6 +111,7 @@ export default function SearchScreen() {
           </>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -129,6 +139,12 @@ const makeStyles = (COLORS: Palette) =>
       ...SHADOWS.card,
     },
     searchInput: { flex: 1, fontSize: 15, color: COLORS.text, padding: 0 },
+    demoNotice: {
+      marginTop: 8,
+      fontSize: 11,
+      color: COLORS.muted,
+      fontStyle: 'italic',
+    },
     sectionTitle: {
       fontSize: 12,
       fontWeight: '800',

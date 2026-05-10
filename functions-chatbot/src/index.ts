@@ -7,8 +7,17 @@ import * as tf from '@tensorflow/tfjs';
 
 import intentsData from './intents.json';
 import { checkOverrides } from './overrides';
-import { fillTemplate } from './personalize';
+import {
+  buildPersonalContext,
+  fillTemplateWithContext,
+  type PersonalContext,
+} from './personalize';
 import { vectorize } from './preprocess';
+import {
+  consumeRateLimit,
+  QUIZ_ANSWER_LIMIT,
+  SEND_CHAT_LIMIT,
+} from './rate-limit';
 
 initializeApp();
 
@@ -116,6 +125,15 @@ const HUMAN_LABEL: Record<string, string> = {
   sleep_recovery: 'sleep and recovery',
   progression_request: 'making it harder/easier',
   quiz_request: 'a quiz',
+  exercise_squat: 'squats',
+  exercise_deadlift: 'deadlifts',
+  exercise_bench_press: 'the bench press',
+  exercise_pullup: 'pull-ups',
+  cardio_advice: 'cardio',
+  weight_loss_tips: 'fat loss',
+  muscle_gain_tips: 'muscle gain',
+  supplement_question: 'supplements',
+  consult_me: 'a personal consultation',
 };
 
 function humanLabel(tag: string): string {
@@ -171,10 +189,10 @@ function renderMarkdown(seg: StructuredResponse): string {
   return parts.join('\n\n');
 }
 
-async function renderSegment(
+function renderSegment(
   seg: StructuredResponse,
-  uid: string,
-): Promise<{
+  ctx: PersonalContext,
+): {
   reply: string;
   segments: {
     shortAnswer: string;
@@ -185,19 +203,19 @@ async function renderSegment(
   followUpQuestion?: string;
   action?: ResponseAction;
   quiz?: ResponseQuiz;
-}> {
-  const filledShort = await fillTemplate(seg.shortAnswer, uid);
+} {
+  const filledShort = fillTemplateWithContext(seg.shortAnswer, ctx);
   const filledExplanation = seg.explanation
-    ? await fillTemplate(seg.explanation, uid)
+    ? fillTemplateWithContext(seg.explanation, ctx)
     : undefined;
   const filledSteps = seg.actionSteps
-    ? await Promise.all(seg.actionSteps.map((s) => fillTemplate(s, uid)))
+    ? seg.actionSteps.map((s) => fillTemplateWithContext(s, ctx))
     : undefined;
   const filledSuggestion = seg.suggestion
-    ? await fillTemplate(seg.suggestion, uid)
+    ? fillTemplateWithContext(seg.suggestion, ctx)
     : undefined;
   const filledFollowUp = seg.followUpQuestion
-    ? await fillTemplate(seg.followUpQuestion, uid)
+    ? fillTemplateWithContext(seg.followUpQuestion, ctx)
     : undefined;
 
   const filledSeg: StructuredResponse = {
@@ -264,16 +282,6 @@ function applyMemoryRules(
 
 // ---------- Quiz grading ----------
 
-async function loadFitnessLevel(uid: string): Promise<string | undefined> {
-  try {
-    const snap = await getFirestore().doc(`users/${uid}`).get();
-    const lvl = (snap.data()?.fitnessLevel as string | undefined) ?? undefined;
-    return lvl;
-  } catch {
-    return undefined;
-  }
-}
-
 const DAILY_QUIZ_XP_CAP = 100;
 
 function todayKey(): string {
@@ -285,6 +293,7 @@ async function gradeQuiz(
   uid: string,
   quiz: ResponseQuiz,
   selectedIndex: number,
+  attemptId: string,
 ): Promise<{
   reply: string;
   xpAwarded: number;
@@ -305,54 +314,72 @@ async function gradeQuiz(
 
   const db = getFirestore();
   const userRef = db.doc(`users/${uid}`);
-  const xpEventRef = db.collection(`users/${uid}/xp_events`).doc();
+  // Deterministic ids derived from attemptId so a retry of the same answer
+  // collides with the prior write and the transaction returns early instead
+  // of double-granting XP. `attemptId` is supplied by the client.
+  const attemptRef = db.doc(`users/${uid}/quizAttempts/${attemptId}`);
+  const xpEventRef = db.doc(`users/${uid}/xp_events/${attemptId}`);
   const today = todayKey();
 
-  // Atomic check-then-award via transaction.
+  // Atomic check-then-award via transaction. Throws on infrastructure failure
+  // so the caller can return a structured error instead of silently treating
+  // it as "no XP awarded" — that previously hid data loss from users.
   let award = 0;
   let capReached = false;
-  try {
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(userRef);
-      const data = snap.data() ?? {};
-      const stats = (data.stats ?? {}) as {
-        chatQuizXpToday?: number;
-        chatQuizXpDate?: string;
-      };
-      const sameDay = stats.chatQuizXpDate === today;
-      const todaySoFar = sameDay ? Number(stats.chatQuizXpToday ?? 0) : 0;
-      const remaining = Math.max(0, DAILY_QUIZ_XP_CAP - todaySoFar);
-      const grant = Math.min(quiz.xpReward, remaining);
+  await db.runTransaction(async (tx) => {
+    const prior = await tx.get(attemptRef);
+    if (prior.exists) {
+      const priorData = prior.data() ?? {};
+      award = Number(priorData.xpAwarded ?? 0);
+      capReached = Boolean(priorData.capReached);
+      return;
+    }
 
-      if (grant <= 0) {
-        capReached = true;
-        return;
-      }
+    const snap = await tx.get(userRef);
+    const data = snap.data() ?? {};
+    const stats = (data.stats ?? {}) as {
+      chatQuizXpToday?: number;
+      chatQuizXpDate?: string;
+    };
+    const sameDay = stats.chatQuizXpDate === today;
+    const todaySoFar = sameDay ? Number(stats.chatQuizXpToday ?? 0) : 0;
+    const remaining = Math.max(0, DAILY_QUIZ_XP_CAP - todaySoFar);
+    const grant = Math.min(quiz.xpReward, remaining);
 
-      tx.set(
-        userRef,
-        {
-          stats: {
-            totalXp: FieldValue.increment(grant),
-            chatQuizXpToday: todaySoFar + grant,
-            chatQuizXpDate: today,
-          },
-        },
-        { merge: true },
-      );
-      tx.set(xpEventRef, {
-        source: 'chat_quiz',
-        quizId: quiz.id,
-        topic: quiz.topic ?? null,
-        xp: grant,
-        createdAt: FieldValue.serverTimestamp(),
-      });
-      award = grant;
-      capReached = grant < quiz.xpReward;
+    tx.set(attemptRef, {
+      quizId: quiz.id,
+      selectedIndex,
+      xpAwarded: grant,
+      capReached: grant < quiz.xpReward,
+      createdAt: FieldValue.serverTimestamp(),
     });
-  } catch (err) {
-    console.warn('[chatbot] gradeQuiz transaction failed:', err);
-  }
+
+    if (grant <= 0) {
+      capReached = true;
+      return;
+    }
+
+    tx.set(
+      userRef,
+      {
+        stats: {
+          totalXp: FieldValue.increment(grant),
+          chatQuizXpToday: todaySoFar + grant,
+          chatQuizXpDate: today,
+        },
+      },
+      { merge: true },
+    );
+    tx.set(xpEventRef, {
+      source: 'chat_quiz',
+      quizId: quiz.id,
+      topic: quiz.topic ?? null,
+      xp: grant,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    award = grant;
+    capReached = grant < quiz.xpReward;
+  });
 
   let reply = `✅ **Correct!**`;
   if (award > 0) {
@@ -421,7 +448,14 @@ type ChatHistoryEntry = {
 type QuizAnswerPayload = {
   id: string;
   selectedIndex: number;
+  /** Stable per-attempt id; reused on retry so XP is granted at most once. */
+  attemptId: string;
 };
+
+const QUIZ_ID_MAX_LEN = 64;
+const ATTEMPT_ID_MAX_LEN = 128;
+// Firestore doc ids cannot contain `/` and must not be `.` / `..`.
+const ATTEMPT_ID_RE = /^[A-Za-z0-9_-]+$/;
 
 const ALLOWED_ORIGINS = [
   'https://fitness-874c3.web.app',
@@ -446,28 +480,51 @@ export const chat = onCall(
 
     // ---- 0. Quiz answer short-circuit ----
     if (data.quizAnswer && typeof data.quizAnswer === 'object') {
-      const { id, selectedIndex } = data.quizAnswer;
+      await consumeRateLimit(uid, QUIZ_ANSWER_LIMIT);
+      const { id, selectedIndex, attemptId } = data.quizAnswer;
+      if (typeof id !== 'string' || id.length === 0 || id.length > QUIZ_ID_MAX_LEN) {
+        throw new HttpsError('invalid-argument', 'Invalid quiz id.');
+      }
+      if (
+        typeof attemptId !== 'string' ||
+        attemptId.length === 0 ||
+        attemptId.length > ATTEMPT_ID_MAX_LEN ||
+        !ATTEMPT_ID_RE.test(attemptId)
+      ) {
+        throw new HttpsError('invalid-argument', 'Invalid attempt id.');
+      }
       const quiz = QUIZ_BY_ID[id];
       if (!quiz) {
         throw new HttpsError('not-found', `Unknown quiz id: ${id}`);
       }
       if (
         typeof selectedIndex !== 'number' ||
+        !Number.isInteger(selectedIndex) ||
         selectedIndex < 0 ||
         selectedIndex >= quiz.options.length
       ) {
         throw new HttpsError('invalid-argument', 'Invalid quiz selection.');
       }
-      const result = await gradeQuiz(uid, quiz, selectedIndex);
-      return {
-        reply: result.reply,
-        intent: result.correct ? 'quiz_correct' : 'quiz_incorrect',
-        confidence: 1.0,
-        segments: { shortAnswer: result.reply },
-        xpAwarded: result.xpAwarded,
-        capReached: result.capReached,
-      };
+      try {
+        const result = await gradeQuiz(uid, quiz, selectedIndex, attemptId);
+        return {
+          reply: result.reply,
+          intent: result.correct ? 'quiz_correct' : 'quiz_incorrect',
+          confidence: 1.0,
+          segments: { shortAnswer: result.reply },
+          xpAwarded: result.xpAwarded,
+          capReached: result.capReached,
+        };
+      } catch (err) {
+        console.error('[chatbot] gradeQuiz failed:', err);
+        throw new HttpsError(
+          'internal',
+          "Couldn't grade that quiz. Please try again.",
+        );
+      }
     }
+
+    await consumeRateLimit(uid, SEND_CHAT_LIMIT);
 
     const message = String(data.message ?? '').trim();
     if (!message) {
@@ -530,8 +587,11 @@ export const chat = onCall(
     let intent = resolvedTag;
     let chosenSeg: StructuredResponse;
 
-    const fitnessLevel = await loadFitnessLevel(uid);
-    const preferredStyle = styleFor(fitnessLevel, styleHint);
+    // Build the personalization context once per call. The chatbot used to
+    // re-fetch user data inside every template fill; the snapshot doc lets us
+    // do one read here and reuse it for shortAnswer/explanation/steps/etc.
+    const personalCtx = await buildPersonalContext(uid);
+    const preferredStyle = styleFor(personalCtx.__fitnessLevel, styleHint);
 
     if (memoryTag || topConf >= HARD_THRESHOLD) {
       chosenSeg = pickResponse(resolvedTag, preferredStyle);
@@ -549,7 +609,7 @@ export const chat = onCall(
       void logUnknown(uid, message, topTag, topConf);
     }
 
-    const rendered = await renderSegment(chosenSeg, uid);
+    const rendered = renderSegment(chosenSeg, personalCtx);
 
     return {
       reply: rendered.reply,

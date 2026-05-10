@@ -11,6 +11,9 @@ export type ChatHistoryItem = {
 export type QuizAnswerPayload = {
   id: string;
   selectedIndex: number;
+  /** Stable per-attempt id; the server uses it as a Firestore doc id to make
+   * grading idempotent (retries don't double-grant XP). */
+  attemptId: string;
 };
 
 export type ChatStyle = 'beginner' | 'advanced' | 'motivational';

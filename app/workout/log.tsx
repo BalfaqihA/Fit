@@ -8,13 +8,13 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
@@ -26,15 +26,58 @@ import {
 } from '@/constants/workout-data';
 import { useAuth } from '@/hooks/use-auth';
 import { useMeasurements } from '@/hooks/use-measurements';
+import { useSubmit } from '@/hooks/use-submit';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import { useWeeklyStats } from '@/hooks/use-weekly-stats';
 import { checkAndUnlockAchievements } from '@/lib/achievements';
 import { xpForExercise, xpForWorkout } from '@/lib/gamification';
 import { captureException } from '@/lib/observability';
+import { parseDurationMin, parseWeight } from '@/lib/validation';
+import { randomId } from '@/lib/uuid';
 import { recordCompletedWorkout } from '@/lib/workouts';
 
 const RPE = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+type Styles = ReturnType<typeof makeStyles>;
+
+// Module-scope component so React doesn't unmount the +/- pressables on
+// every render of the parent.
+function Stepper({
+  value,
+  onChange,
+  min = 1,
+  max = 99,
+  styles,
+  primaryColor,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  min?: number;
+  max?: number;
+  styles: Styles;
+  primaryColor: string;
+}) {
+  return (
+    <View style={styles.stepper}>
+      <Pressable
+        onPress={() => onChange(Math.max(min, value - 1))}
+        style={styles.stepBtn}
+        hitSlop={8}
+      >
+        <Ionicons name="remove" size={16} color={primaryColor} />
+      </Pressable>
+      <Text style={styles.stepValue}>{value}</Text>
+      <Pressable
+        onPress={() => onChange(Math.min(max, value + 1))}
+        style={styles.stepBtn}
+        hitSlop={8}
+      >
+        <Ionicons name="add" size={16} color={primaryColor} />
+      </Pressable>
+    </View>
+  );
+}
 
 export default function WorkoutLog() {
   const { COLORS } = useTheme();
@@ -64,115 +107,109 @@ export default function WorkoutLog() {
   const [duration, setDuration] = useState('30');
   const [rpe, setRpe] = useState(7);
   const [notes, setNotes] = useState('');
-  const [saving, setSaving] = useState(false);
+  const { run: runSave, pending: saving } = useSubmit();
 
   const weightUnit = profile.weightUnit ?? 'kg';
 
-  const onSave = async () => {
-    if (!user) {
-      Alert.alert('Sign in required', 'Please sign in to save your entry.');
-      return;
-    }
-    if (saving) return;
-    const durationMin = Math.max(0, Math.round(Number(duration) || 0));
-    const exerciseXpSum = xpForExercise(sets, reps);
-    const workoutXp = xpForWorkout({ exerciseXpSum, durationMin });
-    const caloriesKcal = Math.round(durationMin * CALORIES_PER_MINUTE);
+  const onSave = () =>
+    runSave(async () => {
+      if (!user) {
+        Alert.alert('Sign in required', 'Please sign in to save your entry.');
+        return;
+      }
+      const parsedDuration = parseDurationMin(duration);
+      if (!parsedDuration.ok) {
+        Alert.alert('Invalid duration', parsedDuration.error);
+        return;
+      }
+      const durationMin = parsedDuration.value;
+      const exerciseXpSum = xpForExercise(sets, reps);
+      const workoutXp = xpForWorkout({ exerciseXpSum, durationMin });
+      const caloriesKcal = Math.round(durationMin * CALORIES_PER_MINUTE);
 
-    const rawWeight = Number(weight) || 0;
-    // Store weight canonically in kg regardless of the user's display unit.
-    const weightKg = weightUnit === 'lb' ? rawWeight * 0.45359237 : rawWeight;
-    const trimmedNotes = notes.trim();
+      // Weight is optional in the manual log: only validate if the user
+      // typed something other than blank/zero.
+      const weightTrimmed = weight.trim();
+      const hasWeight = weightTrimmed !== '' && weightTrimmed !== '0';
+      let rawWeight = 0;
+      if (hasWeight) {
+        const parsedWeight = parseWeight(weightTrimmed, weightUnit);
+        if (!parsedWeight.ok) {
+          Alert.alert('Invalid weight', parsedWeight.error);
+          return;
+        }
+        rawWeight = parsedWeight.value;
+      }
+      // Store weight canonically in kg regardless of the user's display unit.
+      const weightKg = weightUnit === 'lb' ? rawWeight * 0.45359237 : rawWeight;
+      const trimmedNotes = notes.trim();
 
-    setSaving(true);
-    try {
-      await recordCompletedWorkout(user.uid, {
-        durationMin,
-        caloriesKcal,
-        exercisesCompleted: 1,
-        xp: workoutXp,
-        exercises: [
-          {
-            name: exercise.name,
-            primaryMuscle: exercise.muscle,
-            plannedSets: sets,
-            plannedReps: reps,
-            actualSets: sets,
-            rpe,
-            ...(rawWeight > 0
-              ? { weightKg: Math.round(weightKg * 100) / 100 }
-              : {}),
-          },
-        ],
-        ...(trimmedNotes ? { notes: trimmedNotes } : {}),
-        source: 'manual_log',
-        setPlanStartDate: !profile.planStartDate,
-      });
+      try {
+        await recordCompletedWorkout(user.uid, {
+          idempotencyKey: randomId(),
+          durationMin,
+          caloriesKcal,
+          exercisesCompleted: 1,
+          xp: workoutXp,
+          exercises: [
+            {
+              name: exercise.name,
+              primaryMuscle: exercise.muscle,
+              plannedSets: sets,
+              plannedReps: reps,
+              actualSets: sets,
+              rpe,
+              ...(rawWeight > 0
+                ? { weightKg: Math.round(weightKg * 100) / 100 }
+                : {}),
+            },
+          ],
+          ...(trimmedNotes ? { notes: trimmedNotes } : {}),
+          source: 'manual_log',
+          setPlanStartDate: !profile.planStartDate,
+        });
 
-      const prevStats = profile.stats ?? {
-        totalWorkouts: 0,
-        totalMinutes: 0,
-        totalCaloriesKcal: 0,
-        totalXp: 0,
-      };
-      const unlocked = await checkAndUnlockAchievements(user.uid, {
-        totalWorkouts: (prevStats.totalWorkouts ?? 0) + 1,
-        totalMinutes: (prevStats.totalMinutes ?? 0) + durationMin,
-        totalXp: (prevStats.totalXp ?? 0) + workoutXp,
-        longestStreak,
-        weightLogCount: measurements.length,
-      });
+        const prevStats = profile.stats ?? {
+          totalWorkouts: 0,
+          totalMinutes: 0,
+          totalCaloriesKcal: 0,
+          totalXp: 0,
+        };
+        const unlocked = await checkAndUnlockAchievements(user.uid, {
+          totalWorkouts: (prevStats.totalWorkouts ?? 0) + 1,
+          totalMinutes: (prevStats.totalMinutes ?? 0) + durationMin,
+          totalXp: (prevStats.totalXp ?? 0) + workoutXp,
+          longestStreak,
+          weightLogCount: measurements.length,
+        });
 
-      const unlockedLine =
-        unlocked.length > 0
-          ? `\n\nUnlocked: ${unlocked.map((a) => a.title).join(', ')}`
-          : '';
+        const unlockedLine =
+          unlocked.length > 0
+            ? `\n\nUnlocked: ${unlocked.map((a) => a.title).join(', ')}`
+            : '';
 
-      Alert.alert(
-        'Entry saved',
-        `${exercise.name}\n${sets} × ${reps} @ ${weight} ${weightUnit} · RPE ${rpe} · ${durationMin} min\n+${workoutXp} XP${unlockedLine}`,
-        [{ text: 'OK', onPress: () => router.back() }],
-      );
-    } catch (e) {
-      captureException(e, {
-        tags: { area: 'workout', op: 'manualLog' },
-        context: { uid: user.uid, exerciseId: exercise.id },
-      });
-      Alert.alert('Could not save', 'Try again in a moment.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const Stepper = ({
-    value,
-    onChange,
-    min = 1,
-    max = 99,
-  }: {
-    value: number;
-    onChange: (n: number) => void;
-    min?: number;
-    max?: number;
-  }) => (
-    <View style={styles.stepper}>
-      <Pressable
-        onPress={() => onChange(Math.max(min, value - 1))}
-        style={styles.stepBtn}
-        hitSlop={8}
-      >
-        <Ionicons name="remove" size={16} color={COLORS.primary} />
-      </Pressable>
-      <Text style={styles.stepValue}>{value}</Text>
-      <Pressable
-        onPress={() => onChange(Math.min(max, value + 1))}
-        style={styles.stepBtn}
-        hitSlop={8}
-      >
-        <Ionicons name="add" size={16} color={COLORS.primary} />
-      </Pressable>
-    </View>
-  );
+        Alert.alert(
+          'Entry saved',
+          `${exercise.name}\n${sets} × ${reps} @ ${weight} ${weightUnit} · RPE ${rpe} · ${durationMin} min\n+${workoutXp} XP${unlockedLine}`,
+          [{ text: 'OK', onPress: () => router.back() }],
+        );
+      } catch (e) {
+        captureException(e, {
+          tags: { area: 'workout', op: 'manualLog' },
+          context: { uid: user.uid, exerciseId: exercise.id },
+        });
+        // Offer an in-place retry instead of just dismissing — the typed
+        // payload is still in component state, so re-running onSave reuses it.
+        Alert.alert(
+          'Could not save',
+          'Saving your entry failed. Your inputs are still here — tap Retry to try again.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Retry', onPress: () => onSave() },
+          ],
+        );
+      }
+    });
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -184,7 +221,7 @@ export default function WorkoutLog() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -213,11 +250,22 @@ export default function WorkoutLog() {
         <View style={styles.rowFields}>
           <View style={[styles.field, { flex: 1 }]}>
             <Text style={styles.fieldLabel}>Sets</Text>
-            <Stepper value={sets} onChange={setSets} />
+            <Stepper
+              value={sets}
+              onChange={setSets}
+              styles={styles}
+              primaryColor={COLORS.primary}
+            />
           </View>
           <View style={[styles.field, { flex: 1 }]}>
             <Text style={styles.fieldLabel}>Reps</Text>
-            <Stepper value={reps} onChange={setReps} max={60} />
+            <Stepper
+              value={reps}
+              onChange={setReps}
+              max={60}
+              styles={styles}
+              primaryColor={COLORS.primary}
+            />
           </View>
         </View>
 

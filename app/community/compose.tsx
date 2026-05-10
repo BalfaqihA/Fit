@@ -1,29 +1,40 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
+import { useSubmit } from '@/hooks/use-submit';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import { MAX_CAPTION_LEN, createPost } from '@/lib/community';
-import { MAX_POST_IMAGE_BYTES, buildPostImagePath, uploadImage } from '@/lib/upload';
+import {
+  MAX_POST_IMAGE_BYTES,
+  buildPostImagePath,
+  deleteImage,
+  uploadImage,
+} from '@/lib/upload';
+
+const DRAFT_KEY = '@fit/compose-draft';
+
+type ComposeDraft = { caption: string; imageUri?: string };
 
 export default function ComposePost() {
   const { COLORS } = useTheme();
@@ -32,8 +43,42 @@ export default function ComposePost() {
 
   const [caption, setCaption] = useState('');
   const [imageUri, setImageUri] = useState<string | undefined>();
-  const [submitting, setSubmitting] = useState(false);
+  const { run: runPost, pending: submitting } = useSubmit();
   const [error, setError] = useState<string | null>(null);
+  const draftLoaded = useRef(false);
+
+  // Restore any prior draft on mount, then persist on every change so a
+  // back-tap or app-kill mid-compose doesn't erase the user's work.
+  useEffect(() => {
+    AsyncStorage.getItem(DRAFT_KEY)
+      .then((raw) => {
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw) as ComposeDraft;
+            if (typeof parsed.caption === 'string') setCaption(parsed.caption);
+            if (typeof parsed.imageUri === 'string') setImageUri(parsed.imageUri);
+          } catch {
+            // Bad JSON in storage — drop it.
+            AsyncStorage.removeItem(DRAFT_KEY);
+          }
+        }
+      })
+      .finally(() => {
+        draftLoaded.current = true;
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!draftLoaded.current) return;
+    if (!caption && !imageUri) {
+      AsyncStorage.removeItem(DRAFT_KEY);
+      return;
+    }
+    AsyncStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ caption, imageUri } satisfies ComposeDraft),
+    );
+  }, [caption, imageUri]);
 
   const trimmedLen = caption.trim().length;
   const overLimit = trimmedLen > MAX_CAPTION_LEN;
@@ -63,36 +108,48 @@ export default function ComposePost() {
     }
   };
 
-  const handlePost = async () => {
-    if (!canPost) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      let imageUrl: string | null = null;
-      let imagePath: string | null = null;
-      if (imageUri) {
-        const path = buildPostImagePath(profile.id);
-        const result = await uploadImage(imageUri, path, {
-          maxBytes: MAX_POST_IMAGE_BYTES,
+  const handlePost = () =>
+    runPost(async () => {
+      if (!canPost) return;
+      setError(null);
+      let uploadedPath: string | null = null;
+      try {
+        let imageUrl: string | null = null;
+        let imagePath: string | null = null;
+        if (imageUri) {
+          const path = buildPostImagePath(profile.id);
+          const result = await uploadImage(imageUri, path, {
+            maxBytes: MAX_POST_IMAGE_BYTES,
+          });
+          imageUrl = result.url;
+          imagePath = result.path;
+          uploadedPath = result.path;
+        }
+        await createPost({
+          caption,
+          imageUrl,
+          imagePath,
+          authorName: profile.displayName,
+          authorAvatarUrl: profile.avatarUri ?? null,
         });
-        imageUrl = result.url;
-        imagePath = result.path;
+        // Successful post — clear the saved draft so it doesn't reappear next time.
+        await AsyncStorage.removeItem(DRAFT_KEY);
+        router.back();
+      } catch (e) {
+        // If the image landed in Storage but the post write failed, drop the
+        // orphan so it doesn't cost storage forever and isn't readable by
+        // other authed users.
+        if (uploadedPath) {
+          try {
+            await deleteImage(uploadedPath);
+          } catch {
+            // Best-effort cleanup; surface the original error.
+          }
+        }
+        const msg = e instanceof Error ? e.message : 'Could not post.';
+        setError(msg);
       }
-      await createPost({
-        caption,
-        imageUrl,
-        imagePath,
-        authorName: profile.displayName,
-        authorAvatarUrl: profile.avatarUri ?? null,
-      });
-      router.back();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Could not post.';
-      setError(msg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    });
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -103,7 +160,7 @@ export default function ComposePost() {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <ScrollView

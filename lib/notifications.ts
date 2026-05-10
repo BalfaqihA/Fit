@@ -7,7 +7,9 @@ import { loadJSON, saveJSON } from '@/lib/storage';
 const PERM_FLAG_KEY = '@fitlife:notifPermAsked';
 const SOFT_PROMPT_KEY = '@fitlife:notifSoftPromptDismissed';
 const SCHEDULED_FLAG_KEY = '@fitlife:weighInScheduledId';
+const RESUME_FLAG_KEY = '@fitlife:workoutResumeNotifId';
 const WEIGH_IN_CHANNEL = 'weigh-in';
+const WORKOUT_CHANNEL = 'workout-resume';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -23,6 +25,14 @@ async function ensureChannel() {
   await Notifications.setNotificationChannelAsync(WEIGH_IN_CHANNEL, {
     name: 'Weekly Weigh-In',
     importance: Notifications.AndroidImportance.DEFAULT,
+  });
+}
+
+async function ensureWorkoutChannel() {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync(WORKOUT_CHANNEL, {
+    name: 'Workout Resume',
+    importance: Notifications.AndroidImportance.HIGH,
   });
 }
 
@@ -116,6 +126,52 @@ export async function notifyLocally(title: string, body: string): Promise<void> 
     });
   } catch (e) {
     captureException(e, { tags: { area: 'notifications', op: 'notifyLocally' } });
+  }
+}
+
+/**
+ * Fire a local notification immediately telling the user they have a paused
+ * workout to come back to. Cancels any prior resume notification first so only
+ * one is ever queued. No-op if permission is missing.
+ */
+export async function notifyResumeWorkout(dayNum?: number): Promise<void> {
+  try {
+    const status = await Notifications.getPermissionsAsync();
+    if (!status.granted) return;
+    await ensureWorkoutChannel();
+    await cancelResumeReminder();
+    const id = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Workout paused — tap to resume',
+        body:
+          dayNum != null
+            ? `Day ${dayNum} is waiting for you. Open the app to keep going.`
+            : 'You have a workout in progress. Open the app to keep going.',
+        ...(Platform.OS === 'android' ? { channelId: WORKOUT_CHANNEL } : {}),
+      },
+      trigger: null,
+    });
+    await saveJSON(RESUME_FLAG_KEY, id);
+  } catch (e) {
+    captureException(e, {
+      tags: { area: 'notifications', op: 'notifyResumeWorkout' },
+    });
+  }
+}
+
+export async function cancelResumeReminder(): Promise<void> {
+  try {
+    const prev = await loadJSON<string | null>(RESUME_FLAG_KEY, null);
+    if (prev) {
+      await Notifications.cancelScheduledNotificationAsync(prev).catch(
+        () => undefined
+      );
+      await saveJSON(RESUME_FLAG_KEY, null);
+    }
+  } catch (e) {
+    captureException(e, {
+      tags: { area: 'notifications', op: 'cancelResumeReminder' },
+    });
   }
 }
 

@@ -7,14 +7,15 @@ import {
   Dimensions,
   Easing,
   Pressable,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useCommunity } from '@/hooks/use-community';
+import { useUserById } from '@/hooks/use-user-by-id';
 import { timeRemaining } from '@/lib/format';
 
 const STORY_DURATION_MS = 5000;
@@ -22,10 +23,22 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function StoryViewer() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getStoriesGrouped } = useCommunity();
+  const { getStoriesGrouped, stories } = useCommunity();
+  const { user: remoteUser } = useUserById(id);
 
   const groups = getStoriesGrouped();
-  const group = useMemo(() => groups.find((g) => g.user.id === id), [groups, id]);
+  // Prefer the pre-grouped result for seed/current users; otherwise compose
+  // a group on the fly so Firestore-resolved users still play their stories.
+  const group = useMemo(() => {
+    const match = groups.find((g) => g.user.id === id);
+    if (match) return match;
+    if (!remoteUser) return undefined;
+    const ownStories = stories
+      .filter((s) => s.authorId === id && s.expiresAt > Date.now())
+      .sort((a, b) => a.createdAt - b.createdAt);
+    if (ownStories.length === 0) return undefined;
+    return { user: remoteUser, stories: ownStories };
+  }, [groups, id, remoteUser, stories]);
 
   const [index, setIndex] = useState(0);
   const progress = useRef(new Animated.Value(0)).current;

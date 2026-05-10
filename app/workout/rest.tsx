@@ -1,14 +1,15 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
@@ -66,7 +67,8 @@ function fmt(secs: number): string {
 export default function RestScreen() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
-  const { session, planExercises, totalCount } = useWorkoutSession();
+  const { session, planExercises, totalCount, isPaused, pause, resume } =
+    useWorkoutSession();
 
   const nextIndex = session.currentIndex;
   const nextExercise = planExercises[nextIndex];
@@ -74,18 +76,31 @@ export default function RestScreen() {
   const [timeLeft, setTimeLeft] = useState(REST_SECONDS);
   const [totalRest, setTotalRest] = useState(REST_SECONDS);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastAddRef = useRef(0);
+  const firedReadyRef = useRef(false);
 
   const hasSession = session.isActive && !!nextExercise;
 
   useEffect(() => {
-    if (!hasSession) return;
+    if (!hasSession || isPaused) return;
     intervalRef.current = setInterval(() => {
       setTimeLeft((t) => (t <= 0 ? 0 : t - 1));
     }, 1000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [hasSession]);
+  }, [hasSession, isPaused]);
+
+  // One-shot success haptic when the timer hits zero — signals readiness
+  // without forcing the user to look at the screen.
+  useEffect(() => {
+    if (timeLeft === 0 && !firedReadyRef.current && hasSession) {
+      firedReadyRef.current = true;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+        () => {},
+      );
+    }
+  }, [timeLeft, hasSession]);
 
   if (!hasSession || !nextExercise) {
     return (
@@ -117,10 +132,15 @@ export default function RestScreen() {
   const color = GROUP_COLOR[group] ?? COLORS.primary;
   const xp = exerciseXp(nextExercise);
 
-  const addFifteen = () => {
+  const addFifteen = useCallback(() => {
+    // Coalesce rapid taps so a double-tap doesn't queue +30s.
+    const now = Date.now();
+    if (now - lastAddRef.current < 250) return;
+    lastAddRef.current = now;
     setTotalRest((t) => t + 15);
     setTimeLeft((t) => t + 15);
-  };
+    firedReadyRef.current = false;
+  }, []);
 
   const onNext = () => {
     router.replace(`/workout/run/${nextIndex}` as never);
@@ -132,9 +152,24 @@ export default function RestScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Rest</Text>
-        <Text style={styles.headerMeta}>
-          {nextIndex + 1} / {totalCount}
-        </Text>
+        <View style={styles.headerRight}>
+          <Text style={styles.headerMeta}>
+            {nextIndex + 1} / {totalCount}
+          </Text>
+          <Pressable
+            onPress={isPaused ? resume : pause}
+            style={styles.pauseBtn}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={isPaused ? 'Resume workout' : 'Pause workout'}
+          >
+            <Ionicons
+              name={isPaused ? 'play' : 'pause'}
+              size={20}
+              color={COLORS.text}
+            />
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.body}>
@@ -203,9 +238,28 @@ export default function RestScreen() {
         <PrimaryButton
           label="Next"
           onPress={onNext}
+          disabled={isPaused}
           icon={<Ionicons name="arrow-forward" size={18} color="#fff" />}
         />
       </View>
+
+      {isPaused && (
+        <View style={styles.pauseOverlay} pointerEvents="auto">
+          <View style={styles.pauseCard}>
+            <View style={styles.pauseIcon}>
+              <Ionicons name="pause" size={36} color={COLORS.primary} />
+            </View>
+            <Text style={styles.pauseTitle}>Workout paused</Text>
+            <Text style={styles.pauseMeta}>Rest timer is on hold.</Text>
+            <View style={{ height: 16 }} />
+            <PrimaryButton
+              label="Resume"
+              onPress={resume}
+              icon={<Ionicons name="play" size={18} color="#fff" />}
+            />
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -221,7 +275,20 @@ const makeStyles = (COLORS: Palette) =>
       paddingVertical: 14,
     },
     headerTitle: { fontSize: 17, fontWeight: '800', color: COLORS.text },
+    headerRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
     headerMeta: { fontSize: 13, fontWeight: '700', color: COLORS.muted },
+    pauseBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: COLORS.primarySoft,
+    },
     body: {
       flex: 1,
       alignItems: 'center',
@@ -351,5 +418,40 @@ const makeStyles = (COLORS: Palette) =>
       fontSize: 18,
       fontWeight: '800',
       color: COLORS.text,
+    },
+    pauseOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 28,
+    },
+    pauseCard: {
+      backgroundColor: COLORS.card,
+      borderRadius: RADIUS.lg,
+      padding: 24,
+      alignSelf: 'stretch',
+      alignItems: 'center',
+      ...SHADOWS.card,
+    },
+    pauseIcon: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      backgroundColor: COLORS.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 12,
+    },
+    pauseTitle: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: COLORS.text,
+      marginBottom: 4,
+    },
+    pauseMeta: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: COLORS.muted,
     },
   });

@@ -2,15 +2,16 @@ import {
   Timestamp,
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
-  increment,
   limit,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   startAfter,
   where,
   writeBatch,
@@ -221,18 +222,18 @@ export async function loadMorePosts(
 
 // -------- Likes --------
 
+// `likeCount` is maintained by the `on_like_created` / `on_like_deleted`
+// Firestore triggers in `functions/main.py`. Clients only write the like doc;
+// the counter is updated server-side and is unforgeable.
 export async function likePost(post: { id: string; authorId: string }): Promise<void> {
   const uid = requireUid();
   try {
-    const batch = writeBatch(db);
-    batch.set(doc(db, LIKES, likeId(post.id, uid)), {
+    await setDoc(doc(db, LIKES, likeId(post.id, uid)), {
       postId: post.id,
       postOwnerId: post.authorId,
       userId: uid,
       createdAt: serverTimestamp(),
     });
-    batch.update(doc(db, POSTS, post.id), { likeCount: increment(1) });
-    await batch.commit();
   } catch (e) {
     captureException(e, { tags: { area: 'community', op: 'likePost' } });
     throw e;
@@ -242,10 +243,7 @@ export async function likePost(post: { id: string; authorId: string }): Promise<
 export async function unlikePost(postId: string): Promise<void> {
   const uid = requireUid();
   try {
-    const batch = writeBatch(db);
-    batch.delete(doc(db, LIKES, likeId(postId, uid)));
-    batch.update(doc(db, POSTS, postId), { likeCount: increment(-1) });
-    await batch.commit();
+    await deleteDoc(doc(db, LIKES, likeId(postId, uid)));
   } catch (e) {
     captureException(e, { tags: { area: 'community', op: 'unlikePost' } });
     throw e;
@@ -254,7 +252,8 @@ export async function unlikePost(postId: string): Promise<void> {
 
 export function subscribeToLikedPostIds(
   uid: string,
-  onChange: (ids: Set<string>) => void
+  onChange: (ids: Set<string>) => void,
+  onError?: (err: Error) => void,
 ): () => void {
   const q = query(collection(db, LIKES), where('userId', '==', uid));
   return onSnapshot(
@@ -269,6 +268,7 @@ export function subscribeToLikedPostIds(
     },
     (err) => {
       captureException(err, { tags: { area: 'community', op: 'subscribeLikes' } });
+      onError?.(err);
     }
   );
 }
@@ -277,7 +277,6 @@ export function subscribeToLikedPostIds(
 
 export type AddCommentInput = {
   postId: string;
-  postOwnerId: string;
   text: string;
   authorName: string;
   authorAvatarUrl?: string | null;
@@ -291,19 +290,30 @@ export async function addComment(input: AddCommentInput): Promise<string> {
     throw new Error(`Comment is too long (max ${MAX_COMMENT_LEN}).`);
   }
   try {
-    const batch = writeBatch(db);
+    // Read the post's actual `authorId` rather than trusting any caller-
+    // supplied value — the security rules also enforce this match, so
+    // spoofing fails closed even if a future caller passes a wrong owner.
+    const postSnap = await getDoc(doc(db, POSTS, input.postId));
+    if (!postSnap.exists()) {
+      throw new Error('Post no longer exists.');
+    }
+    const postOwnerId = (postSnap.data() as { authorId?: string }).authorId;
+    if (!postOwnerId) {
+      throw new Error('Post is missing an author.');
+    }
+    // `commentCount` is maintained by the `on_comment_created` /
+    // `on_comment_deleted` Firestore triggers; clients only write the
+    // comment document.
     const commentRef = doc(collection(db, COMMENTS));
-    batch.set(commentRef, {
+    await setDoc(commentRef, {
       postId: input.postId,
-      postOwnerId: input.postOwnerId,
+      postOwnerId,
       authorId: uid,
       authorName: input.authorName,
       authorAvatarUrl: input.authorAvatarUrl ?? null,
       text,
       createdAt: serverTimestamp(),
     });
-    batch.update(doc(db, POSTS, input.postId), { commentCount: increment(1) });
-    await batch.commit();
     return commentRef.id;
   } catch (e) {
     captureException(e, { tags: { area: 'community', op: 'addComment' } });
@@ -311,13 +321,10 @@ export async function addComment(input: AddCommentInput): Promise<string> {
   }
 }
 
-export async function deleteComment(commentId: string, postId: string): Promise<void> {
+export async function deleteComment(commentId: string, _postId: string): Promise<void> {
   requireUid();
   try {
-    const batch = writeBatch(db);
-    batch.delete(doc(db, COMMENTS, commentId));
-    batch.update(doc(db, POSTS, postId), { commentCount: increment(-1) });
-    await batch.commit();
+    await deleteDoc(doc(db, COMMENTS, commentId));
   } catch (e) {
     captureException(e, { tags: { area: 'community', op: 'deleteComment' } });
     throw e;

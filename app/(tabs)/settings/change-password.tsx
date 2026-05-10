@@ -2,20 +2,24 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
 import { changePassword, mapAuthError } from '@/lib/auth';
+
+type Styles = ReturnType<typeof makeStyles>;
 
 function scorePassword(
   pw: string,
@@ -31,6 +35,78 @@ function scorePassword(
   if (score === 2) return { label: 'Fair', ratio, color: '#F2A43A' };
   if (score === 3) return { label: 'Good', ratio, color: COLORS.primary };
   return { label: 'Strong', ratio, color: COLORS.success };
+}
+
+// Component lives at module scope (NOT inside ChangePassword) — declaring it
+// inside the parent caused React to remount the TextInput on every keystroke,
+// which dismissed the keyboard after a single character.
+function Field({
+  label,
+  value,
+  onChange,
+  show,
+  onToggle,
+  styles,
+  mutedColor,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  show: boolean;
+  onToggle: () => void;
+  styles: Styles;
+  mutedColor: string;
+}) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.inputWrap}>
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          secureTextEntry={!show}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.input}
+          placeholderTextColor={mutedColor}
+        />
+        <Pressable onPress={onToggle} hitSlop={8}>
+          <Ionicons
+            name={show ? 'eye-off-outline' : 'eye-outline'}
+            size={20}
+            color={mutedColor}
+          />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function Hint({
+  met,
+  text,
+  styles,
+  successColor,
+  mutedColor,
+  textColor,
+}: {
+  met: boolean;
+  text: string;
+  styles: Styles;
+  successColor: string;
+  mutedColor: string;
+  textColor: string;
+}) {
+  return (
+    <View style={styles.hintRow}>
+      <Ionicons
+        name={met ? 'checkmark-circle' : 'ellipse-outline'}
+        size={16}
+        color={met ? successColor : mutedColor}
+      />
+      <Text style={[styles.hintText, met && { color: textColor }]}>{text}</Text>
+    </View>
+  );
 }
 
 export default function ChangePassword() {
@@ -68,115 +144,111 @@ export default function ChangePassword() {
     }
   };
 
-  const Field = ({
-    label,
-    value,
-    onChange,
-    show,
-    onToggle,
-  }: {
-    label: string;
-    value: string;
-    onChange: (v: string) => void;
-    show: boolean;
-    onToggle: () => void;
-  }) => (
-    <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.inputWrap}>
-        <TextInput
-          value={value}
-          onChangeText={onChange}
-          secureTextEntry={!show}
-          autoCapitalize="none"
-          style={styles.input}
-          placeholderTextColor={COLORS.muted}
-        />
-        <Pressable onPress={onToggle} hitSlop={8}>
-          <Ionicons
-            name={show ? 'eye-off-outline' : 'eye-outline'}
-            size={20}
-            color={COLORS.muted}
-          />
-        </Pressable>
-      </View>
-    </View>
-  );
-
-  const Hint = ({ met, text }: { met: boolean; text: string }) => (
-    <View style={styles.hintRow}>
-      <Ionicons
-        name={met ? 'checkmark-circle' : 'ellipse-outline'}
-        size={16}
-        color={met ? COLORS.success : COLORS.muted}
-      />
-      <Text style={[styles.hintText, met && { color: COLORS.text }]}>{text}</Text>
-    </View>
-  );
-
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <BackButton />
         <Text style={styles.headerTitle}>Change Password</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <Field
-          label="Current password"
-          value={current}
-          onChange={setCurrent}
-          show={showCurrent}
-          onToggle={() => setShowCurrent((s) => !s)}
-        />
-        <Field
-          label="New password"
-          value={next}
-          onChange={setNext}
-          show={showNext}
-          onToggle={() => setShowNext((s) => !s)}
-        />
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Field
+            label="Current password"
+            value={current}
+            onChange={setCurrent}
+            show={showCurrent}
+            onToggle={() => setShowCurrent((s) => !s)}
+            styles={styles}
+            mutedColor={COLORS.muted}
+          />
+          <Field
+            label="New password"
+            value={next}
+            onChange={setNext}
+            show={showNext}
+            onToggle={() => setShowNext((s) => !s)}
+            styles={styles}
+            mutedColor={COLORS.muted}
+          />
 
-        {next.length > 0 && (
-          <View style={styles.strengthWrap}>
-            <View style={styles.strengthBar}>
-              <View
-                style={[
-                  styles.strengthFill,
-                  { width: `${strength.ratio * 100}%`, backgroundColor: strength.color },
-                ]}
-              />
+          {next.length > 0 && (
+            <View style={styles.strengthWrap}>
+              <View style={styles.strengthBar}>
+                <View
+                  style={[
+                    styles.strengthFill,
+                    {
+                      width: `${strength.ratio * 100}%`,
+                      backgroundColor: strength.color,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={[styles.strengthText, { color: strength.color }]}>
+                {strength.label}
+              </Text>
             </View>
-            <Text style={[styles.strengthText, { color: strength.color }]}>
-              {strength.label}
-            </Text>
+          )}
+
+          <Field
+            label="Confirm new password"
+            value={confirm}
+            onChange={setConfirm}
+            show={showConfirm}
+            onToggle={() => setShowConfirm((s) => !s)}
+            styles={styles}
+            mutedColor={COLORS.muted}
+          />
+
+          <View style={styles.hintCard}>
+            <Text style={styles.hintTitle}>Password must include:</Text>
+            <Hint
+              met={next.length >= 8}
+              text="At least 8 characters"
+              styles={styles}
+              successColor={COLORS.success}
+              mutedColor={COLORS.muted}
+              textColor={COLORS.text}
+            />
+            <Hint
+              met={/[A-Z]/.test(next)}
+              text="One uppercase letter"
+              styles={styles}
+              successColor={COLORS.success}
+              mutedColor={COLORS.muted}
+              textColor={COLORS.text}
+            />
+            <Hint
+              met={/[0-9]/.test(next)}
+              text="One number"
+              styles={styles}
+              successColor={COLORS.success}
+              mutedColor={COLORS.muted}
+              textColor={COLORS.text}
+            />
+            <Hint
+              met={/[^A-Za-z0-9]/.test(next)}
+              text="One special character"
+              styles={styles}
+              successColor={COLORS.success}
+              mutedColor={COLORS.muted}
+              textColor={COLORS.text}
+            />
           </View>
-        )}
 
-        <Field
-          label="Confirm new password"
-          value={confirm}
-          onChange={setConfirm}
-          show={showConfirm}
-          onToggle={() => setShowConfirm((s) => !s)}
-        />
-
-        <View style={styles.hintCard}>
-          <Text style={styles.hintTitle}>Password must include:</Text>
-          <Hint met={next.length >= 8} text="At least 8 characters" />
-          <Hint met={/[A-Z]/.test(next)} text="One uppercase letter" />
-          <Hint met={/[0-9]/.test(next)} text="One number" />
-          <Hint met={/[^A-Za-z0-9]/.test(next)} text="One special character" />
-        </View>
-
-        <View style={{ height: 12 }} />
-        <PrimaryButton label="Save" onPress={submit} disabled={!canSubmit} />
-      </ScrollView>
+          <View style={{ height: 12 }} />
+          <PrimaryButton label="Save" onPress={submit} disabled={!canSubmit} />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

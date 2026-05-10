@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import React, { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useMemo } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { type Palette } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
@@ -29,6 +29,14 @@ export function CommentRow({
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
 
+  const confirmDelete = useCallback(() => {
+    if (!onDelete) return;
+    Alert.alert('Delete comment', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: onDelete },
+    ]);
+  }, [onDelete]);
+
   return (
     <View style={styles.row}>
       <Pressable onPress={onPressAuthor} hitSlop={4}>
@@ -48,7 +56,7 @@ export function CommentRow({
         <View style={styles.meta}>
           <Text style={styles.time}>{relativeTime(createdAtMs)}</Text>
           {isOwn && onDelete && (
-            <Pressable onPress={onDelete} hitSlop={4}>
+            <Pressable onPress={confirmDelete} hitSlop={4}>
               <Text style={styles.delete}>Delete</Text>
             </Pressable>
           )}

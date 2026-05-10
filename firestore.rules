@@ -10,6 +10,13 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    // True iff `claimedOwner` matches the actual `authorId` of the
+    // referenced post. Used to prevent clients from spoofing `postOwnerId`
+    // on like/comment writes (which would misroute activity notifications).
+    function postOwnerMatches(postId, claimedOwner) {
+      return get(/databases/$(database)/documents/communityPosts/$(postId)).data.authorId == claimedOwner;
+    }
+
     match /users/{uid} {
       allow read, create, update: if isOwner(uid);
       allow delete: if false;
@@ -38,6 +45,13 @@ service cloud.firestore {
         allow read, update: if isOwner(uid);
         allow create, delete: if false;
       }
+
+      // Per-user analytics snapshot maintained by Cloud Functions (admin SDK
+      // bypasses these rules on write). Owner can read their own snapshot.
+      match /insights/{doc} {
+        allow read: if isOwner(uid);
+        allow create, update, delete: if false;
+      }
     }
 
     // Community: posts visible to all signed-in users.
@@ -51,15 +65,13 @@ service cloud.firestore {
         && request.resource.data.likeCount == 0
         && request.resource.data.commentCount == 0;
 
-      // Owner edits caption/image; any signed-in user can adjust counters
-      // (the actual like/comment write is gated by the like/comment rules).
-      allow update: if isSignedIn() && (
-        (resource.data.authorId == request.auth.uid
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['caption', 'imageUrl', 'imagePath', 'updatedAt']))
-        || request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['likeCount', 'commentCount'])
-      );
+      // Counters (`likeCount`, `commentCount`) are maintained by Firestore
+      // triggers in `functions/main.py` and must NOT be writable by clients.
+      // Author-only edits cover caption and image; nothing else.
+      allow update: if isSignedIn()
+        && resource.data.authorId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['caption', 'imageUrl', 'imagePath', 'updatedAt']);
 
       allow delete: if isOwner(resource.data.authorId);
     }
@@ -68,9 +80,15 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn()
         && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.postId is string
         && request.resource.data.text is string
         && request.resource.data.text.size() >= 1
-        && request.resource.data.text.size() <= 500;
+        && request.resource.data.text.size() <= 500
+        && request.resource.data.postOwnerId is string
+        && postOwnerMatches(
+            request.resource.data.postId,
+            request.resource.data.postOwnerId
+          );
       allow update: if false;
       allow delete: if isOwner(resource.data.authorId);
     }
@@ -80,7 +98,12 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn()
         && likeId == request.resource.data.postId + '_' + request.auth.uid
-        && request.resource.data.userId == request.auth.uid;
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.postOwnerId is string
+        && postOwnerMatches(
+            request.resource.data.postId,
+            request.resource.data.postOwnerId
+          );
       allow update: if false;
       allow delete: if isOwner(resource.data.userId);
     }

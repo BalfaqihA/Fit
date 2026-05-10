@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
@@ -49,6 +49,15 @@ export function PostCard({
     ? `@${authorHandle} · ${relativeTime(createdAtMs)}`
     : relativeTime(createdAtMs);
 
+  // Coalesce rapid taps so a flurry hits the network once, not once per tap.
+  const lastLikeAt = useRef(0);
+  const handleLike = useCallback(() => {
+    const now = Date.now();
+    if (now - lastLikeAt.current < 300) return;
+    lastLikeAt.current = now;
+    onLike();
+  }, [onLike]);
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -79,7 +88,7 @@ export function PostCard({
       )}
 
       <View style={styles.actions}>
-        <Pressable style={styles.action} onPress={onLike} hitSlop={6}>
+        <Pressable style={styles.action} onPress={handleLike} hitSlop={6}>
           <Ionicons
             name={liked ? 'heart' : 'heart-outline'}
             size={22}

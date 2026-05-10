@@ -18,7 +18,10 @@ import random
 from typing import Any, Dict, List
 
 from firebase_admin import auth as admin_auth, firestore, initialize_app
-from firebase_functions import https_fn, options
+from firebase_functions import firestore_fn, https_fn, options
+from google.cloud.firestore_v1 import Increment
+
+import insights
 
 initialize_app()
 
@@ -249,3 +252,210 @@ def delete_account(req: https_fn.CallableRequest) -> Dict[str, Any]:
     deleted += 1
 
     return {"deleted": deleted}
+
+
+# -------- Community counter maintenance --------
+#
+# `likeCount` and `commentCount` on `communityPosts/{postId}` are derived from
+# the actual `likes/{likeId}` and `comments/{commentId}` documents. Clients no
+# longer write these counters directly (the security rules forbid it), so the
+# only way they can move is through these triggers. This makes the counters
+# unforgeable by malicious clients.
+
+
+@firestore_fn.on_document_created(document="likes/{likeId}", region="us-central1")
+def on_like_created(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> None:
+    snap = event.data
+    if snap is None:
+        return
+    post_id = snap.get("postId")
+    if not isinstance(post_id, str) or not post_id:
+        return
+    db = firestore.client()
+    db.collection("communityPosts").document(post_id).update(
+        {"likeCount": Increment(1)}
+    )
+
+
+@firestore_fn.on_document_deleted(document="likes/{likeId}", region="us-central1")
+def on_like_deleted(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> None:
+    snap = event.data
+    if snap is None:
+        return
+    post_id = snap.get("postId")
+    if not isinstance(post_id, str) or not post_id:
+        return
+    db = firestore.client()
+    db.collection("communityPosts").document(post_id).update(
+        {"likeCount": Increment(-1)}
+    )
+
+
+@firestore_fn.on_document_created(document="comments/{commentId}", region="us-central1")
+def on_comment_created(
+    event: firestore_fn.Event[firestore_fn.DocumentSnapshot],
+) -> None:
+    snap = event.data
+    if snap is None:
+        return
+    post_id = snap.get("postId")
+    if not isinstance(post_id, str) or not post_id:
+        return
+    db = firestore.client()
+    db.collection("communityPosts").document(post_id).update(
+        {"commentCount": Increment(1)}
+    )
+
+
+@firestore_fn.on_document_deleted(document="comments/{commentId}", region="us-central1")
+def on_comment_deleted(
+    event: firestore_fn.Event[firestore_fn.DocumentSnapshot],
+) -> None:
+    snap = event.data
+    if snap is None:
+        return
+    post_id = snap.get("postId")
+    if not isinstance(post_id, str) or not post_id:
+        return
+    db = firestore.client()
+    db.collection("communityPosts").document(post_id).update(
+        {"commentCount": Increment(-1)}
+    )
+
+
+# -------- Per-user insights snapshot triggers --------
+#
+# Every workout / measurement / achievement / plan write fans out to a
+# `users/{uid}/insights/snapshot` doc kept in sync with the rest of the
+# user's data. Chatbot reads this single doc per chat turn for personalized
+# replies — instead of joining workouts + measurements + plan on the fly.
+
+
+def _insights_ref(db: Any, uid: str):
+    return db.collection("users").document(uid).collection("insights").document(
+        "snapshot"
+    )
+
+
+def _merge_insights(uid: str, payload: Dict[str, Any]) -> None:
+    """Merge a partial section update into the snapshot doc.
+
+    All triggers go through this helper so the `updatedAt` and
+    `schemaVersion` fields stay consistent.
+    """
+    db = firestore.client()
+    payload = {
+        **payload,
+        "userId": uid,
+        "schemaVersion": insights.SCHEMA_VERSION,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    }
+    _insights_ref(db, uid).set(payload, merge=True)
+
+
+@firestore_fn.on_document_written(
+    document="users/{uid}", region="us-central1"
+)
+def on_profile_write(
+    event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],
+) -> None:
+    """Refresh demographics/preferences/plan when the user profile changes."""
+    uid = event.params.get("uid")
+    if not uid:
+        return
+    # Skip cascading writes that originate from this trigger itself.
+    after = event.data.after if event.data else None
+    if after is None or not after.exists:
+        return
+    db = firestore.client()
+    sections = insights.refresh_profile_sections(uid, db)
+    _merge_insights(uid, sections)
+
+
+@firestore_fn.on_document_written(
+    document="users/{uid}/workouts/{workoutId}", region="us-central1"
+)
+def on_workout_write(
+    event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],
+) -> None:
+    """Refresh totals/recent/streaks/consistency/PRs/flags on workout write."""
+    uid = event.params.get("uid")
+    if not uid:
+        return
+    db = firestore.client()
+    sections = insights.refresh_workout_sections(uid, db)
+    _merge_insights(uid, sections)
+
+
+@firestore_fn.on_document_written(
+    document="users/{uid}/measurements/{measurementId}", region="us-central1"
+)
+def on_measurement_write(
+    event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],
+) -> None:
+    """Refresh weightTrend + needsWeighIn flag when a weight is logged."""
+    uid = event.params.get("uid")
+    if not uid:
+        return
+    db = firestore.client()
+    sections = insights.refresh_measurement_sections(uid, db)
+    _merge_insights(uid, sections)
+
+
+@firestore_fn.on_document_written(
+    document="users/{uid}/achievements/{achievementId}", region="us-central1"
+)
+def on_achievement_write(
+    event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],
+) -> None:
+    """Refresh unlocked-achievement summary."""
+    uid = event.params.get("uid")
+    if not uid:
+        return
+    db = firestore.client()
+    sections = insights.refresh_achievement_sections(uid, db)
+    _merge_insights(uid, sections)
+
+
+@firestore_fn.on_document_written(
+    document="users/{uid}/plans/{planId}", region="us-central1"
+)
+def on_plan_write(
+    event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],
+) -> None:
+    """Refresh plan summary when the user's currentPlan changes."""
+    uid = event.params.get("uid")
+    plan_id = event.params.get("planId")
+    if not uid or not plan_id:
+        return
+    db = firestore.client()
+    profile = (db.collection("users").document(uid).get().to_dict() or {})
+    # Only refresh if this is the user's *current* plan — historical plan
+    # writes shouldn't churn the snapshot.
+    if profile.get("currentPlanId") != plan_id:
+        return
+    sections = insights.refresh_profile_sections(uid, db)
+    _merge_insights(uid, sections)
+
+
+@https_fn.on_call(
+    region="us-central1",
+    cors=options.CorsOptions(cors_origins=_ALLOWED_ORIGINS, cors_methods=["POST"]),
+)
+def bootstrap_insights(req: https_fn.CallableRequest) -> Dict[str, Any]:
+    """One-shot rebuild of `users/{uid}/insights/snapshot` from source data.
+
+    Called on first launch after the feature ships, or any time the snapshot
+    is suspected of being stale. Idempotent — overwrites the doc with a
+    freshly-computed full snapshot.
+    """
+    if req.auth is None:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Sign in required."
+        )
+
+    uid = req.auth.uid
+    db = firestore.client()
+    snapshot = insights.build_full_snapshot(uid, db)
+    _merge_insights(uid, snapshot)
+    return {"ok": True, "schemaVersion": insights.SCHEMA_VERSION}

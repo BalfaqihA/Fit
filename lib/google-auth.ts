@@ -5,7 +5,7 @@ import {
   signInWithCredential,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { useCallback } from 'react';
 
 import { auth, db } from '@/lib/firebase';
@@ -23,9 +23,6 @@ export type GoogleSignInResult =
 
 async function ensureProfile(user: User): Promise<boolean> {
   const profileRef = doc(db, 'users', user.uid);
-  const snap = await getDoc(profileRef);
-  if (snap.exists()) return false;
-
   const fallbackName =
     user.displayName?.trim() || user.email?.split('@')[0] || 'New User';
   const handle = (user.email?.split('@')[0] ?? user.uid).toLowerCase();
@@ -43,12 +40,18 @@ async function ensureProfile(user: User): Promise<boolean> {
     avatarUri: user.photoURL ?? undefined,
   };
 
-  await setDoc(profileRef, {
-    ...seed,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  // Read + create inside a single transaction to close the check-then-write
+  // race that allowed two concurrent sign-ins to seed the profile twice.
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(profileRef);
+    if (snap.exists()) return false;
+    tx.set(profileRef, {
+      ...seed,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return true;
   });
-  return true;
 }
 
 export function useGoogleSignIn() {

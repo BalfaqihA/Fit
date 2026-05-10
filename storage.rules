@@ -2,12 +2,26 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // Allowlist explicit raster image types. The original `image/.*` regex
+    // accepted `image/svg+xml`, which can carry executable content if rendered
+    // in a WebView, so it is excluded here.
+    function isAllowedImageType() {
+      return request.resource.contentType in [
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/webp',
+        'image/heic',
+        'image/heif'
+      ];
+    }
+
     match /communityPosts/{userId}/{file} {
       allow read: if request.auth != null;
       allow write: if request.auth != null
         && request.auth.uid == userId
         && request.resource.size < 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && isAllowedImageType();
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
@@ -16,7 +30,7 @@ service firebase.storage {
       allow write: if request.auth != null
         && request.auth.uid == userId
         && request.resource.size < 3 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && isAllowedImageType();
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
   }

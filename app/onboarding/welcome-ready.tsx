@@ -2,7 +2,8 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useMemo } from 'react';
-import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import {  StyleSheet, Text, View} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';

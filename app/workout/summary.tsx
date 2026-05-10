@@ -3,12 +3,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
@@ -29,6 +29,7 @@ import {
   levelFromXp,
 } from '@/lib/gamification';
 import { captureException } from '@/lib/observability';
+import { randomId } from '@/lib/uuid';
 import { recordCompletedWorkout } from '@/lib/workouts';
 
 export default function WorkoutSummary() {
@@ -56,6 +57,9 @@ export default function WorkoutSummary() {
   const xp = Number(params.xp ?? 0);
 
   const persisted = useRef(false);
+  // Stable per-summary-view id; reused if React re-runs the effect so a retry
+  // collides with the first write and Firestore rejects rather than double-grant.
+  const idempotencyKey = useRef(randomId()).current;
   useEffect(() => {
     if (persisted.current) return;
     persisted.current = true;
@@ -66,7 +70,8 @@ export default function WorkoutSummary() {
     const run = async () => {
       if (user) {
         try {
-          await recordCompletedWorkout(user.uid, {
+          const result = await recordCompletedWorkout(user.uid, {
+            idempotencyKey,
             planId: params.planId || undefined,
             dayNum: params.dayNum ? Number(params.dayNum) : undefined,
             durationMin: duration,
@@ -76,6 +81,12 @@ export default function WorkoutSummary() {
             exercises: exercisesSnapshot.length > 0 ? exercisesSnapshot : undefined,
             setPlanStartDate: !profile.planStartDate,
           });
+          if (result.alreadyRecorded) {
+            // A prior call with the same key already granted XP and stats —
+            // skip the achievement check to avoid re-firing unlock alerts.
+            reset();
+            return;
+          }
 
           const newly = await checkAndUnlockAchievements(user.uid, {
             totalWorkouts: (prevStats?.totalWorkouts ?? 0) + 1,

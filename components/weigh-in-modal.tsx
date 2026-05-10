@@ -21,6 +21,7 @@ import {
   requestNotificationPermissionOnce,
   scheduleWeeklyWeighIn,
 } from '@/lib/notifications';
+import { parseWeight } from '@/lib/validation';
 
 type Props = {
   visible: boolean;
@@ -45,14 +46,12 @@ export function WeighInModal({ visible, onClose }: Props) {
 
   const onSave = async () => {
     if (!user) return;
-    const parsed = Number(value.replace(',', '.'));
-    const minDisplay = unit === 'lb' ? 55 : 25;
-    const maxDisplay = unit === 'lb' ? 880 : 400;
-    if (!parsed || parsed < minDisplay || parsed > maxDisplay) {
-      setError(`Enter a weight between ${minDisplay} and ${maxDisplay} ${unit}.`);
+    const parsed = parseWeight(value, unit);
+    if (!parsed.ok) {
+      setError(parsed.error);
       return;
     }
-    const weightKg = unit === 'lb' ? parsed * 0.45359237 : parsed;
+    const weightKg = unit === 'lb' ? parsed.value * 0.45359237 : parsed.value;
     setSaving(true);
     setError(null);
     try {

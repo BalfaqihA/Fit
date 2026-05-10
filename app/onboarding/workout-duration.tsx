@@ -1,13 +1,13 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
@@ -40,6 +40,10 @@ export default function WorkoutDurationPage() {
     const match = OPTIONS.find((o) => parseMinutes(o) === answers.sessionMinutes);
     return match ?? '30 Minutes';
   });
+
+  useEffect(() => {
+    setAnswer('sessionMinutes', parseMinutes(selected));
+  }, [selected, setAnswer]);
 
   const progressItems = useMemo(
     () => new Array(TOTAL_STEPS).fill(null).map((_, i) => i),

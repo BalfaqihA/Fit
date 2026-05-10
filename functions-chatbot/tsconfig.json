@@ -1,9 +1,9 @@
 {
-  "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "module": "Node16",
     "target": "es2022",
     "moduleResolution": "node16",
+    "lib": ["es2022"],
     "noImplicitReturns": true,
     "noUnusedLocals": true,
     "outDir": "lib",
@@ -11,13 +11,9 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true
   },
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "lib",
-    "node_modules"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["lib", "node_modules"]
 }

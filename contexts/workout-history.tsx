@@ -14,6 +14,7 @@ import React, {
 
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
+import { captureException } from '@/lib/observability';
 import type { CompletedExerciseLog } from '@/lib/workouts';
 
 export type WorkoutSessionDoc = {
@@ -32,9 +33,14 @@ export type WorkoutSessionDoc = {
 type WorkoutHistoryValue = {
   sessions: WorkoutSessionDoc[];
   loading: boolean;
+  error: Error | null;
 };
 
-const DEFAULT_VALUE: WorkoutHistoryValue = { sessions: [], loading: true };
+const DEFAULT_VALUE: WorkoutHistoryValue = {
+  sessions: [],
+  loading: true,
+  error: null,
+};
 
 export const WorkoutHistoryContext =
   createContext<WorkoutHistoryValue>(DEFAULT_VALUE);
@@ -47,17 +53,20 @@ export function WorkoutHistoryProvider({
   const { user } = useAuth();
   const [sessions, setSessions] = useState<WorkoutSessionDoc[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     if (!user) {
       setSessions([]);
       setLoading(false);
+      setError(null);
       return;
     }
     setLoading(true);
+    setError(null);
     const q = query(
       collection(db, 'users', user.uid, 'workouts'),
-      orderBy('completedAt', 'desc')
+      orderBy('completedAt', 'desc'),
     );
     const unsub = onSnapshot(
       q,
@@ -89,15 +98,22 @@ export function WorkoutHistoryProvider({
         });
         setSessions(list);
         setLoading(false);
+        setError(null);
       },
-      () => setLoading(false)
+      (err) => {
+        captureException(err, {
+          tags: { area: 'workout-history', op: 'subscribe' },
+        });
+        setError(err);
+        setLoading(false);
+      },
     );
     return unsub;
   }, [user]);
 
   const value = useMemo<WorkoutHistoryValue>(
-    () => ({ sessions, loading }),
-    [sessions, loading]
+    () => ({ sessions, loading, error }),
+    [sessions, loading, error],
   );
 
   return (

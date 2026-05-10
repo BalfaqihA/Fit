@@ -6,12 +6,12 @@ import {
   Alert,
   Dimensions,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
@@ -74,7 +74,7 @@ export default function RunExercise() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { index } = useLocalSearchParams<{ index: string }>();
-  const idx = Number(index ?? '0');
+  const rawIdx = Number(index ?? '0');
 
   const {
     session,
@@ -84,7 +84,16 @@ export default function RunExercise() {
     reset,
     minutes,
     calories,
+    isPaused,
+    pause,
+    resume,
   } = useWorkoutSession();
+
+  // Clamp the URL param so a deep-link to /workout/run/99 with only 5
+  // exercises can't read past the end of the array.
+  const idx = Number.isFinite(rawIdx) && planExercises.length > 0
+    ? Math.max(0, Math.min(rawIdx, planExercises.length - 1))
+    : 0;
 
   const [actualSets, setActualSets] = useState(0);
   useEffect(() => {
@@ -183,7 +192,19 @@ export default function RunExercise() {
         <Text style={styles.headerTitle}>
           Exercise {idx + 1} of {totalCount}
         </Text>
-        <View style={{ width: 40 }} />
+        <Pressable
+          onPress={isPaused ? resume : pause}
+          style={styles.closeBtn}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={isPaused ? 'Resume workout' : 'Pause workout'}
+        >
+          <Ionicons
+            name={isPaused ? 'play' : 'pause'}
+            size={22}
+            color={COLORS.text}
+          />
+        </Pressable>
       </View>
 
       <View style={styles.progressTrack}>
@@ -355,6 +376,7 @@ export default function RunExercise() {
         <PrimaryButton
           label={isLast ? 'Finish Workout' : 'Next Exercise'}
           onPress={onNext}
+          disabled={isPaused}
           icon={
             <Ionicons
               name={isLast ? 'checkmark-circle' : 'arrow-forward'}
@@ -364,6 +386,26 @@ export default function RunExercise() {
           }
         />
       </View>
+
+      {isPaused && (
+        <View style={styles.pauseOverlay} pointerEvents="auto">
+          <View style={styles.pauseCard}>
+            <View style={styles.pauseIcon}>
+              <Ionicons name="pause" size={36} color={COLORS.primary} />
+            </View>
+            <Text style={styles.pauseTitle}>Workout paused</Text>
+            <Text style={styles.pauseMeta}>
+              {minutes}m · {calories} kcal so far
+            </Text>
+            <View style={{ height: 16 }} />
+            <PrimaryButton
+              label="Resume"
+              onPress={resume}
+              icon={<Ionicons name="play" size={18} color="#fff" />}
+            />
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -552,5 +594,40 @@ const makeStyles = (COLORS: Palette) =>
       backgroundColor: COLORS.bg,
       borderTopWidth: 1,
       borderTopColor: COLORS.divider,
+    },
+    pauseOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 28,
+    },
+    pauseCard: {
+      backgroundColor: COLORS.card,
+      borderRadius: RADIUS.lg,
+      padding: 24,
+      alignSelf: 'stretch',
+      alignItems: 'center',
+      ...SHADOWS.card,
+    },
+    pauseIcon: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      backgroundColor: COLORS.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 12,
+    },
+    pauseTitle: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: COLORS.text,
+      marginBottom: 4,
+    },
+    pauseMeta: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: COLORS.muted,
     },
   });

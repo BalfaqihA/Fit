@@ -6,13 +6,14 @@ import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ResumeWorkoutPrompt } from '@/components/resume-workout-prompt';
 import { WeighInBanner } from '@/components/weigh-in-banner';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useAuth } from '@/hooks/use-auth';
@@ -207,6 +208,7 @@ export default function HomeTab() {
         </View>
 
         <WeighInBanner />
+        <ResumeWorkoutPrompt />
 
         <LinearGradient
           colors={

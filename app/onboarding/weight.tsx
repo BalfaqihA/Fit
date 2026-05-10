@@ -1,20 +1,22 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette } from '@/constants/design';
 import { useOnboarding } from '@/hooks/use-onboarding';
 import { useTheme } from '@/hooks/use-theme';
+import { parseWeight } from '@/lib/validation';
 
 const presets = [50, 70, 90, 110];
 
@@ -28,18 +30,41 @@ export default function WeightPage() {
   const [weight, setWeight] = useState(
     answers.weightKg ? String(answers.weightKg) : '70'
   );
+  const [error, setError] = useState<string | null>(null);
 
   const progressItems = useMemo(
     () => new Array(TOTAL_STEPS).fill(null).map((_, i) => i),
     []
   );
 
+  // Persist valid intermediate values so navigating back and forth doesn't
+  // lose the answer if the user never taps Next on this screen.
+  useEffect(() => {
+    const parsed = parseWeight(weight, 'kg');
+    if (parsed.ok) setAnswer('weightKg', parsed.value);
+  }, [weight, setAnswer]);
+
   const onChangeWeight = (value: string) => {
     setWeight(value.replace(/[^0-9]/g, ''));
+    if (error) setError(null);
+  };
+
+  const onNext = () => {
+    const parsed = parseWeight(weight, 'kg');
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
+    setAnswer('weightKg', parsed.value);
+    router.push('/onboarding/goal' as never);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <View style={styles.container}>
         <View style={styles.topRow}>
           <BackButton />
@@ -92,18 +117,12 @@ export default function WeightPage() {
             ))}
           </View>
 
-          <View style={styles.infoRow}>
-          </View>
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </View>
 
-        <PrimaryButton
-          label="Next"
-          onPress={() => {
-            setAnswer('weightKg', Number(weight) || 0);
-            router.push('/onboarding/goal' as never);
-          }}
-        />
+        <PrimaryButton label="Next" onPress={onNext} />
       </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -218,15 +237,11 @@ const makeStyles = (COLORS: Palette) =>
       fontWeight: '500',
       color: COLORS.muted,
     },
-    infoRow: {
-      marginTop: 28,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    infoText: {
-      marginLeft: 6,
+    errorText: {
+      marginTop: 16,
+      textAlign: 'center',
       fontSize: 13,
-      color: COLORS.muted,
+      fontWeight: '600',
+      color: COLORS.accent,
     },
   });

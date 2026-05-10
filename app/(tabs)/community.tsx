@@ -1,18 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
-  SafeAreaView,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PostCard } from '@/components/post-card';
 import { StoryRing } from '@/components/story-ring';
@@ -46,6 +47,15 @@ export default function CommunityTab() {
   } = usePosts();
 
   const storyGroups = getStoriesGrouped();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    retry();
+    // The feed listener is realtime, so the visible refresh spinner just
+    // needs a brief tick to feel responsive.
+    setTimeout(() => setRefreshing(false), 600);
+  }, [retry]);
 
   const handleLikeToggle = useCallback(
     async (post: FeedPost) => {
@@ -236,6 +246,14 @@ export default function CommunityTab() {
           if (hasMore && !loadingMore && !loading && !error) loadMore();
         }}
         onEndReachedThreshold={0.4}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        }
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => (
           <PostCard

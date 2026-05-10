@@ -1,6 +1,6 @@
 {
   "softThreshold": 0.40,
-  "hardThreshold": 0.65,
+  "hardThreshold": 0.70,
   "threshold": 0.45,
   "styleRouting": {
     "beginner": "beginner",
@@ -359,6 +359,17 @@
           "shortAnswer": "If it's been 3+ days of fatigue, **rest** — don't push.",
           "explanation": "Real burnout needs real rest. A forced session on top of exhaustion sets you back. Take 1–2 days off, then ease in.",
           "suggestion": "Want recovery tips for a real rest day?"
+        },
+        {
+          "style": "step",
+          "shortAnswer": "Last session was **{lastWorkoutDaysAgo} day(s) ago** — that's why it feels heavy.",
+          "explanation": "Your adherence is **{adherenceLabel}** right now. The longer the gap the higher the activation cost. The fix is short, easy, and on the calendar — not long, hard, and aspirational.",
+          "actionSteps": [
+            "Pick the easiest item on today's plan",
+            "Set a 15-minute timer — no more",
+            "Stop guilt-free if you hit the bell"
+          ],
+          "action": { "label": "Start the easy session", "type": "navigate", "route": "/(tabs)/" }
         }
       ]
     },
@@ -674,6 +685,12 @@
             "Total minutes (target: 150+)",
             "Streak length (don't break it)"
           ]
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Body: weight {weightDirectionWord} {weightDeltaKg}kg over the month.",
+          "explanation": "Plan adherence: **{adherenceLabel}**. Top lift: {topPRName} at {topPRWeightKg}kg. Trend matters more than any single week.",
+          "suggestion": "Want me to flag where you're stalling?"
         }
       ]
     },
@@ -968,13 +985,12 @@
     {
       "tag": "form_check",
       "patterns": [
-        "how do i squat", "how to do a deadlift", "is my squat form ok",
-        "how to bench press", "form for pull ups", "how do i do a row",
-        "how to overhead press", "deadlift form", "squat form", "bench form",
-        "form for deadlift", "how to do squats properly", "proper deadlift technique",
+        "how do i do a row", "how to overhead press",
         "form check", "how to do pushups", "how to do lunges", "lunge form",
         "form for rows", "press form", "form for overhead press",
-        "how to do a hip hinge", "how to brace core", "form tips for squat"
+        "how to do a hip hinge", "how to brace core", "general lifting form",
+        "form basics", "how do i lift safely", "lifting form rules",
+        "form for accessory lifts", "form tips please"
       ],
       "responses": [
         {
@@ -1564,6 +1580,391 @@
           "style": "step",
           "shortAnswer": "Cool — opening Settings.",
           "action": { "label": "Open Settings", "type": "navigate", "route": "/(tabs)/dashboard" }
+        }
+      ]
+    },
+    {
+      "tag": "exercise_squat",
+      "patterns": [
+        "how do i squat", "squat form", "back squat technique",
+        "how to squat properly", "squat tips", "what muscles does squat work",
+        "squat depth", "how to squat deeper", "squat cues",
+        "front squat vs back squat", "are squats safe for knees",
+        "should i squat below parallel", "how to brace for a squat",
+        "low bar vs high bar squat", "goblet squat tips", "form tips for squat",
+        "is my squat form ok", "how to do squats properly", "squat technique",
+        "squat coaching"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "**Squat** — full breakdown.",
+          "actionSteps": [
+            "Bar on upper traps, feet shoulder-width, toes slightly out",
+            "Brace your core like you're about to take a punch",
+            "Sit hips back AND down, knees track over toes",
+            "Hit at least parallel — hip crease below the knee cap",
+            "Drive through the whole foot to stand tall"
+          ],
+          "suggestion": "Want help picking the load for today?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Squats hit quads, glutes, adductors, and core.",
+          "explanation": "High-bar biases quads; low-bar biases posterior chain. Stance width and bar position swap which tissues do the work.",
+          "actionSteps": [
+            "Quads dominant: high-bar, narrower stance, more upright",
+            "Posterior chain: low-bar, wider stance, more hip hinge",
+            "Mobility limited: try heel-elevated or front squat first"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "{firstName}, squats are the most important leg lift you'll learn.",
+          "explanation": "Don't chase a number — chase clean reps. Bodyweight first until depth and bracing feel automatic, then add load slowly.",
+          "suggestion": "Start with goblet squats (dumbbell at chest) for 3 sets of 10."
+        }
+      ]
+    },
+    {
+      "tag": "exercise_deadlift",
+      "patterns": [
+        "how do i deadlift", "how to deadlift", "deadlift form",
+        "deadlift cues", "deadlift technique", "form for deadlift",
+        "proper deadlift technique", "RDL vs conventional", "romanian deadlift",
+        "sumo vs conventional deadlift", "how to set up for a deadlift",
+        "deadlift starting position", "is my deadlift form ok",
+        "how to deadlift safely", "deadlift back rounding",
+        "deadlift hurts my back", "how to lock out a deadlift",
+        "trap bar deadlift form", "deadlift breathing", "deadlift coaching"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "**Deadlift** — full breakdown.",
+          "actionSteps": [
+            "Bar over mid-foot, shins ~1 inch from the bar",
+            "Hinge hips back, grip outside the knees",
+            "Chest up, lats tight (squeeze oranges in your armpits)",
+            "Push the floor away — don't yank the bar",
+            "Lock hips and knees out together, lower with control"
+          ],
+          "suggestion": "Want a warm-up ramp for your working sets?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Deadlifts are a hip-hinge expression of full-body tension.",
+          "explanation": "RDLs train the eccentric hinge and bias hamstrings. Conventional pulls hit hamstrings + erectors. Sumo trades back stress for hip stress.",
+          "actionSteps": [
+            "Conventional: shoulders slightly ahead of bar at start",
+            "Sumo: torso more upright, hips closer to bar",
+            "RDL: bar travels along legs, slight knee bend, stop at mid-shin"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "{firstName}, deadlifts look intimidating but the cue is simple: push the floor away.",
+          "explanation": "If your back rounds you're going too heavy. Drop weight, film a side angle, fix the hinge.",
+          "suggestion": "Try 3 sets of 5 with a weight you could do for 8 — leave reps in the tank."
+        }
+      ]
+    },
+    {
+      "tag": "exercise_bench_press",
+      "patterns": [
+        "how to bench press", "bench press form", "bench press technique",
+        "bench form", "how to bench", "how to do a bench press",
+        "incline vs flat bench", "close grip bench press", "bench press tips",
+        "bench press cues", "is my bench form ok", "how to bench press more",
+        "bench press hurts shoulders", "bench press grip width",
+        "leg drive on bench press", "bench press arch", "dumbbell bench press form",
+        "what muscles does bench press work", "bench press lockout",
+        "bench press coaching"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "**Bench press** — full breakdown.",
+          "actionSteps": [
+            "Feet planted, slight upper-back arch, shoulder blades retracted",
+            "Grip just outside shoulder-width, wrists stacked over elbows",
+            "Lower bar to lower-mid chest, elbows ~45° from torso",
+            "Drive feet into the floor as you press the bar back up",
+            "Lockout straight up — don't drift toward your face"
+          ],
+          "suggestion": "Want a spot or a safety-bar setup tip?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Bench press is chest, anterior delts, and triceps — biased by grip and angle.",
+          "explanation": "Close grip emphasizes triceps; wide grip biases pecs but stresses shoulders. Incline shifts work to upper chest and front delts.",
+          "actionSteps": [
+            "Close grip: index fingers ~16in apart, elbows tight",
+            "Incline: 30° is the sweet spot for upper chest",
+            "Flared elbows = shoulder pain — keep them tucked"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "{firstName}, the bench press is a full-body lift — not just a chest exercise.",
+          "explanation": "Leg drive, retracted shoulder blades, and a tight upper back all add to the press. Treat it like a squat lying down.",
+          "suggestion": "Always bench with a spotter or in a power rack with safety pins."
+        }
+      ]
+    },
+    {
+      "tag": "exercise_pullup",
+      "patterns": [
+        "how to do a pull up", "pull up form", "how to do pullups",
+        "pullup progressions", "can't do a pullup", "pullup vs chinup",
+        "how to get my first pullup", "pullup grip", "pull up technique",
+        "assisted pullup", "negative pullups", "how to increase pullups",
+        "pull up tips", "what muscles do pullups work", "pullup form check",
+        "form for pull ups", "pullup training", "chinup form",
+        "wide grip vs neutral grip pullup", "pullup coaching"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "**Pull-up** — full breakdown.",
+          "actionSteps": [
+            "Hang from the bar, hands just outside shoulder-width",
+            "Set your shoulders down — pull your shoulder blades into your back pockets",
+            "Drive elbows down and back, chest toward the bar",
+            "Chin clears the bar at the top, full hang at the bottom",
+            "Control the lower — eccentric is where the gains live"
+          ],
+          "suggestion": "Want a no-pullup-yet progression plan?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Pull-ups train lats, biceps, mid-back, and grip.",
+          "explanation": "Chin-ups (underhand) are easier and more biceps-dominant. Wide grip biases lats more, neutral grip is shoulder-friendly.",
+          "actionSteps": [
+            "Chin-up: supinated grip, shoulder-width — easier, more biceps",
+            "Pull-up: pronated, just outside shoulder-width — harder, more lats",
+            "Neutral grip: palms facing — best for cranky shoulders"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "{firstName}, can't do one yet? Build up — every strong puller started here.",
+          "explanation": "The fastest path is heavy negatives + assisted reps. Don't grind 100 bad-form reps — build the pattern correctly.",
+          "actionSteps": [
+            "Negatives: jump to top, lower for 5 seconds. 3 sets of 5",
+            "Band-assisted: loop a band around the bar, foot in it",
+            "Inverted rows: feet on floor, bar at chest height — same pattern, easier"
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "cardio_advice",
+      "patterns": [
+        "should i do cardio", "how much cardio", "cardio per week",
+        "HIIT vs steady state", "is cardio bad for muscle gain",
+        "cardio after lifting", "cardio before or after lifting",
+        "best cardio for fat loss", "is running good for fitness",
+        "should i run or cycle", "what cardio should i do",
+        "do i need cardio", "cardio frequency", "low intensity cardio",
+        "zone 2 cardio", "stairmaster vs treadmill", "incline walking",
+        "is jumping rope good cardio", "rowing for cardio", "elliptical workout"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "Cardio: 2–4 sessions/week, 20–40 min each, mix intensities.",
+          "actionSteps": [
+            "2× zone 2 (conversational pace) for heart health and recovery",
+            "1–2× higher intensity (HIIT or tempo) for fitness",
+            "Schedule cardio AFTER lifting on the same day, or on rest days",
+            "Lower-impact options (bike, row, incline walk) save your joints"
+          ],
+          "suggestion": "Want a sample weekly cardio template?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Steady-state and HIIT do different jobs — both belong in a program.",
+          "explanation": "Zone 2 builds aerobic capacity and recovery; HIIT raises VO2max but is very fatiguing. Excessive HIIT eats into lifting recovery — keep it 1–2× per week.",
+          "actionSteps": [
+            "Zone 2: heart rate 60–70% of max, 30–60 min, can hold a conversation",
+            "HIIT: 30s hard / 90s easy × 6–10, total ~20 min",
+            "If lifting and cardio same day, lift first"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "{firstName}, cardio doesn't have to be punishing.",
+          "explanation": "A brisk 30-min walk on incline 5× a week is more useful than smashing yourself once. Consistency beats intensity here.",
+          "suggestion": "Start with a 20-minute walk after dinner. That's it. You can build from there."
+        }
+      ]
+    },
+    {
+      "tag": "weight_loss_tips",
+      "patterns": [
+        "how to lose weight", "fat loss tips", "best way to cut",
+        "calorie deficit", "how to lose fat", "how do i cut",
+        "weight loss advice", "lose belly fat", "how to drop fat",
+        "fastest way to lose weight", "how many calories to lose weight",
+        "lose weight without losing muscle", "fat loss diet",
+        "how to start cutting", "shred fat", "how to lose weight fast",
+        "lose 10 pounds", "fat burning tips", "lean down advice",
+        "weight cut strategy"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "Fat loss in 4 levers — pick all four for fastest progress.",
+          "actionSteps": [
+            "Eat in a 300–500 kcal deficit (not more — it backfires)",
+            "Hit 1.6–2.2g of protein per kg of bodyweight to keep muscle",
+            "Lift heavy 3–5×/week — gives your body a reason to keep muscle",
+            "Walk 8–10k steps/day; this is the cheapest cardio there is"
+          ],
+          "suggestion": "Want help estimating your daily calories?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Slow cuts (0.5–1% bodyweight/week) preserve muscle and sanity.",
+          "explanation": "Aggressive cuts work for ~3 weeks then crash adherence. The deficit is the king variable; protein protects muscle; cardio is a tool, not the answer.",
+          "actionSteps": [
+            "Track calories for 1 week to learn your maintenance",
+            "Subtract 300–500 kcal — that's your cutting target",
+            "Re-weigh weekly average; if not down in 2–3 weeks, cut another 10%"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "{firstName}, the boring answer is the only one that works: small deficit + high protein + lifting.",
+          "explanation": "There's no special food, no magic timing, no detox tea. Calories in vs calories out, with enough protein to keep muscle.",
+          "suggestion": "Pick ONE habit this week — track protein, hit 8k steps, or log every meal. Just one."
+        }
+      ]
+    },
+    {
+      "tag": "muscle_gain_tips",
+      "patterns": [
+        "how to build muscle", "how to gain muscle", "bulking advice",
+        "hypertrophy tips", "gain mass", "how to bulk",
+        "how to put on muscle", "muscle building tips", "lean bulk",
+        "how to grow muscle", "how to get bigger", "best way to build muscle",
+        "muscle gain diet", "calories for bulking", "protein for muscle gain",
+        "skinny guy how to gain muscle", "hardgainer tips",
+        "how much to eat to gain muscle", "training for hypertrophy",
+        "how to maximize muscle growth"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "Muscle growth = progressive overload + slight calorie surplus + protein.",
+          "actionSteps": [
+            "Eat ~200–400 kcal above maintenance (lean bulk)",
+            "Hit 1.6–2.2g of protein per kg of bodyweight",
+            "Train 4–6 sets per muscle group, 5–30 reps per set, 8–20 weekly sets",
+            "Progressive overload: add reps OR weight each week"
+          ],
+          "suggestion": "Want a 4-day hypertrophy split?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Volume + proximity to failure are the two non-negotiables.",
+          "explanation": "Most lifters under-eat or under-train. 10–20 hard sets per muscle per week, taken close to failure (RIR 0–3), in a small surplus is the recipe.",
+          "actionSteps": [
+            "Compounds for the bulk of stimulus, isolations for finishing",
+            "Track top set weight × reps weekly — must trend up",
+            "Sleep 7–9 hours; under-recovered tissue can't grow"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "{firstName}, you'll grow muscle if you eat enough, lift hard, and sleep.",
+          "explanation": "Newcomers grow fastest because everything's a stimulus. Don't overcomplicate — show up, hit your sets, get bigger.",
+          "suggestion": "Eat one extra meal a day, hit your protein, and add weight to the bar weekly."
+        }
+      ]
+    },
+    {
+      "tag": "supplement_question",
+      "patterns": [
+        "should i take creatine", "creatine safe", "is creatine worth it",
+        "how much creatine", "creatine loading", "protein powder worth it",
+        "do i need protein powder", "whey vs casein", "BCAAs worth it",
+        "should i take BCAAs", "pre workout safe", "is pre workout bad",
+        "best supplements for muscle", "what supplements should i take",
+        "vitamin d supplement", "fish oil supplement", "magnesium for sleep",
+        "is creatine bad for kidneys", "supplements for fat loss",
+        "supplement stack"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "Only 3 supplements have strong evidence — the rest are optional.",
+          "actionSteps": [
+            "**Creatine monohydrate**: 5g/day, take whenever. Most-studied performance supp.",
+            "**Whey protein**: a convenient way to hit your daily protein target — not magic",
+            "**Vitamin D + omega-3**: useful for most people, especially in winter",
+            "Skip BCAAs if you eat enough protein. Skip fat burners — they don't work."
+          ],
+          "suggestion": "Want help calculating your daily protein target?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Creatine, whey, and caffeine are the only supps with consistent meta-analytic support.",
+          "explanation": "Creatine adds ~5–10% strength over months. Whey is just protein — same as eggs and chicken. BCAAs are redundant if total protein is met. Pre-workouts are mostly caffeine + flavor.",
+          "actionSteps": [
+            "Creatine: 5g/day, no loading needed unless you're impatient",
+            "Caffeine: 3–6 mg/kg ~30 min pre-training",
+            "Whey: 25–40g per shake, 1–2 shakes/day if needed"
+          ]
+        },
+        {
+          "style": "beginner",
+          "shortAnswer": "{firstName}, supplements are the last 5% — diet and training are the first 95%.",
+          "explanation": "Don't waste money on stacks until you're consistently hitting protein, calories, sleep, and progressive overload.",
+          "suggestion": "If you take only one thing: 5g of creatine monohydrate a day."
+        }
+      ]
+    },
+    {
+      "tag": "consult_me",
+      "patterns": [
+        "give me a consultation", "analyze my progress", "what's my report",
+        "how am i doing", "personal report", "give me a coaching summary",
+        "where do i stand", "review my training", "consult me",
+        "summarize my training", "coach me", "my fitness summary",
+        "tell me about my progress", "weekly review", "training assessment",
+        "how is my training going", "give me my stats", "personalized review"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "{firstName}, here's where you stand.",
+          "actionSteps": [
+            "**Workouts**: {totalWorkouts} done, {streak}-day streak (best: {longestStreak})",
+            "**Adherence**: {adherenceLabel} — averaging {daysPerWeek} planned/week",
+            "**Weight**: {currentWeightKg}kg, {weightDirectionWord} {weightDeltaKg}kg in 30d",
+            "**Top PR**: {topPRName} — {topPRWeightKg}kg",
+            "**Last session**: {lastWorkoutDaysAgo} day(s) ago"
+          ],
+          "suggestion": "Want me to focus on plan, nutrition, or recovery next?"
+        },
+        {
+          "style": "advanced",
+          "shortAnswer": "Snapshot at training day {trainingAgeDays}.",
+          "explanation": "Adherence over the last 30 days is {adherenceLabel}, last logged {lastWorkoutDaysAgo} day(s) ago. Goal on file: {goal}. Level: {fitnessLevel}.",
+          "actionSteps": [
+            "Strength: best lift is {topPRName} at {topPRWeightKg}kg",
+            "Body: {weightDirectionWord} {weightDeltaKg}kg over the month — current {currentWeightKg}kg",
+            "Streak: {streak} active / {longestStreak} all-time best"
+          ],
+          "suggestion": "Pick a thread — programming, nutrition, recovery — and we go deeper."
+        },
+        {
+          "style": "motivational",
+          "shortAnswer": "{firstName}, {totalWorkouts} workouts in. That's a habit, not a phase.",
+          "explanation": "{streak} days strong right now (your best was {longestStreak}). Weight {weightDirectionWord} {weightDeltaKg}kg, plan adherence {adherenceLabel}. You're building something real.",
+          "suggestion": "What do you want to push on next?"
         }
       ]
     }

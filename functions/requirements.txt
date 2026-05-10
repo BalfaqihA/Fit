@@ -1,2 +1,5 @@
-firebase-functions==0.4.2
-firebase-admin==6.5.0
+firebase-functions>=0.4.2,<1.0.0
+firebase-admin>=6.5.0,<8.0.0
+# Pulled in transitively by firebase-admin, but declared explicitly because
+# main.py imports `Increment` from `google.cloud.firestore_v1` directly.
+google-cloud-firestore>=2.16.0,<3.0.0

@@ -1,41 +1,55 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette } from '@/constants/design';
 import { useOnboarding } from '@/hooks/use-onboarding';
 import { useTheme } from '@/hooks/use-theme';
+import { parseIntInRange } from '@/lib/validation';
 
 const TOTAL_STEPS = 9;
 const CURRENT_STEP = 1;
+
+const AGE_MIN = 13;
+const AGE_MAX = 120;
 
 export default function AgePage() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { answers, setAnswer } = useOnboarding();
   const [age, setAge] = useState(answers.age ?? 25);
+  const [error, setError] = useState<string | null>(null);
 
   const progressItems = useMemo(
     () => new Array(TOTAL_STEPS).fill(null).map((_, i) => i),
     []
   );
 
+  // Persist a valid value the moment the user changes it.
+  useEffect(() => {
+    if (age >= AGE_MIN && age <= AGE_MAX) setAnswer('age', age);
+  }, [age, setAnswer]);
+
   const decreaseAge = () => {
-    setAge((prev) => Math.max(1, prev - 1));
+    setAge((prev) => Math.max(AGE_MIN, prev - 1));
+    if (error) setError(null);
   };
 
   const increaseAge = () => {
-    setAge((prev) => prev + 1);
+    setAge((prev) => Math.min(AGE_MAX, prev + 1));
+    if (error) setError(null);
   };
 
   const onChangeAge = (value: string) => {
@@ -45,10 +59,25 @@ export default function AgePage() {
       return;
     }
     setAge(Number(cleaned));
+    if (error) setError(null);
+  };
+
+  const onNext = () => {
+    const parsed = parseIntInRange(String(age), AGE_MIN, AGE_MAX);
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
+    setAnswer('age', parsed.value);
+    router.push('/onboarding/gender' as never);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <View style={styles.container}>
         <View style={styles.topRow}>
           <BackButton />
@@ -97,16 +126,13 @@ export default function AgePage() {
               <Ionicons name="add" size={24} color="#FFFFFF" />
             </Pressable>
           </View>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </View>
 
-        <PrimaryButton
-          label="Next"
-          onPress={() => {
-            setAnswer('age', age);
-            router.push('/onboarding/gender' as never);
-          }}
-        />
+        <PrimaryButton label="Next" onPress={onNext} />
       </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -219,5 +245,12 @@ const makeStyles = (COLORS: Palette) =>
       backgroundColor: COLORS.primary,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    errorText: {
+      marginTop: 24,
+      textAlign: 'center',
+      fontSize: 13,
+      fontWeight: '600',
+      color: COLORS.accent,
     },
   });

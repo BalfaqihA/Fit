@@ -1,24 +1,34 @@
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette } from '@/constants/design';
 import { useOnboarding } from '@/hooks/use-onboarding';
 import { useTheme } from '@/hooks/use-theme';
+import { parseIntInRange } from '@/lib/validation';
 
 type Unit = 'cm' | 'ft';
 
 const TOTAL_STEPS = 9;
 const CURRENT_STEP = 3;
+
+const HEIGHT_CM_MIN = 90;
+const HEIGHT_CM_MAX = 250;
+
+function toCm(num: number, unit: Unit): number {
+  return unit === 'ft' ? Math.round(num * 30.48) : num;
+}
 
 export default function HeightPage() {
   const { COLORS } = useTheme();
@@ -28,18 +38,49 @@ export default function HeightPage() {
     answers.heightCm ? String(answers.heightCm) : '170'
   );
   const [unit, setUnit] = useState<Unit>('cm');
+  const [error, setError] = useState<string | null>(null);
 
   const progressItems = useMemo(
     () => new Array(TOTAL_STEPS).fill(null).map((_, i) => i),
     []
   );
 
+  // Persist valid intermediate values so navigating back/forward keeps them.
+  useEffect(() => {
+    const num = Number(height);
+    if (!Number.isFinite(num)) return;
+    const cm = toCm(num, unit);
+    if (cm >= HEIGHT_CM_MIN && cm <= HEIGHT_CM_MAX) {
+      setAnswer('heightCm', cm);
+    }
+  }, [height, unit, setAnswer]);
+
   const onChangeHeight = (value: string) => {
     setHeight(value.replace(/[^0-9]/g, ''));
+    if (error) setError(null);
+  };
+
+  const onNext = () => {
+    if (!height) {
+      setError('Enter your height.');
+      return;
+    }
+    const cm = toCm(Number(height), unit);
+    const parsed = parseIntInRange(String(cm), HEIGHT_CM_MIN, HEIGHT_CM_MAX);
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
+    setAnswer('heightCm', parsed.value);
+    router.push('/onboarding/weight' as never);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <View style={styles.container}>
         <View style={styles.topRow}>
           <BackButton />
@@ -115,20 +156,13 @@ export default function HeightPage() {
               </Pressable>
             </View>
 
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
           </View>
         </View>
 
-        <PrimaryButton
-          label="Next"
-          onPress={() => {
-            const num = Number(height) || 0;
-            // Convert ft input → cm canonical value.
-            const heightCm = unit === 'ft' ? Math.round(num * 30.48) : num;
-            setAnswer('heightCm', heightCm);
-            router.push('/onboarding/weight' as never);
-          }}
-        />
+        <PrimaryButton label="Next" onPress={onNext} />
       </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -252,10 +286,11 @@ const makeStyles = (COLORS: Palette) =>
     unitButtonTextInactive: {
       color: COLORS.text,
     },
-    rangeText: {
-      marginTop: 16,
+    errorText: {
+      marginTop: 14,
       textAlign: 'center',
       fontSize: 13,
-      color: COLORS.muted,
+      fontWeight: '600',
+      color: COLORS.accent,
     },
   });

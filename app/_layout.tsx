@@ -3,7 +3,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
 import 'react-native-reanimated';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ErrorBoundary } from '@/components/error-boundary';
 import { AuthProvider } from '@/contexts/auth';
 import { CommunityProvider } from '@/contexts/community';
 import { OnboardingProvider } from '@/contexts/onboarding';
@@ -31,6 +33,12 @@ function WeighInScheduler() {
   const { user } = useAuth();
   const { profile, hydrated } = useUserProfile();
   const armed = useRef(false);
+
+  // Re-arm whenever the user identity changes (sign out / sign in as a
+  // different account) so the prompt can fire again for the new user.
+  useEffect(() => {
+    armed.current = false;
+  }, [user?.uid]);
 
   useEffect(() => {
     if (!user || !hydrated || armed.current) return;
@@ -125,6 +133,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   return (
+    <SafeAreaProvider>
+    <ErrorBoundary>
     <ThemeProvider>
       <AuthProvider>
         <UserProfileProvider>
@@ -155,5 +165,7 @@ export default function RootLayout() {
         </UserProfileProvider>
       </AuthProvider>
     </ThemeProvider>
+    </ErrorBoundary>
+    </SafeAreaProvider>
   );
 }

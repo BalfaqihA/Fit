@@ -7,20 +7,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
 import { mapAuthError, signUpWithEmail } from '@/lib/auth';
 import { useGoogleSignIn } from '@/lib/google-auth';
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { parseEmail, parsePassword } from '@/lib/validation';
 
 const GRADIENT_DARK = ['#1A1A2E', '#16213E', '#2D1B5E'] as const;
 const GRADIENT_BRAND = ['#8E54E9', '#6C56D9'] as const;
@@ -126,12 +125,14 @@ export default function SignupPage() {
       setError('Please enter your full name.');
       return;
     }
-    if (!EMAIL_REGEX.test(email.trim())) {
-      setError('Please enter a valid email address.');
+    const parsedEmail = parseEmail(email);
+    if (!parsedEmail.ok) {
+      setError(parsedEmail.error);
       return;
     }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
+    const parsedPassword = parsePassword(password);
+    if (!parsedPassword.ok) {
+      setError(parsedPassword.error);
       return;
     }
     if (password !== confirmPassword) {
@@ -141,7 +142,11 @@ export default function SignupPage() {
 
     try {
       setLoading(true);
-      await signUpWithEmail({ fullName, email, password });
+      await signUpWithEmail({
+        fullName: fullName.trim(),
+        email: parsedEmail.value,
+        password,
+      });
       router.replace('/onboarding' as never);
     } catch (e) {
       setError(mapAuthError(e));
@@ -154,7 +159,7 @@ export default function SignupPage() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -292,8 +297,23 @@ export default function SignupPage() {
 
             <Text style={styles.termsText}>
               By signing up, you agree to our{' '}
-              <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
-              <Text style={styles.termsLink}>Privacy Policy</Text>
+              <Text
+                style={styles.termsLink}
+                onPress={() =>
+                  router.push('/(tabs)/settings/terms-of-service' as never)
+                }
+              >
+                Terms of Service
+              </Text>{' '}
+              and{' '}
+              <Text
+                style={styles.termsLink}
+                onPress={() =>
+                  router.push('/(tabs)/settings/privacy-policy' as never)
+                }
+              >
+                Privacy Policy
+              </Text>
             </Text>
           </View>
         </ScrollView>

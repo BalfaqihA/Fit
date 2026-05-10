@@ -8,12 +8,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
@@ -28,16 +28,19 @@ export default function StoryCompose() {
 
   const [imageUri, setImageUri] = useState<string | undefined>();
   const [caption, setCaption] = useState('');
+  const [permissionDenied, setPermissionDenied] = useState(false);
 
   const pickImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
+      setPermissionDenied(true);
       Alert.alert(
         'Permission needed',
-        'We need access to your photos to create a story.'
+        'We need access to your photos to create a story. You can enable it in your device settings.'
       );
       return;
     }
+    setPermissionDenied(false);
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.8,
@@ -71,7 +74,7 @@ export default function StoryCompose() {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <View style={styles.body}>
@@ -81,6 +84,18 @@ export default function StoryCompose() {
               <Pressable style={styles.changeBtn} onPress={pickImage}>
                 <Ionicons name="image-outline" size={16} color="#FFFFFF" />
                 <Text style={styles.changeBtnText}>Change</Text>
+              </Pressable>
+            </View>
+          ) : permissionDenied ? (
+            <View style={styles.placeholder}>
+              <Ionicons name="lock-closed-outline" size={32} color={COLORS.muted} />
+              <Text style={styles.placeholderText}>Photos access denied</Text>
+              <Text style={styles.helperText}>
+                Enable photo access in Settings, then tap Try again.
+              </Text>
+              <Pressable style={styles.changeBtn} onPress={pickImage}>
+                <Ionicons name="refresh" size={16} color="#FFFFFF" />
+                <Text style={styles.changeBtnText}>Try again</Text>
               </Pressable>
             </View>
           ) : (

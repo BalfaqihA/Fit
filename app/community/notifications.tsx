@@ -4,12 +4,12 @@ import { router } from 'expo-router';
 import React, { useEffect, useMemo } from 'react';
 import {
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { type Palette, RADIUS } from '@/constants/design';

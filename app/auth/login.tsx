@@ -6,18 +6,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
 import { mapAuthError, signInWithEmail } from '@/lib/auth';
 import { useGoogleSignIn } from '@/lib/google-auth';
+import { parseEmail } from '@/lib/validation';
 
 type Styles = ReturnType<typeof makeStyles>;
 
@@ -95,13 +96,18 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     setError(null);
-    if (!email.trim() || !password) {
-      setError('Please enter your email and password.');
+    const parsedEmail = parseEmail(email);
+    if (!parsedEmail.ok) {
+      setError(parsedEmail.error);
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
       return;
     }
     try {
       setLoading(true);
-      await signInWithEmail({ email, password });
+      await signInWithEmail({ email: parsedEmail.value, password });
       // The AuthGate in app/_layout.tsx will redirect to /(tabs) once user is set.
     } catch (e) {
       setError(mapAuthError(e));
@@ -130,7 +136,7 @@ export default function LoginPage() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
           showsVerticalScrollIndicator={false}

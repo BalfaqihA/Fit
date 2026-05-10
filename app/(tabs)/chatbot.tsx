@@ -6,13 +6,13 @@ import {
   Linking,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Markdown from 'react-native-markdown-display';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
@@ -24,6 +24,7 @@ import {
   sendChat,
 } from '@/lib/chatbot';
 import { captureException } from '@/lib/observability';
+import { randomId } from '@/lib/uuid';
 
 type Message = {
   id: string;
@@ -35,6 +36,8 @@ type Message = {
   quiz?: ChatQuiz;
   quizAnswered?: boolean;
   quizSelected?: number;
+  /** Stable per-quiz-attempt id reused on retry so the server can dedupe. */
+  quizAttemptId?: string;
   xpAwarded?: number;
 };
 
@@ -45,6 +48,31 @@ const initialMessages: Message[] = [
     text: "Hi! I'm your **FitLife coach**.\n\nAsk me about your plan, nutrition, motivation, or recovery — or type _quiz me_ for a knowledge check.",
   },
 ];
+
+/**
+ * Wraps Markdown rendering so a single malformed reply degrades to plain text
+ * instead of blanking the whole chat. The Markdown lib has thrown on
+ * unbalanced tokens before; falling back keeps the bubble readable.
+ */
+class SafeMarkdown extends React.Component<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  { children: string; style: any; fallbackStyle: object },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: Error) {
+    captureException(error, { tags: { area: 'chatbot.markdown' } });
+  }
+  render() {
+    if (this.state.failed) {
+      return <Text style={this.props.fallbackStyle}>{this.props.children}</Text>;
+    }
+    return <Markdown style={this.props.style}>{this.props.children}</Markdown>;
+  }
+}
 
 const SUGGESTIONS = [
   "What's my workout today?",
@@ -63,6 +91,9 @@ export default function ChatbotTab() {
   const [pending, setPending] = useState(false);
   const [lastIntent, setLastIntent] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+  // Synchronous guard against rapid double-taps that would slip past the
+  // `pending` state check (which only flips on the next render).
+  const inFlight = useRef(false);
 
   const buildHistory = (): ChatHistoryItem[] =>
     messages.slice(-10).map((m) => ({
@@ -80,7 +111,8 @@ export default function ChatbotTab() {
 
   const send = async (override?: string) => {
     const text = (override ?? draft).trim();
-    if (!text || pending) return;
+    if (!text || pending || inFlight.current) return;
+    inFlight.current = true;
 
     const userMsg: Message = {
       id: `u-${Date.now()}`,
@@ -114,17 +146,28 @@ export default function ChatbotTab() {
       });
     } finally {
       setPending(false);
+      inFlight.current = false;
       scrollRef.current?.scrollToEnd({ animated: true });
     }
   };
 
   const answerQuiz = async (msg: Message, selectedIndex: number) => {
     if (!msg.quiz || msg.quizAnswered || pending) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
 
+    // Reuse the same attempt id if the message already has one (retry path);
+    // otherwise mint a fresh one and stash it on the message.
+    const attemptId = msg.quizAttemptId ?? randomId();
     setMessages((prev) =>
       prev.map((m) =>
         m.id === msg.id
-          ? { ...m, quizAnswered: true, quizSelected: selectedIndex }
+          ? {
+              ...m,
+              quizAnswered: true,
+              quizSelected: selectedIndex,
+              quizAttemptId: attemptId,
+            }
           : m,
       ),
     );
@@ -135,7 +178,7 @@ export default function ChatbotTab() {
         message: msg.quiz.question,
         previousIntent: 'quiz_request',
         history: buildHistory(),
-        quizAnswer: { id: msg.quiz.id, selectedIndex },
+        quizAnswer: { id: msg.quiz.id, selectedIndex, attemptId },
       });
       setMessages((prev) =>
         prev.map((m) =>
@@ -152,11 +195,21 @@ export default function ChatbotTab() {
       captureException(err, {
         tags: { area: 'chatbot', op: 'quizAnswer' },
       });
+      // Roll back the optimistic "answered" mark so the user can retry the
+      // same quiz (the attemptId stays so the server still dedupes).
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msg.id
+            ? { ...m, quizAnswered: false, quizSelected: undefined }
+            : m,
+        ),
+      );
       appendBotMessage({
         text: "Sorry, I couldn't grade that quiz right now.",
       });
     } finally {
       setPending(false);
+      inFlight.current = false;
       scrollRef.current?.scrollToEnd({ animated: true });
     }
   };
@@ -189,7 +242,7 @@ export default function ChatbotTab() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={80}
       >
         <ScrollView
@@ -215,7 +268,12 @@ export default function ChatbotTab() {
                   ]}
                 >
                   {msg.from === 'bot' ? (
-                    <Markdown style={markdownStyles}>{msg.text}</Markdown>
+                    <SafeMarkdown
+                      style={markdownStyles}
+                      fallbackStyle={styles.bubbleText}
+                    >
+                      {msg.text}
+                    </SafeMarkdown>
                   ) : (
                     <Text style={[styles.bubbleText, { color: '#FFFFFF' }]}>
                       {msg.text}
@@ -322,9 +380,6 @@ export default function ChatbotTab() {
         </ScrollView>
 
         <View style={styles.inputBar}>
-          <Pressable style={styles.iconBtn}>
-            <Ionicons name="add" size={22} color={COLORS.muted} />
-          </Pressable>
           <TextInput
             value={draft}
             onChangeText={setDraft}
@@ -334,9 +389,6 @@ export default function ChatbotTab() {
             multiline
             editable={!pending}
           />
-          <Pressable style={styles.iconBtn}>
-            <Ionicons name="mic-outline" size={20} color={COLORS.muted} />
-          </Pressable>
           <Pressable
             style={[
               styles.sendBtn,

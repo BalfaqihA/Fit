@@ -4,12 +4,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useMemo } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
@@ -36,7 +37,7 @@ export default function StartSession() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { startSession } = useWorkoutSession();
-  const { plan } = usePlan();
+  const { plan, loading: planLoading } = usePlan();
   const { profile } = useUserProfile();
 
   const dayNum = useMemo(
@@ -48,6 +49,21 @@ export default function StartSession() {
     if (!plan || plan.days.length === 0) return null;
     return plan.days[planDayIndex(dayNum, plan.days.length)];
   }, [plan, dayNum]);
+
+  if (planLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <BackButton />
+          <Text style={styles.headerTitle}>Today&apos;s session</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.empty}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!planDay) {
     return (

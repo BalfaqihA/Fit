@@ -1,26 +1,28 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { CommentRow } from '@/components/comment-row';
 import { PostCard } from '@/components/post-card';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useComments } from '@/hooks/use-comments';
+import { useSubmit } from '@/hooks/use-submit';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import {
@@ -50,7 +52,29 @@ export default function PostDetail() {
   const [liked, setLiked] = useState(false);
   const { comments, loading: commentsLoading } = useComments(id);
   const [draft, setDraft] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const { run: runComment, pending: submitting } = useSubmit();
+
+  // Per-post comment draft autosave so the user doesn't lose typing on
+  // keyboard dismiss / nav. Keyed by post id.
+  const draftKey = id ? `@fit/comment-draft/${id}` : null;
+  const draftLoaded = useRef(false);
+
+  useEffect(() => {
+    if (!draftKey) return;
+    AsyncStorage.getItem(draftKey)
+      .then((raw) => {
+        if (raw) setDraft(raw);
+      })
+      .finally(() => {
+        draftLoaded.current = true;
+      });
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftKey || !draftLoaded.current) return;
+    if (draft) AsyncStorage.setItem(draftKey, draft);
+    else AsyncStorage.removeItem(draftKey);
+  }, [draft, draftKey]);
 
   // Real-time single-doc subscription for the post.
   useEffect(() => {
@@ -82,25 +106,23 @@ export default function PostDetail() {
   const trimmedDraft = draft.trim();
   const draftValid = trimmedDraft.length > 0 && trimmedDraft.length <= MAX_COMMENT_LEN;
 
-  const handleSubmit = async () => {
-    if (!post || !draftValid || submitting) return;
-    setSubmitting(true);
-    try {
-      await addComment({
-        postId: post.id,
-        postOwnerId: post.authorId,
-        text: trimmedDraft,
-        authorName: profile.displayName,
-        authorAvatarUrl: profile.avatarUri ?? null,
-      });
-      setDraft('');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Could not add comment.';
-      Alert.alert('Error', msg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const handleSubmit = () =>
+    runComment(async () => {
+      if (!post || !draftValid) return;
+      try {
+        await addComment({
+          postId: post.id,
+          text: trimmedDraft,
+          authorName: profile.displayName,
+          authorAvatarUrl: profile.avatarUri ?? null,
+        });
+        setDraft('');
+        if (draftKey) await AsyncStorage.removeItem(draftKey);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Could not add comment.';
+        Alert.alert('Error', msg);
+      }
+    });
 
   const handleToggleLike = async () => {
     if (!post) return;
@@ -217,7 +239,7 @@ export default function PostDetail() {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
       >

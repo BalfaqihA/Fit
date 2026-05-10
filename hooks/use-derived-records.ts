@@ -153,7 +153,7 @@ export function useDerivedRecords(): DerivedRecord[] {
         label: 'Longest Streak',
         value: `${longestStreak}`,
         unit: 'days',
-        icon: 'flame',
+        icon: 'fire',
         delta: `${longestStreak}d`,
         trend: 'up',
         achievedAt: longestStreakDate,

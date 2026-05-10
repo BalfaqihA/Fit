@@ -62,12 +62,27 @@ export async function deleteImage(storagePath: string): Promise<void> {
   }
 }
 
+// Defensive: Firebase Auth UIDs are alphanumeric (Firebase docs guarantee 28
+// chars for current SDKs, but we accept 20–64 to stay flexible across legacy
+// uids and any future format change). Reject anything else so a future code
+// path that built the path from non-auth input cannot escape its prefix
+// (e.g. "../" path traversal) or land images in unintended directories.
+const SAFE_UID_RE = /^[A-Za-z0-9]{20,64}$/;
+
+function assertSafeUid(userId: string): void {
+  if (!SAFE_UID_RE.test(userId)) {
+    throw new UploadError('Invalid user id for upload path.', 'failed');
+  }
+}
+
 export function buildPostImagePath(userId: string): string {
+  assertSafeUid(userId);
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 8);
   return `communityPosts/${userId}/${ts}_${rand}.jpg`;
 }
 
 export function buildProfileImagePath(userId: string, kind: 'avatar' | 'cover'): string {
+  assertSafeUid(userId);
   return `users/${userId}/${kind}.jpg`;
 }

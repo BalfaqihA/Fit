@@ -17,11 +17,15 @@ import React, {
 import { useAuth } from '@/hooks/use-auth';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import { db } from '@/lib/firebase';
+import { captureException } from '@/lib/observability';
 import type { Plan } from '@/types/plan';
 
 type PlanContextValue = {
   plan: Plan | null;
   loading: boolean;
+  /** Last subscription/load error, or null. Surface this in screens so a
+   *  failure isn't silently invisible to the user. */
+  error: Error | null;
   history: Plan[];
   loadHistory: () => Promise<void>;
 };
@@ -35,16 +39,19 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
 
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
   const [history, setHistory] = useState<Plan[]>([]);
 
   useEffect(() => {
     if (!user || !planId) {
       setPlan(null);
       setLoading(false);
+      setError(null);
       return;
     }
 
     setLoading(true);
+    setError(null);
     const ref = doc(db, 'users', user.uid, 'plans', planId);
     const unsubscribe = onSnapshot(
       ref,
@@ -55,8 +62,13 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
           setPlan(null);
         }
         setLoading(false);
+        setError(null);
       },
-      () => setLoading(false)
+      (err) => {
+        captureException(err, { tags: { area: 'plan', op: 'subscribe' } });
+        setError(err);
+        setLoading(false);
+      },
     );
     return unsubscribe;
   }, [user, planId]);
@@ -66,19 +78,25 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
       setHistory([]);
       return;
     }
-    const q = query(
-      collection(db, 'users', user.uid, 'plans'),
-      orderBy('createdAt', 'desc')
-    );
-    const snap = await getDocs(q);
-    setHistory(
-      snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Plan, 'id'>) }))
-    );
+    try {
+      const q = query(
+        collection(db, 'users', user.uid, 'plans'),
+        orderBy('createdAt', 'desc'),
+      );
+      const snap = await getDocs(q);
+      setHistory(
+        snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Plan, 'id'>) })),
+      );
+    } catch (err) {
+      captureException(err, { tags: { area: 'plan', op: 'loadHistory' } });
+      setError(err as Error);
+      throw err;
+    }
   }, [user]);
 
   const value = useMemo<PlanContextValue>(
-    () => ({ plan, loading, history, loadHistory }),
-    [plan, loading, history, loadHistory]
+    () => ({ plan, loading, error, history, loadHistory }),
+    [plan, loading, error, history, loadHistory],
   );
 
   return <PlanContext.Provider value={value}>{children}</PlanContext.Provider>;

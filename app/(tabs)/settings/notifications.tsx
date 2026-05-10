@@ -1,12 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
+import {  ScrollView,
   StyleSheet,
   Switch,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';

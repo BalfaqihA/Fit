@@ -3,13 +3,14 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { FollowButton } from '@/components/follow-button';
@@ -19,6 +20,7 @@ import { useAchievements } from '@/hooks/use-achievements';
 import { useAuth } from '@/hooks/use-auth';
 import { useCommunity } from '@/hooks/use-community';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserById } from '@/hooks/use-user-by-id';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import { getAchievement } from '@/lib/achievements';
 import { levelFromXp } from '@/lib/gamification';
@@ -32,10 +34,9 @@ export default function ProfileView() {
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { profile } = useUserProfile();
   const { user: authUser } = useAuth();
-  const { getUserById, getPostsByUser, getFollowerCount, getFollowingCount } =
+  const { getPostsByUser, getFollowerCount, getFollowingCount } =
     useCommunity();
-
-  const user = id ? getUserById(id) : undefined;
+  const { user, loading: userLoading, notFound } = useUserById(id);
   const isCurrentUser = !!user && user.id === profile.id;
   const { unlocked } = useAchievements(
     isCurrentUser && authUser ? authUser.uid : undefined,
@@ -53,7 +54,13 @@ export default function ProfileView() {
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>User not found</Text>
+          {userLoading ? (
+            <ActivityIndicator color={COLORS.primary} />
+          ) : (
+            <Text style={styles.emptyTitle}>
+              {notFound ? 'User not found' : 'Loading…'}
+            </Text>
+          )}
         </View>
       </SafeAreaView>
     );

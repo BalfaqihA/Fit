@@ -28,7 +28,7 @@ export default function TabLayout() {
           fontSize: 11,
           fontWeight: '700',
         },
-        tabBarHideOnKeyboard: false,
+        tabBarHideOnKeyboard: true,
       }}>
       <Tabs.Screen
         name="index"

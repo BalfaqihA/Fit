@@ -6,12 +6,12 @@ import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette } from '@/constants/design';
@@ -226,9 +226,11 @@ export default function ProfileCompletePage() {
 
       // 5) verify currentPlanId is now linked on the user profile
       const userSnap = await getDoc(doc(db, 'users', user.uid));
-      const linkedPlanId = userSnap.exists()
-        ? (userSnap.data() as { currentPlanId?: string }).currentPlanId
-        : undefined;
+      const userData = userSnap.exists() ? userSnap.data() : null;
+      const linkedPlanId =
+        userData && typeof userData.currentPlanId === 'string'
+          ? userData.currentPlanId
+          : undefined;
       if (linkedPlanId !== planId) {
         throw new Error(
           'Plan was created but not linked to your profile. Please try again.'

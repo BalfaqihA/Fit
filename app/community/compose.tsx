@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -27,14 +28,21 @@ import { useUserProfile } from '@/hooks/use-user-profile';
 import { MAX_CAPTION_LEN, createPost } from '@/lib/community';
 import {
   MAX_POST_IMAGE_BYTES,
+  MAX_POST_VIDEO_BYTES,
   buildPostImagePath,
+  buildPostVideoPath,
   deleteImage,
   uploadImage,
+  uploadVideo,
 } from '@/lib/upload';
 
 const DRAFT_KEY = '@fit/compose-draft';
 
-type ComposeDraft = { caption: string; imageUri?: string };
+type ComposeDraft = {
+  caption: string;
+  imageUri?: string;
+  videoUri?: string;
+};
 
 export default function ComposePost() {
   const { COLORS } = useTheme();
@@ -43,9 +51,15 @@ export default function ComposePost() {
 
   const [caption, setCaption] = useState('');
   const [imageUri, setImageUri] = useState<string | undefined>();
+  const [videoUri, setVideoUri] = useState<string | undefined>();
   const { run: runPost, pending: submitting } = useSubmit();
   const [error, setError] = useState<string | null>(null);
   const draftLoaded = useRef(false);
+
+  const videoPlayer = useVideoPlayer(videoUri ?? '', (p) => {
+    p.loop = true;
+    p.muted = false;
+  });
 
   // Restore any prior draft on mount, then persist on every change so a
   // back-tap or app-kill mid-compose doesn't erase the user's work.
@@ -57,6 +71,7 @@ export default function ComposePost() {
             const parsed = JSON.parse(raw) as ComposeDraft;
             if (typeof parsed.caption === 'string') setCaption(parsed.caption);
             if (typeof parsed.imageUri === 'string') setImageUri(parsed.imageUri);
+            if (typeof parsed.videoUri === 'string') setVideoUri(parsed.videoUri);
           } catch {
             // Bad JSON in storage — drop it.
             AsyncStorage.removeItem(DRAFT_KEY);
@@ -70,19 +85,20 @@ export default function ComposePost() {
 
   useEffect(() => {
     if (!draftLoaded.current) return;
-    if (!caption && !imageUri) {
+    if (!caption && !imageUri && !videoUri) {
       AsyncStorage.removeItem(DRAFT_KEY);
       return;
     }
     AsyncStorage.setItem(
       DRAFT_KEY,
-      JSON.stringify({ caption, imageUri } satisfies ComposeDraft),
+      JSON.stringify({ caption, imageUri, videoUri } satisfies ComposeDraft),
     );
-  }, [caption, imageUri]);
+  }, [caption, imageUri, videoUri]);
 
   const trimmedLen = caption.trim().length;
   const overLimit = trimmedLen > MAX_CAPTION_LEN;
-  const canPost = !submitting && !overLimit && (trimmedLen > 0 || !!imageUri);
+  const canPost =
+    !submitting && !overLimit && (trimmedLen > 0 || !!imageUri || !!videoUri);
 
   const pickImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -105,6 +121,32 @@ export default function ComposePost() {
         return;
       }
       setImageUri(asset.uri);
+      setVideoUri(undefined);
+    }
+  };
+
+  const pickVideo = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(
+        'Permission needed',
+        'We need access to your photos so you can attach a video.'
+      );
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'],
+      videoMaxDuration: 60,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > MAX_POST_VIDEO_BYTES) {
+        Alert.alert('Video too large', 'Please pick a video under 50 MB.');
+        return;
+      }
+      setVideoUri(asset.uri);
+      setImageUri(undefined);
     }
   };
 
@@ -116,7 +158,19 @@ export default function ComposePost() {
       try {
         let imageUrl: string | null = null;
         let imagePath: string | null = null;
-        if (imageUri) {
+        let videoUrl: string | null = null;
+        let videoPath: string | null = null;
+        let mediaType: 'image' | 'video' | null = null;
+        if (videoUri) {
+          const path = buildPostVideoPath(profile.id);
+          const result = await uploadVideo(videoUri, path, {
+            maxBytes: MAX_POST_VIDEO_BYTES,
+          });
+          videoUrl = result.url;
+          videoPath = result.path;
+          uploadedPath = result.path;
+          mediaType = 'video';
+        } else if (imageUri) {
           const path = buildPostImagePath(profile.id);
           const result = await uploadImage(imageUri, path, {
             maxBytes: MAX_POST_IMAGE_BYTES,
@@ -124,11 +178,15 @@ export default function ComposePost() {
           imageUrl = result.url;
           imagePath = result.path;
           uploadedPath = result.path;
+          mediaType = 'image';
         }
         await createPost({
           caption,
           imageUrl,
           imagePath,
+          videoUrl,
+          videoPath,
+          mediaType,
           authorName: profile.displayName,
           authorAvatarUrl: profile.avatarUri ?? null,
         });
@@ -136,7 +194,7 @@ export default function ComposePost() {
         await AsyncStorage.removeItem(DRAFT_KEY);
         router.back();
       } catch (e) {
-        // If the image landed in Storage but the post write failed, drop the
+        // If the media landed in Storage but the post write failed, drop the
         // orphan so it doesn't cost storage forever and isn't readable by
         // other authed users.
         if (uploadedPath) {
@@ -188,7 +246,24 @@ export default function ComposePost() {
             {trimmedLen} / {MAX_CAPTION_LEN}
           </Text>
 
-          {imageUri ? (
+          {videoUri ? (
+            <View style={styles.imagePreviewWrap}>
+              <VideoView
+                player={videoPlayer}
+                style={styles.imagePreview}
+                nativeControls
+                contentFit="cover"
+              />
+              <Pressable
+                style={styles.removeBtn}
+                onPress={() => setVideoUri(undefined)}
+                hitSlop={6}
+                disabled={submitting}
+              >
+                <Ionicons name="close" size={18} color="#FFFFFF" />
+              </Pressable>
+            </View>
+          ) : imageUri ? (
             <View style={styles.imagePreviewWrap}>
               <Image source={{ uri: imageUri }} style={styles.imagePreview} contentFit="cover" />
               <Pressable
@@ -201,10 +276,24 @@ export default function ComposePost() {
               </Pressable>
             </View>
           ) : (
-            <Pressable style={styles.addPhoto} onPress={pickImage} disabled={submitting}>
-              <Ionicons name="image-outline" size={22} color={COLORS.primary} />
-              <Text style={styles.addPhotoText}>Add a photo</Text>
-            </Pressable>
+            <View style={styles.addMediaRow}>
+              <Pressable
+                style={styles.addPhoto}
+                onPress={pickImage}
+                disabled={submitting}
+              >
+                <Ionicons name="image-outline" size={22} color={COLORS.primary} />
+                <Text style={styles.addPhotoText}>Photo</Text>
+              </Pressable>
+              <Pressable
+                style={styles.addPhoto}
+                onPress={pickVideo}
+                disabled={submitting}
+              >
+                <Ionicons name="videocam-outline" size={22} color={COLORS.primary} />
+                <Text style={styles.addPhotoText}>Video</Text>
+              </Pressable>
+            </View>
           )}
 
           {error && <Text style={styles.error}>{error}</Text>}
@@ -258,8 +347,9 @@ const makeStyles = (COLORS: Palette) =>
       fontSize: 11,
       fontWeight: '700',
     },
+    addMediaRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
     addPhoto: {
-      marginTop: 14,
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',

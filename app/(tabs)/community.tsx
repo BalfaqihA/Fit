@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,6 +12,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ViewToken,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -48,6 +49,16 @@ export default function CommunityTab() {
 
   const storyGroups = getStoriesGrouped();
   const [refreshing, setRefreshing] = useState(false);
+  const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
+  // viewabilityConfig must be stable across renders — FlatList warns otherwise.
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      // Pick the most-visible item so only one video plays audio at a time.
+      const top = viewableItems[0];
+      setVisiblePostId(top ? (top.key as string) : null);
+    },
+  ).current;
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -246,6 +257,8 @@ export default function CommunityTab() {
           if (hasMore && !loadingMore && !loading && !error) loadMore();
         }}
         onEndReachedThreshold={0.4}
+        viewabilityConfig={viewabilityConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -263,11 +276,14 @@ export default function CommunityTab() {
             authorAvatarUrl={item.authorAvatarUrl}
             caption={item.caption}
             imageUrl={item.imageUrl}
+            videoUrl={item.videoUrl}
+            mediaType={item.mediaType ?? undefined}
             createdAtMs={item.createdAtMs}
             liked={likedIds.has(item.id)}
             likeCount={item.likeCount}
             commentCount={item.commentCount}
             isOwn={item.authorId === profile.id}
+            isVisible={visiblePostId === item.id}
             onLike={() => handleLikeToggle(item)}
             onComment={() => router.push(`/community/post/${item.id}` as never)}
             onPressAuthor={() =>

@@ -16,12 +16,23 @@ service firebase.storage {
       ];
     }
 
+    function isAllowedVideoType() {
+      return request.resource.contentType in [
+        'video/mp4',
+        'video/quicktime',
+        'video/x-m4v',
+        'video/webm'
+      ];
+    }
+
     match /communityPosts/{userId}/{file} {
       allow read: if request.auth != null;
       allow write: if request.auth != null
         && request.auth.uid == userId
-        && request.resource.size < 5 * 1024 * 1024
-        && isAllowedImageType();
+        && (
+          (isAllowedImageType() && request.resource.size < 5 * 1024 * 1024)
+          || (isAllowedVideoType() && request.resource.size < 50 * 1024 * 1024)
+        );
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
 

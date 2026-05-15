@@ -50,7 +50,7 @@ export default function ActivityDetail() {
             COLORS={COLORS}
           />
           <Tile
-            icon="flame-outline"
+            icon="bonfire-outline"
             iconColor="#FF5A64"
             iconBg="#FFE1E1"
             label="Calories burned"

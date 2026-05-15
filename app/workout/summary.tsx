@@ -139,7 +139,7 @@ export default function WorkoutSummary() {
 
   const stats = [
     { icon: 'time-outline', label: 'Duration', value: `${duration}m` },
-    { icon: 'flame-outline', label: 'Calories', value: `${calories}` },
+    { icon: 'bonfire-outline', label: 'Calories', value: `${calories}` },
     { icon: 'barbell-outline', label: 'Exercises', value: `${done}` },
     { icon: 'flash-outline', label: 'XP Earned', value: `+${xp}` },
   ];

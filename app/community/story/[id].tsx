@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
@@ -44,10 +45,27 @@ export default function StoryViewer() {
   const progress = useRef(new Animated.Value(0)).current;
   const animationRef = useRef<Animated.CompositeAnimation | null>(null);
 
+  const currentStory = group?.stories[index];
+  const isVideo = currentStory?.mediaType === 'video' && !!currentStory.videoUri;
+
+  const videoPlayer = useVideoPlayer(
+    isVideo ? (currentStory?.videoUri ?? '') : '',
+    (p) => {
+      p.loop = false;
+      p.muted = false;
+    },
+  );
+
   useEffect(() => {
     if (!group || group.stories.length === 0) return;
     progress.setValue(0);
     animationRef.current?.stop();
+    if (isVideo) {
+      // For videos, the progress bar is driven by the player position below,
+      // and advance happens when playback finishes.
+      videoPlayer.play();
+      return;
+    }
     const anim = Animated.timing(progress, {
       toValue: 1,
       duration: STORY_DURATION_MS,
@@ -60,7 +78,38 @@ export default function StoryViewer() {
     });
     return () => anim.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, group?.stories.length]);
+  }, [index, group?.stories.length, isVideo]);
+
+  // Drive the progress bar from the video's playback position and advance
+  // to the next story when the clip ends.
+  useEffect(() => {
+    if (!isVideo) return;
+    const interval = setInterval(() => {
+      const duration = videoPlayer.duration;
+      if (!duration || duration <= 0) return;
+      const pct = Math.min(1, Math.max(0, videoPlayer.currentTime / duration));
+      progress.setValue(pct);
+      if (pct >= 0.999) {
+        clearInterval(interval);
+        goNext();
+      }
+    }, 100);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVideo, index]);
+
+  // Always pause/release the player on unmount so audio doesn't keep playing
+  // after the user navigates away.
+  useEffect(() => {
+    return () => {
+      try {
+        videoPlayer.pause();
+      } catch {
+        // player may already be released
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!group || group.stories.length === 0) {
     return (
@@ -95,7 +144,18 @@ export default function StoryViewer() {
   return (
     <View style={styles.safe}>
       <StatusBar barStyle="light-content" />
-      <Image source={{ uri: story.imageUri }} style={styles.image} contentFit="cover" />
+      {isVideo ? (
+        <VideoView
+          player={videoPlayer}
+          style={styles.image}
+          nativeControls={false}
+          contentFit="cover"
+        />
+      ) : (
+        story.imageUri && (
+          <Image source={{ uri: story.imageUri }} style={styles.image} contentFit="cover" />
+        )
+      )}
 
       <View style={styles.overlayTop}>
         <View style={styles.progressRow}>

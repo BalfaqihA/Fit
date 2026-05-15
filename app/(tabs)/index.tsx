@@ -144,7 +144,7 @@ export default function HomeTab() {
       { label: 'Workouts', value: `${totals.totalWorkouts}`, icon: 'run' },
       { label: 'Calories', value: fmtK(totals.totalCaloriesKcal), icon: 'fire' },
       { label: 'Minutes', value: `${totals.totalMinutes}`, icon: 'timer-outline' },
-      { label: 'Streak', value: `${currentStreak}d`, icon: 'flame' },
+      { label: 'Streak', value: `${currentStreak}d`, icon: 'fire' },
     ];
   }, [sessions, historyLoading, profile.stats, currentStreak]);
 

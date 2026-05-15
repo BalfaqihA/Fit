@@ -70,7 +70,7 @@ export default function DayExercises() {
       value: `${todays.durationMin}m`,
     },
     {
-      icon: 'flame-outline',
+      icon: 'bonfire-outline',
       label: 'Calories',
       value: `${todays.caloriesKcal}`,
     },

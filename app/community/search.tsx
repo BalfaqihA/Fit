@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,31 +16,38 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { UserListRow } from '@/components/user-list-row';
-import { SEED_USERS } from '@/constants/community-data';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { useCommunity } from '@/hooks/use-community';
 import { useTheme } from '@/hooks/use-theme';
+import { searchUsers, type SearchUser } from '@/lib/users';
 
 export default function SearchScreen() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
-  const { isFollowing } = useCommunity();
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState<SearchUser[]>([]);
+  const [searching, setSearching] = useState(false);
 
   const trimmed = query.trim().toLowerCase();
-  const matches = useMemo(() => {
-    if (!trimmed) return [];
-    return SEED_USERS.filter(
-      (u) =>
-        u.displayName.toLowerCase().includes(trimmed) ||
-        u.handle.toLowerCase().includes(trimmed)
-    );
-  }, [trimmed]);
 
-  const suggested = useMemo(
-    () => SEED_USERS.filter((u) => !isFollowing(u.id)).slice(0, 5),
-    [isFollowing]
-  );
+  useEffect(() => {
+    if (!trimmed) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const found = await searchUsers(trimmed);
+      if (cancelled) return;
+      setResults(found);
+      setSearching(false);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [trimmed]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -71,21 +79,22 @@ export default function SearchScreen() {
             </Pressable>
           )}
         </View>
-        <Text style={styles.demoNotice}>
-          Demo search — results come from sample users only.
-        </Text>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
         {trimmed ? (
           <>
             <Text style={styles.sectionTitle}>
-              {matches.length} {matches.length === 1 ? 'result' : 'results'}
+              {searching
+                ? 'Searching…'
+                : `${results.length} ${results.length === 1 ? 'result' : 'results'}`}
             </Text>
-            {matches.length === 0 ? (
+            {searching ? (
+              <ActivityIndicator color={COLORS.primary} style={{ marginTop: 14 }} />
+            ) : results.length === 0 ? (
               <Text style={styles.emptyText}>No users match &quot;{query}&quot;.</Text>
             ) : (
-              matches.map((user) => (
+              results.map((user) => (
                 <UserListRow
                   key={user.id}
                   user={user}
@@ -97,18 +106,10 @@ export default function SearchScreen() {
             )}
           </>
         ) : (
-          <>
-            <Text style={styles.sectionTitle}>Suggested for you</Text>
-            {suggested.map((user) => (
-              <UserListRow
-                key={user.id}
-                user={user}
-                onPress={() =>
-                  router.push(`/community/profile/${user.id}` as never)
-                }
-              />
-            ))}
-          </>
+          <View style={styles.emptyHint}>
+            <Ionicons name="people-outline" size={28} color={COLORS.muted} />
+            <Text style={styles.emptyText}>Start typing to find users.</Text>
+          </View>
         )}
       </ScrollView>
       </KeyboardAvoidingView>
@@ -139,11 +140,10 @@ const makeStyles = (COLORS: Palette) =>
       ...SHADOWS.card,
     },
     searchInput: { flex: 1, fontSize: 15, color: COLORS.text, padding: 0 },
-    demoNotice: {
-      marginTop: 8,
-      fontSize: 11,
-      color: COLORS.muted,
-      fontStyle: 'italic',
+    emptyHint: {
+      alignItems: 'center',
+      marginTop: 40,
+      gap: 10,
     },
     sectionTitle: {
       fontSize: 12,

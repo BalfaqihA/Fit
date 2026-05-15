@@ -41,6 +41,9 @@ export type FeedPost = {
   caption: string;
   imageUrl: string | null;
   imagePath: string | null;
+  videoUrl: string | null;
+  videoPath: string | null;
+  mediaType: 'image' | 'video' | null;
   createdAtMs: number;
   likeCount: number;
   commentCount: number;
@@ -71,7 +74,9 @@ function tsToMs(t: unknown): number {
 }
 
 export function mapPost(snap: QueryDocumentSnapshot | DocumentSnapshot): FeedPost {
-  const d = snap.data() as Record<string, unknown>;
+  const d = (snap.data() ?? {}) as Record<string, unknown>;
+  const videoUrl = (d.videoUrl as string | null) ?? null;
+  const mt = (d.mediaType as string | undefined) ?? (videoUrl ? 'video' : d.imageUrl ? 'image' : null);
   return {
     id: snap.id,
     authorId: (d.authorId as string) ?? '',
@@ -80,6 +85,9 @@ export function mapPost(snap: QueryDocumentSnapshot | DocumentSnapshot): FeedPos
     caption: (d.caption as string) ?? '',
     imageUrl: (d.imageUrl as string | null) ?? null,
     imagePath: (d.imagePath as string | null) ?? null,
+    videoUrl,
+    videoPath: (d.videoPath as string | null) ?? null,
+    mediaType: mt === 'image' || mt === 'video' ? mt : null,
     createdAtMs: tsToMs(d.createdAt),
     likeCount: (d.likeCount as number) ?? 0,
     commentCount: (d.commentCount as number) ?? 0,
@@ -127,6 +135,9 @@ export type CreatePostInput = {
   caption: string;
   imageUrl?: string | null;
   imagePath?: string | null;
+  videoUrl?: string | null;
+  videoPath?: string | null;
+  mediaType?: 'image' | 'video' | null;
   authorName: string;
   authorAvatarUrl?: string | null;
 };
@@ -137,9 +148,11 @@ export async function createPost(input: CreatePostInput): Promise<string> {
   if (caption.length > MAX_CAPTION_LEN) {
     throw new Error(`Caption is too long (max ${MAX_CAPTION_LEN}).`);
   }
-  if (!caption && !input.imageUrl) {
-    throw new Error('Add some text or an image.');
+  if (!caption && !input.imageUrl && !input.videoUrl) {
+    throw new Error('Add some text, an image, or a video.');
   }
+  const resolvedType =
+    input.mediaType ?? (input.videoUrl ? 'video' : input.imageUrl ? 'image' : null);
   try {
     const docRef = await addDoc(collection(db, POSTS), {
       authorId: uid,
@@ -148,6 +161,9 @@ export async function createPost(input: CreatePostInput): Promise<string> {
       caption,
       imageUrl: input.imageUrl ?? null,
       imagePath: input.imagePath ?? null,
+      videoUrl: input.videoUrl ?? null,
+      videoPath: input.videoPath ?? null,
+      mediaType: resolvedType,
       createdAt: serverTimestamp(),
       likeCount: 0,
       commentCount: 0,
@@ -165,13 +181,18 @@ export async function deletePost(postId: string): Promise<void> {
     const postRef = doc(db, POSTS, postId);
     const snap = await getDoc(postRef);
     if (!snap.exists()) return;
-    const imagePath = (snap.data() as { imagePath?: string | null }).imagePath ?? null;
+    const data = snap.data() as { imagePath?: string | null; videoPath?: string | null };
+    const imagePath = data.imagePath ?? null;
+    const videoPath = data.videoPath ?? null;
     const batch = writeBatch(db);
     batch.delete(postRef);
     await batch.commit();
     if (imagePath) {
-      // Best-effort; image deletion is independent of post deletion.
+      // Best-effort; media deletion is independent of post deletion.
       await deleteImage(imagePath);
+    }
+    if (videoPath) {
+      await deleteImage(videoPath);
     }
   } catch (e) {
     captureException(e, { tags: { area: 'community', op: 'deletePost' } });

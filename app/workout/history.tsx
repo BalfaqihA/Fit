@@ -208,7 +208,7 @@ export default function WorkoutHistory() {
                           />
                           <Detail
                             COLORS={COLORS}
-                            icon="flame-outline"
+                            icon="bonfire-outline"
                             label="Calories"
                             value={`${s.caloriesKcal}`}
                           />

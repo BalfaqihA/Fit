@@ -42,6 +42,7 @@ type CommunityContextValue = {
   getPostsForFeed: () => Post[];
   getPostsByUser: (id: string) => Post[];
   getCommentsForPost: (postId: string) => Comment[];
+  getCommentsByAuthor: (id: string) => Comment[];
   getStoriesGrouped: () => StoryGroup[];
   getMyStories: () => Story[];
   getFollowers: (userId: string) => (SeedUser | UserProfile)[];
@@ -52,13 +53,26 @@ type CommunityContextValue = {
   hasLiked: (postId: string) => boolean;
   unreadNotificationCount: number;
 
-  createPost: (input: { caption: string; imageUri?: string }) => Post;
+  createPost: (input: {
+    caption: string;
+    imageUri?: string;
+    videoUri?: string;
+    mediaType?: 'image' | 'video';
+  }) => Post;
   deletePost: (id: string) => void;
-  editPost: (id: string, patch: Partial<Pick<Post, 'caption' | 'imageUri'>>) => void;
+  editPost: (
+    id: string,
+    patch: Partial<Pick<Post, 'caption' | 'imageUri' | 'videoUri' | 'mediaType'>>,
+  ) => void;
   toggleLike: (postId: string) => void;
   addComment: (postId: string, text: string) => void;
   deleteComment: (id: string) => void;
-  createStory: (input: { imageUri: string; caption?: string }) => Story;
+  createStory: (input: {
+    imageUri?: string;
+    videoUri?: string;
+    mediaType?: 'image' | 'video';
+    caption?: string;
+  }) => Story;
   toggleFollow: (userId: string) => void;
   markNotificationsRead: () => void;
 };
@@ -184,6 +198,12 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
   const getCommentsForPost = useCallback(
     (postId: string) =>
       comments.filter((c) => c.postId === postId).sort((a, b) => a.createdAt - b.createdAt),
+    [comments]
+  );
+
+  const getCommentsByAuthor = useCallback(
+    (id: string) =>
+      comments.filter((c) => c.authorId === id).sort((a, b) => b.createdAt - a.createdAt),
     [comments]
   );
 
@@ -319,12 +339,16 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
   );
 
   const createPost = useCallback<CommunityContextValue['createPost']>(
-    ({ caption, imageUri }) => {
+    ({ caption, imageUri, videoUri, mediaType }) => {
+      const resolvedType: 'image' | 'video' | undefined =
+        mediaType ?? (videoUri ? 'video' : imageUri ? 'image' : undefined);
       const post: Post = {
         id: newId('p'),
         authorId: profile.id,
         caption: caption.trim(),
         imageUri,
+        videoUri,
+        mediaType: resolvedType,
         createdAt: Date.now(),
         likeIds: [],
       };
@@ -397,12 +421,16 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const createStory = useCallback<CommunityContextValue['createStory']>(
-    ({ imageUri, caption }) => {
+    ({ imageUri, videoUri, mediaType, caption }) => {
       const now = Date.now();
+      const resolvedType: 'image' | 'video' =
+        mediaType ?? (videoUri ? 'video' : 'image');
       const story: Story = {
         id: newId('s'),
         authorId: profile.id,
         imageUri,
+        videoUri,
+        mediaType: resolvedType,
         caption,
         createdAt: now,
         expiresAt: now + STORY_TTL_MS,
@@ -453,6 +481,7 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
       getPostsForFeed,
       getPostsByUser,
       getCommentsForPost,
+      getCommentsByAuthor,
       getStoriesGrouped,
       getMyStories,
       getFollowers,
@@ -483,6 +512,7 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
       getPostsForFeed,
       getPostsByUser,
       getCommentsForPost,
+      getCommentsByAuthor,
       getStoriesGrouped,
       getMyStories,
       getFollowers,

@@ -83,9 +83,18 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
         throw new Error('You must be signed in to update your profile.');
       }
       const ref = doc(db, 'users', user.uid);
+      // Mirror displayName/handle to lowercase fields so prefix search in
+      // lib/users.ts can find this user.
+      const mirror: Record<string, string> = {};
+      if (typeof patch.displayName === 'string') {
+        mirror.displayNameLower = patch.displayName.toLowerCase();
+      }
+      if (typeof patch.handle === 'string') {
+        mirror.handleLower = patch.handle.toLowerCase();
+      }
       await setDoc(
         ref,
-        { ...patch, updatedAt: serverTimestamp() },
+        { ...patch, ...mirror, updatedAt: serverTimestamp() },
         { merge: true }
       );
     },

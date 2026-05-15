@@ -49,7 +49,7 @@ export function StoryRing({
             <Ionicons name="person" size={22} color={COLORS.primary} />
           </View>
         )}
-        {own && (
+        {own && !hasStory && (
           <View style={[styles.add, { backgroundColor: COLORS.primary, borderColor: COLORS.bg }]}>
             <Ionicons name="add" size={14} color="#FFFFFF" />
           </View>

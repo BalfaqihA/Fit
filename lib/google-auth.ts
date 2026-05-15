@@ -1,5 +1,3 @@
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
 import {
   GoogleAuthProvider,
   signInWithCredential,
@@ -11,7 +9,31 @@ import { useCallback } from 'react';
 import { auth, db } from '@/lib/firebase';
 import type { UserProfile } from '@/types/community';
 
-WebBrowser.maybeCompleteAuthSession();
+// `expo-auth-session/providers/google` pulls in `expo-crypto`, which resolves
+// a native module at module load. If the dev client binary doesn't include
+// that native module (e.g. packages added after the last prebuild), the
+// `require` throws and any file that imports this module — login, signup —
+// fails to load. We swallow that failure so the rest of the app still boots
+// and Google sign-in degrades to a clear error instead of a route crash.
+type GoogleProvider = typeof import('expo-auth-session/providers/google');
+type WebBrowserModule = typeof import('expo-web-browser');
+
+let nativeAvailable = false;
+let Google: GoogleProvider | null = null;
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  Google = require('expo-auth-session/providers/google') as GoogleProvider;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const WebBrowser = require('expo-web-browser') as WebBrowserModule;
+  WebBrowser.maybeCompleteAuthSession();
+  nativeAvailable = true;
+} catch (err) {
+  console.warn(
+    '[google-auth] Native modules unavailable — Google sign-in disabled. Rebuild the dev client to enable it.',
+    err,
+  );
+}
 
 const IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 const ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
@@ -54,11 +76,19 @@ async function ensureProfile(user: User): Promise<boolean> {
   });
 }
 
-export function useGoogleSignIn() {
-  const [request, , promptAsync] = Google.useAuthRequest({
-    iosClientId: IOS_CLIENT_ID,
-    androidClientId: ANDROID_CLIENT_ID,
-    webClientId: WEB_CLIENT_ID,
+type GoogleSignInHook = {
+  signIn: () => Promise<GoogleSignInResult>;
+  ready: boolean;
+  isConfigured: boolean;
+};
+
+function useGoogleSignInReal(): GoogleSignInHook {
+  // Non-null asserted: this implementation is only selected at module load
+  // when `Google` resolved successfully.
+  const [request, , promptAsync] = Google!.useAuthRequest({
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
   });
 
   const isConfigured = !!(IOS_CLIENT_ID || ANDROID_CLIENT_ID || WEB_CLIENT_ID);
@@ -92,3 +122,19 @@ export function useGoogleSignIn() {
     isConfigured,
   };
 }
+
+function useGoogleSignInStub(): GoogleSignInHook {
+  const signIn = useCallback(async (): Promise<GoogleSignInResult> => {
+    throw new Error(
+      'Google sign-in is unavailable in this build. Rebuild the dev client (`npx expo prebuild --clean && npx expo run:android`) to enable it.',
+    );
+  }, []);
+  return { signIn, ready: false, isConfigured: false };
+}
+
+// Selected once at module load. `nativeAvailable` cannot change between
+// renders, so the hook identity is stable for the lifetime of the app —
+// keeping React's rules-of-hooks intact.
+export const useGoogleSignIn: () => GoogleSignInHook = nativeAvailable
+  ? useGoogleSignInReal
+  : useGoogleSignInStub;

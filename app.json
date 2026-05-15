@@ -51,7 +51,8 @@
         }
       ],
       "@sentry/react-native",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -18,13 +18,10 @@
         "*.local"
       ]
     },
-    {
+     {
       "source": "functions-chatbot",
       "codebase": "chatbot",
       "runtime": "nodejs20",
-      "predeploy": [
-        "npm --prefix \"$RESOURCE_DIR\" run build"
-      ],
       "ignore": [
         "node_modules",
         ".git",

@@ -301,7 +301,7 @@ export default function RunExercise() {
             <Text style={styles.metricLabel}>XP</Text>
           </View>
           <View style={styles.metric}>
-            <Ionicons name="flame-outline" size={18} color={COLORS.primary} />
+            <Ionicons name="bonfire-outline" size={18} color={COLORS.primary} />
             <Text style={styles.metricValue}>{calories}</Text>
             <Text style={styles.metricLabel}>Calories</Text>
           </View>

@@ -161,7 +161,7 @@ export default function WorkoutCalendar() {
       >
         <View style={styles.stripRow}>
           <View style={styles.stripCard}>
-            <Ionicons name="flame" size={20} color="#FF8A3D" />
+            <Ionicons name="bonfire" size={20} color="#FF8A3D" />
             <Text style={styles.stripValue}>{streak}</Text>
             <Text style={styles.stripLabel}>Day Streak</Text>
           </View>

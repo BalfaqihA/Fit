@@ -67,11 +67,15 @@ export type SeedUser = {
   goals: GoalKey[];
 };
 
+export type MediaType = 'image' | 'video';
+
 export type Post = {
   id: string;
   authorId: string;
   caption: string;
   imageUri?: string;
+  videoUri?: string;
+  mediaType?: MediaType;
   createdAt: number;
   likeIds: string[];
 };
@@ -87,7 +91,9 @@ export type Comment = {
 export type Story = {
   id: string;
   authorId: string;
-  imageUri: string;
+  imageUri?: string;
+  videoUri?: string;
+  mediaType?: MediaType;
   caption?: string;
   createdAt: number;
   expiresAt: number;

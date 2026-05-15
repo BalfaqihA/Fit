@@ -18,7 +18,11 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read, create, update: if isOwner(uid);
+      // Public-profile read access: any signed-in user can read a user
+      // document so the community search and "other user profile" screens
+      // work. Subcollections (workouts, measurements, etc.) remain owner-only.
+      allow read: if isSignedIn();
+      allow create, update: if isOwner(uid);
       allow delete: if false;
 
       match /workouts/{workoutId} {
@@ -116,6 +120,60 @@ service cloud.firestore {
         && request.resource.data.reason is string
         && request.resource.data.reason.size() >= 1
         && request.resource.data.reason.size() <= 300;
+      allow update, delete: if false;
+    }
+
+    // ---- Chatbot collections (Gemini-backed) ----
+    // All chatbot writes go through Cloud Functions using the admin SDK,
+    // which bypasses these rules. Owner-read is what the rules control.
+
+    // Knowledge base — readable by any signed-in user, never client-writable.
+    match /fitness_knowledge/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // Per-user chat memory — owner-readable. Functions writes via admin SDK.
+    match /chat_memory/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+
+    // Per-user daily Gemini usage — owner-readable for quota UIs.
+    match /chatbot_usage/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+
+    // Chat sessions and their messages. Each session has a `userId` field
+    // that we check on read; clients can NOT write (server is the only
+    // writer to keep audit fields tamper-proof).
+    match /chat_sessions/{sessionId} {
+      allow read: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+      allow write: if false;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn()
+          && get(/databases/$(database)/documents/chat_sessions/$(sessionId))
+              .data.userId == request.auth.uid;
+        allow write: if false;
+      }
+    }
+
+    // User feedback on a specific assistant message. Create-only by the
+    // author; reads happen server-side via the admin SDK.
+    match /chatbot_feedback/{feedbackId} {
+      allow read: if false;
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.messageId is string
+        && request.resource.data.rating in ['up', 'down']
+        && (
+          !('reason' in request.resource.data)
+          || (request.resource.data.reason is string
+              && request.resource.data.reason.size() <= 300)
+        );
       allow update, delete: if false;
     }
   }

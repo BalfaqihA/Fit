@@ -57,6 +57,18 @@ export type ChatResponse = {
   quiz?: ChatQuiz;
   xpAwarded?: number;
   capReached?: boolean;
+  // Gemini-path structured fields. Optional because the template fallback
+  // path returns only `reply` + `segments`. The UI renders these when present
+  // and falls back to the legacy markdown otherwise.
+  personalizedRecommendation?: string;
+  reason?: string;
+  steps?: string[];
+  safetyWarning?: string;
+  suggestedActions?: string[];
+  // Server-generated Firestore ids so the client can attach feedback by id
+  // and reconcile against `chat_sessions/{sessionId}/messages`.
+  messageId?: string;
+  sessionId?: string;
 };
 
 const chatFn = httpsCallable<ChatRequest, ChatResponse>(functions, 'chat');

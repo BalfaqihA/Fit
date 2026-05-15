@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import React, { useCallback, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { PostVideo } from '@/components/post-video';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTime } from '@/lib/format';
@@ -15,11 +16,14 @@ export type PostCardProps = {
   authorAvatarUrl: string | null;
   caption: string;
   imageUrl: string | null;
+  videoUrl?: string | null;
+  mediaType?: 'image' | 'video';
   createdAtMs: number;
   liked: boolean;
   likeCount: number;
   commentCount: number;
   isOwn: boolean;
+  isVisible?: boolean;
   onLike: () => void;
   onComment: () => void;
   onPressAuthor: () => void;
@@ -33,10 +37,13 @@ export function PostCard({
   authorAvatarUrl,
   caption,
   imageUrl,
+  videoUrl,
+  mediaType,
   createdAtMs,
   liked,
   likeCount,
   commentCount,
+  isVisible,
   onLike,
   onComment,
   onPressAuthor,
@@ -83,8 +90,16 @@ export function PostCard({
 
       {!!caption && <Text style={styles.caption}>{caption}</Text>}
 
-      {imageUrl && (
-        <Image source={{ uri: imageUrl }} style={styles.image} contentFit="cover" />
+      {mediaType === 'video' && videoUrl ? (
+        <PostVideo
+          uri={videoUrl}
+          shouldPlay={!!isVisible}
+          style={styles.image}
+        />
+      ) : (
+        imageUrl && (
+          <Image source={{ uri: imageUrl }} style={styles.image} contentFit="cover" />
+        )
       )}
 
       <View style={styles.actions}>

@@ -47,6 +47,9 @@ export type FeedPost = {
   createdAtMs: number;
   likeCount: number;
   commentCount: number;
+  // 'visible' | 'hidden' | 'removed'. Server-set; legacy/missing → 'visible'.
+  // The feed is filtered server-side; this is for debugging/clarity only.
+  moderationStatus: string;
 };
 
 export type FeedComment = {
@@ -58,6 +61,7 @@ export type FeedComment = {
   authorAvatarUrl: string | null;
   text: string;
   createdAtMs: number;
+  moderationStatus: string;
 };
 
 export type LikeDoc = {
@@ -91,6 +95,7 @@ export function mapPost(snap: QueryDocumentSnapshot | DocumentSnapshot): FeedPos
     createdAtMs: tsToMs(d.createdAt),
     likeCount: (d.likeCount as number) ?? 0,
     commentCount: (d.commentCount as number) ?? 0,
+    moderationStatus: (d.moderationStatus as string) ?? 'visible',
   };
 }
 
@@ -105,6 +110,7 @@ export function mapComment(snap: QueryDocumentSnapshot): FeedComment {
     authorAvatarUrl: (d.authorAvatarUrl as string | null) ?? null,
     text: (d.text as string) ?? '',
     createdAtMs: tsToMs(d.createdAt),
+    moderationStatus: (d.moderationStatus as string) ?? 'visible',
   };
 }
 
@@ -167,6 +173,7 @@ export async function createPost(input: CreatePostInput): Promise<string> {
       createdAt: serverTimestamp(),
       likeCount: 0,
       commentCount: 0,
+      moderationStatus: 'visible',
     });
     return docRef.id;
   } catch (e) {
@@ -207,6 +214,7 @@ export function subscribeToFeed(
 ): () => void {
   const q = query(
     collection(db, POSTS),
+    where('moderationStatus', 'in', ['visible']),
     orderBy('createdAt', 'desc'),
     limit(pageSize)
   );
@@ -230,6 +238,7 @@ export async function loadMorePosts(
 ): Promise<{ posts: FeedPost[]; lastDoc: QueryDocumentSnapshot | null }> {
   const q = query(
     collection(db, POSTS),
+    where('moderationStatus', 'in', ['visible']),
     orderBy('createdAt', 'desc'),
     startAfter(cursor),
     limit(pageSize)
@@ -334,6 +343,7 @@ export async function addComment(input: AddCommentInput): Promise<string> {
       authorAvatarUrl: input.authorAvatarUrl ?? null,
       text,
       createdAt: serverTimestamp(),
+      moderationStatus: 'visible',
     });
     return commentRef.id;
   } catch (e) {
@@ -360,6 +370,7 @@ export function subscribeToComments(
   const q = query(
     collection(db, COMMENTS),
     where('postId', '==', postId),
+    where('moderationStatus', 'in', ['visible']),
     orderBy('createdAt', 'asc')
   );
   return onSnapshot(

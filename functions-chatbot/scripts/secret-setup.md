@@ -49,6 +49,27 @@ npx ts-node scripts/seed-knowledge.ts
 
 The script is idempotent — re-runs merge instead of duplicating.
 
+## 6. Seed an admin test account (one-time)
+
+To test the admin section without the bootstrap screen/secret, provision the
+owner account directly. Uses the same service account key as step 5.
+
+```powershell
+$env:GOOGLE_APPLICATION_CREDENTIALS = "$HOME/.config/fit-admin.json"
+
+cd functions-chatbot
+npx ts-node scripts/seed-admin.ts
+```
+
+This creates/updates `ahmed1.balfaqeih55@gmail.com` (password `1221304386`,
+email pre-verified) and stamps the `owner` claim. Then just log in with those
+credentials — **Settings → ADMIN → Admin Dashboard** appears.
+
+The admin screens read from the Cloud Functions, so the backend must also be
+deployed once (`firebase deploy --only "functions:chatbot,firestore:rules,firestore:indexes"`;
+wait for indexes to show **Enabled** in the console). Re-running the script is
+safe — it just resets the password and re-stamps the claim.
+
 ## Rotating the key
 
 If you need to rotate (e.g. accidental leak):

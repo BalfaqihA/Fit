@@ -10,6 +10,15 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    // Admin identity comes ONLY from the `admin` custom claim on the ID
+    // token. It is never stored on `users/{uid}` because a user can write
+    // their own user doc (`allow update: if isOwner(uid)` below) and could
+    // self-grant. All admin mutations go through Cloud Functions (Admin SDK
+    // bypasses these rules); these reads just let the admin app load data.
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
     // True iff `claimedOwner` matches the actual `authorId` of the
     // referenced post. Used to prevent clients from spoofing `postOwnerId`
     // on like/comment writes (which would misroute activity notifications).
@@ -67,7 +76,10 @@ service cloud.firestore {
         && request.resource.data.caption is string
         && request.resource.data.caption.size() <= 500
         && request.resource.data.likeCount == 0
-        && request.resource.data.commentCount == 0;
+        && request.resource.data.commentCount == 0
+        // Every new post starts visible so the moderated feed query
+        // (where moderationStatus == 'visible') includes it.
+        && request.resource.data.moderationStatus == 'visible';
 
       // Counters (`likeCount`, `commentCount`) are maintained by Firestore
       // triggers in `functions/main.py` and must NOT be writable by clients.
@@ -89,6 +101,7 @@ service cloud.firestore {
         && request.resource.data.text.size() >= 1
         && request.resource.data.text.size() <= 500
         && request.resource.data.postOwnerId is string
+        && request.resource.data.moderationStatus == 'visible'
         && postOwnerMatches(
             request.resource.data.postId,
             request.resource.data.postOwnerId
@@ -175,6 +188,36 @@ service cloud.firestore {
               && request.resource.data.reason.size() <= 300)
         );
       allow update, delete: if false;
+    }
+
+    // ---- Admin section ----
+    // Admins READ these in-app; every WRITE is performed server-side by an
+    // admin Cloud Function via the Admin SDK (which bypasses these rules), so
+    // the client write path is closed everywhere.
+
+    match /adminAuditLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /adminStats/{doc=**} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /adminSettings/{doc=**} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /userModeration/{uid} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /contentModeration/{contentId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
   }
 }

@@ -153,6 +153,8 @@ export default function RootLayout() {
                         <Stack.Screen name="community" />
                         <Stack.Screen name="dashboard" />
                         <Stack.Screen name="(tabs)" />
+                        <Stack.Screen name="admin" />
+                        <Stack.Screen name="admin-bootstrap" />
                         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
                       </Stack>
                     </AuthGate>

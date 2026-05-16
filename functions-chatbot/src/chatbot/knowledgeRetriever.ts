@@ -101,7 +101,12 @@ export async function retrieveKnowledge(
   let docs: KnowledgeDoc[] = [];
   try {
     const snap = await db.collection(COLLECTION).limit(MAX_DOCS).get();
-    docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<KnowledgeDoc, 'id'>) }));
+    docs = snap.docs
+      // Skip admin-archived docs. Done in memory (not a Firestore
+      // `where('status','!=','archived')`) so legacy docs that predate the
+      // `status` field — which `!=` would wrongly exclude — stay retrievable.
+      .filter((d) => (d.data() as { status?: string }).status !== 'archived')
+      .map((d) => ({ id: d.id, ...(d.data() as Omit<KnowledgeDoc, 'id'>) }));
   } catch (err) {
     console.warn('[chatbot] retrieveKnowledge failed', err);
     return [];

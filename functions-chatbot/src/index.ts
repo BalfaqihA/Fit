@@ -242,3 +242,7 @@ export const chat = onCall(
     return orchestrate({ uid, message, history, previousIntent, styleHint });
   },
 );
+
+// ---------- Admin section ----------
+export * from './adminBootstrap';
+export * from './admin';

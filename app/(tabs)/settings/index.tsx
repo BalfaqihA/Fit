@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
+import { useAdmin } from '@/hooks/use-admin';
 import { useAuth } from '@/hooks/use-auth';
 import { useOnboarding } from '@/hooks/use-onboarding';
 import { useTheme } from '@/hooks/use-theme';
@@ -79,7 +80,16 @@ export default function SettingsHub() {
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { profile } = useUserProfile();
   const { user } = useAuth();
+  const { isAdmin } = useAdmin();
   const { setMode, reset: resetOnboarding } = useOnboarding();
+
+  const adminRows: SettingsRow[] = [
+    {
+      label: 'Admin Dashboard',
+      icon: 'shield-checkmark-outline',
+      onPress: () => router.push('/admin' as never),
+    },
+  ];
 
   const profileHref = user ? (`/community/profile/${user.uid}` as const) : null;
 
@@ -181,6 +191,9 @@ export default function SettingsHub() {
           <Ionicons name="chevron-forward" size={20} color={COLORS.muted} />
         </Pressable>
 
+        {isAdmin && (
+          <Section title="ADMIN" rows={adminRows} styles={styles} COLORS={COLORS} />
+        )}
         <Section title="ACCOUNT" rows={accountRows} styles={styles} COLORS={COLORS} />
         <Section title="PREFERENCES" rows={preferenceRows} styles={styles} COLORS={COLORS} />
         <Section title="SUPPORT" rows={supportRows} styles={styles} COLORS={COLORS} />

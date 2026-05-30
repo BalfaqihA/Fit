@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
+  browserLocalPersistence,
   getAuth,
   initializeAuth,
   // @ts-expect-error getReactNativePersistence is exported at runtime by firebase/auth in v10+
@@ -40,7 +41,15 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 let _auth: Auth;
 if (Platform.OS === 'web') {
-  _auth = getAuth(app);
+  try {
+    // Pin browser persistence explicitly. Otherwise on the Metro dev server the
+    // default-resolution chain occasionally lands on inMemoryPersistence, which
+    // makes onAuthStateChanged fire `null` right after signIn — leaving the user
+    // stuck on the login screen with no error.
+    _auth = initializeAuth(app, { persistence: browserLocalPersistence });
+  } catch {
+    _auth = getAuth(app);
+  }
 } else {
   try {
     _auth = initializeAuth(app, {

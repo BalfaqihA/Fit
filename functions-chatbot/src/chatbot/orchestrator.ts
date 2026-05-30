@@ -6,6 +6,7 @@ import { callGemini, GeminiFailureError } from './geminiClient';
 import { appendMessage, getOrCreateActiveSession } from './chatHistoryService';
 import { loadMemory, updateMemory } from './chatMemoryService';
 import { mapToBroadIntent } from './intentMapper';
+import { retrieveExerciseDocs } from './exerciseRetriever';
 import { retrieveKnowledge } from './knowledgeRetriever';
 import { buildGeminiPrompt } from './promptBuilder';
 import { parseAndValidate, renderAnswerMarkdown } from './responseValidator';
@@ -121,11 +122,24 @@ export async function handle(
   };
 
   // 4 + 5. Load memory and retrieve knowledge in parallel — both are
-  // independent reads of the same Firestore region.
+  // independent reads of the same Firestore region. For plan/exercise intents
+  // we also pull dataset-backed exercise docs (skipped otherwise to save a
+  // read) and fold them into the same KNOWLEDGE BASE prompt block.
+  const EXERCISE_INTENTS = new Set([
+    'todays_workout',
+    'exercise_substitution',
+    'exercise_form',
+    'exercise_stats',
+    'workout_plan',
+  ]);
+  // Structured list comes straight from personalize.ts — no fragile string
+  // parsing. The formatted `ctx.todayPlanExercises` is only for the prompt.
+  const exerciseNamesFromPlan = ctx.__todayPlanExercisesList ?? [];
+
   let memory;
   let knowledge: KnowledgeDoc[];
   try {
-    [memory, knowledge] = await Promise.all([
+    const [mem, kb, exDocs] = await Promise.all([
       loadMemory(uid),
       retrieveKnowledge({
         message,
@@ -133,7 +147,27 @@ export async function handle(
         goal: ctx.goal,
         fitnessLevel: ctx.__fitnessLevel,
       }),
+      EXERCISE_INTENTS.has(broadIntent)
+        ? retrieveExerciseDocs({
+            message,
+            exerciseNamesFromPlan,
+            equipment: ctx.equipment,
+            goal: ctx.goal,
+            fitnessLevel: ctx.__fitnessLevel,
+          })
+        : Promise.resolve([]),
     ]);
+    memory = mem;
+    knowledge = [
+      ...kb,
+      ...exDocs.map((ex) => ({
+        id: ex.id,
+        title: ex.name,
+        category: ex.category,
+        content: (ex.instructions ?? []).join(' '),
+        tags: ex.primaryMuscles,
+      })),
+    ];
   } catch (err) {
     console.warn('[chatbot] memory+knowledge fetch failed', err);
     memory = { userId: uid };

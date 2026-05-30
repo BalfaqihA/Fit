@@ -12,8 +12,9 @@ import { useTheme } from '@/hooks/use-theme';
 import { adminApi } from '@/lib/admin';
 
 // One-time owner bootstrap entry. Lives OUTSIDE the /admin guard (you can't be
-// an admin to grant yourself admin). Dev-only: remove the route from the
-// final build once the owner claim is set.
+// an admin to grant yourself admin). Gated to dev builds — production users
+// hitting the route get redirected home so the form is never reachable from a
+// shipped build, even before the route is removed.
 export default function AdminBootstrap() {
   const { user, initializing } = useAuth();
   const { refresh } = useAdmin();
@@ -22,6 +23,11 @@ export default function AdminBootstrap() {
 
   const [secret, setSecret] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Production builds: the bootstrap secret form must not be reachable.
+  if (!__DEV__) {
+    return <Redirect href="/(tabs)" />;
+  }
 
   if (initializing) return null;
   if (!user) return <Redirect href="/auth/login" />;

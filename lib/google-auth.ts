@@ -7,6 +7,7 @@ import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { useCallback } from 'react';
 
 import { auth, db } from '@/lib/firebase';
+import { buildUserSearchFields } from '@/lib/users';
 import type { UserProfile } from '@/types/community';
 
 // `expo-auth-session/providers/google` pulls in `expo-crypto`, which resolves
@@ -69,6 +70,9 @@ async function ensureProfile(user: User): Promise<boolean> {
     if (snap.exists()) return false;
     tx.set(profileRef, {
       ...seed,
+      ...buildUserSearchFields(seed.displayName, seed.handle),
+      followerCount: 0,
+      followingCount: 0,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });

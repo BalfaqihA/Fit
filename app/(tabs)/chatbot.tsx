@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useMemo, useRef, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Linking,
@@ -26,21 +26,23 @@ import { captureException } from '@/lib/observability';
 import { randomId } from '@/lib/uuid';
 
 const SUGGESTIONS = [
-  'Create workout for today',
-  'What should I eat after workout?',
-  'Help me lose weight',
-  'Give me motivation',
-  'Knee-friendly workout',
-  'Create weekly plan',
+  'Explain my latest weight update',
+  'What workout should I do today?',
+  'Which exercise burned the most calories?',
+  'Am I on track this week?',
+  'Replace an exercise in my plan',
+  'Summarise my current workout plan',
 ];
 
 /**
  * Wraps Markdown rendering so a single malformed reply degrades to plain text
  * instead of blanking the whole chat.
  */
+type MarkdownStyles = ReturnType<typeof makeMarkdownStyles>;
+type ChatStyles = ReturnType<typeof makeStyles>;
+
 class SafeMarkdown extends React.Component<
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  { children: string; style: any; fallbackStyle: object },
+  { children: string; style: MarkdownStyles; fallbackStyle: object },
   { failed: boolean }
 > {
   state = { failed: false };
@@ -68,6 +70,7 @@ export default function ChatbotTab() {
     pending,
     setPending,
     canRetry,
+    hydrated,
     send,
     retry,
     newSession,
@@ -76,8 +79,21 @@ export default function ChatbotTab() {
     appendBotMessage,
   } = useChatSession();
 
+  // Deep link from the weight-update insight sheet ("Ask Coach About This").
+  const { initialPrompt } = useLocalSearchParams<{ initialPrompt?: string }>();
+  const initialPromptSent = useRef(false);
+
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (initialPromptSent.current) return;
+    if (!initialPrompt || !hydrated || pending) return;
+    initialPromptSent.current = true;
+    void send(initialPrompt).then(() =>
+      scrollRef.current?.scrollToEnd({ animated: true }),
+    );
+  }, [initialPrompt, hydrated, pending, send]);
   // Tracks which assistant messages already received a thumb so we can grey
   // the buttons out — feedback writes are append-only on the server, so this
   // is purely a UI nicety. Keyed by messageId (server id).
@@ -257,6 +273,7 @@ export default function ChatbotTab() {
             style={styles.input}
             multiline
             editable={!pending}
+            accessibilityLabel="Chat message"
           />
           <Pressable
             style={[
@@ -265,6 +282,9 @@ export default function ChatbotTab() {
             ]}
             onPress={() => void handleSendDraft()}
             disabled={!draft.trim() || pending}
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
+            accessibilityState={{ disabled: !draft.trim() || pending }}
           >
             <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
           </Pressable>
@@ -279,10 +299,8 @@ export default function ChatbotTab() {
 type MessageBlockProps = {
   msg: LocalChatMessage;
   COLORS: Palette;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  styles: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  markdownStyles: any;
+  styles: ChatStyles;
+  markdownStyles: MarkdownStyles;
   pending: boolean;
   feedbackRating?: 'up' | 'down';
   onAction: (a: ChatAction) => void;

@@ -49,6 +49,22 @@ npx ts-node scripts/seed-knowledge.ts
 
 The script is idempotent — re-runs merge instead of duplicating.
 
+## 5b. Seed the exercise library (one-time)
+
+The chatbot grounds plan/exercise answers in the `exercise_library` collection,
+seeded from `functions/data/exercises.json`. Same service account key as step 5.
+
+```powershell
+$env:GOOGLE_APPLICATION_CREDENTIALS = "$HOME/.config/fit-admin.json"
+
+cd functions-chatbot
+npm run seed:exercises    # or: npx ts-node scripts/seed-exercise-library.ts
+```
+
+Idempotent — keyed by dataset `id`, re-runs merge instead of duplicating. To
+seed the emulator instead, set `$env:FIRESTORE_EMULATOR_HOST = "localhost:8080"`
+before running.
+
 ## 6. Seed an admin test account (one-time)
 
 To test the admin section without the bootstrap screen/secret, provision the

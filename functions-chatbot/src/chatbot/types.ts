@@ -4,6 +4,12 @@
 
 export const BROAD_INTENTS = [
   'workout_plan',
+  'todays_workout',
+  'exercise_substitution',
+  'exercise_form',
+  'weight_progress',
+  'weekly_stats',
+  'exercise_stats',
   'nutrition_advice',
   'weight_loss',
   'muscle_gain',

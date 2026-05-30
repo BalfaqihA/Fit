@@ -1,13 +1,30 @@
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 
+type PlanExerciseLite = {
+  name?: string;
+  sets?: number;
+  reps?: number;
+  primaryMuscles?: string[];
+  equipment?: string;
+};
+
 type PlanDay = {
   day?: number;
   title?: string;
   estimatedMinutes?: number;
-  exercises?: unknown[];
+  exercises?: PlanExerciseLite[];
+};
+
+type PlanProfile = {
+  goal?: string;
+  level?: string;
+  equipment?: string;
+  daysPerWeek?: number;
+  sessionMinutes?: number;
 };
 
 type PlanDoc = {
+  profile?: PlanProfile;
   days?: PlanDay[];
 };
 
@@ -50,6 +67,16 @@ type InsightsSnapshot = {
   recent?: {
     last7d?: { workouts?: number; minutes?: number };
     lastWorkoutAt?: string | null;
+  };
+  latestWeightUpdateSummary?: {
+    currentKg?: number | null;
+    deltaSinceLastKg?: number | null;
+    delta30dKg?: number | null;
+    currentWeekCalories?: number | null;
+    mostActiveWeekCalories?: number | null;
+    mostActiveWeekRange?: string | null;
+    topExercise?: string | null;
+    measurementId?: string | null;
   };
   streaks?: { current?: number; longest?: number };
   consistency?: { adherence30d?: number; label?: string };
@@ -134,6 +161,12 @@ function computeStreakFromDates(dates: Date[]): number {
 export type PersonalContext = Record<string, string> & {
   /** Internal: tracked so chat() can derive an automatic styleHint. */
   __fitnessLevel?: string;
+  /**
+   * Internal: structured list of today's plan exercises (names only). Mirrors
+   * the formatted `todayPlanExercises` string used in the prompt — the
+   * orchestrator reads this list instead of re-parsing the formatted line.
+   */
+  __todayPlanExercisesList?: string[];
 };
 
 function defaultContext(): PersonalContext {
@@ -168,6 +201,23 @@ function defaultContext(): PersonalContext {
     topPRName: 'your main lift',
     topPRWeightKg: '—',
     trainingAgeDays: '0',
+    // Active-plan tokens (rendered into the CURRENT WORKOUT PLAN prompt block).
+    planGoal: '—',
+    planDaysPerWeek: '—',
+    planSessionMinutes: '—',
+    planCompletedThisWeek: '0',
+    planPlannedThisWeek: '0',
+    todayPlanLine: 'rest day',
+    todayPlanExercises: '—',
+    nextPlanLine: '—',
+    // Latest-weight-update tokens (rendered into the LATEST WEIGHT UPDATE block).
+    wuCurrentKg: '—',
+    wuDeltaSinceLastKg: '0',
+    wuDelta30dKg: '0',
+    wuCurrentWeekCalories: '0',
+    wuMostActiveWeek: '—',
+    wuMostActiveWeekCalories: '0',
+    wuTopExercises: '—',
   };
 }
 
@@ -217,6 +267,9 @@ function applySnapshotToContext(
   if (recent.last7d && typeof recent.last7d.minutes === 'number') {
     ctx.weeklyMinutes = String(recent.last7d.minutes);
   }
+  if (recent.last7d && typeof recent.last7d.workouts === 'number') {
+    ctx.planCompletedThisWeek = String(recent.last7d.workouts);
+  }
   if (typeof recent.lastWorkoutAt === 'string') {
     const last = new Date(recent.lastWorkoutAt + 'T00:00:00Z').getTime();
     if (Number.isFinite(last)) {
@@ -240,6 +293,35 @@ function applySnapshotToContext(
   }
   if (typeof flags.trainingAgeDays === 'number') {
     ctx.trainingAgeDays = String(flags.trainingAgeDays);
+  }
+
+  const wu = snap.latestWeightUpdateSummary;
+  if (wu) {
+    if (typeof wu.currentKg === 'number') {
+      ctx.wuCurrentKg = String(wu.currentKg);
+    }
+    if (typeof wu.deltaSinceLastKg === 'number') {
+      const d = wu.deltaSinceLastKg;
+      ctx.wuDeltaSinceLastKg =
+        d === 0 ? '0' : `${d < 0 ? 'down' : 'up'} ${Math.abs(d)}`;
+    }
+    if (typeof wu.delta30dKg === 'number') {
+      const d = wu.delta30dKg;
+      ctx.wuDelta30dKg =
+        d === 0 ? '0' : `${d < 0 ? 'down' : 'up'} ${Math.abs(d)}`;
+    }
+    if (typeof wu.currentWeekCalories === 'number') {
+      ctx.wuCurrentWeekCalories = String(wu.currentWeekCalories);
+    }
+    if (typeof wu.mostActiveWeekCalories === 'number') {
+      ctx.wuMostActiveWeekCalories = String(wu.mostActiveWeekCalories);
+    }
+    if (typeof wu.mostActiveWeekRange === 'string') {
+      ctx.wuMostActiveWeek = wu.mostActiveWeekRange;
+    }
+    if (typeof wu.topExercise === 'string') {
+      ctx.wuTopExercises = wu.topExercise;
+    }
   }
 }
 
@@ -386,6 +468,19 @@ export async function buildPersonalContext(
         .doc(`users/${uid}/plans/${user.currentPlanId}`)
         .get();
       const plan = (planSnap.data() ?? {}) as PlanDoc;
+      const profile = plan.profile ?? {};
+      if (typeof profile.goal === 'string') {
+        ctx.planGoal = GOAL_LABELS[profile.goal] ?? profile.goal;
+      }
+      if (typeof profile.daysPerWeek === 'number') {
+        ctx.planDaysPerWeek = String(profile.daysPerWeek);
+        ctx.planPlannedThisWeek = String(profile.daysPerWeek);
+      } else if (ctx.daysPerWeek !== '0') {
+        ctx.planPlannedThisWeek = ctx.daysPerWeek;
+      }
+      if (typeof profile.sessionMinutes === 'number') {
+        ctx.planSessionMinutes = String(profile.sessionMinutes);
+      }
       const days = plan.days ?? [];
       if (days.length > 0) {
         const dayIdx = new Date().getDay() % days.length;
@@ -393,12 +488,30 @@ export async function buildPersonalContext(
         if (today) {
           const focus = today.title || 'training';
           ctx.todayFocus = focus;
-          ctx.todayExerciseCount = String(today.exercises?.length ?? 0);
+          const exs = today.exercises ?? [];
+          ctx.todayExerciseCount = String(exs.length);
           ctx.warmupHint = warmupHintFor(focus);
+          ctx.todayPlanLine = `Day ${today.day ?? dayIdx + 1}, ${focus}, ${exs.length} exercises`;
+          if (exs.length > 0) {
+            const top = exs.slice(0, 6);
+            ctx.todayPlanExercises = top
+              .map((ex, i) => {
+                const muscle = ex.primaryMuscles?.[0] ?? 'mixed';
+                const equip = ex.equipment ?? 'bodyweight';
+                return `${i + 1}. ${ex.name ?? 'Exercise'} — ${ex.sets ?? '?'}x${ex.reps ?? '?'} — ${muscle} — ${equip}`;
+              })
+              .join('\n');
+            ctx.__todayPlanExercisesList = top
+              .map((ex) => (typeof ex.name === 'string' ? ex.name.trim() : ''))
+              .filter((n): n is string => !!n);
+          }
         }
         const nextIdx = (dayIdx + 1) % days.length;
         const nextDay = days[nextIdx];
-        if (nextDay?.title) ctx.nextWorkoutDay = nextDay.title;
+        if (nextDay?.title) {
+          ctx.nextWorkoutDay = nextDay.title;
+          ctx.nextPlanLine = `Day ${nextDay.day ?? nextIdx + 1}, ${nextDay.title}`;
+        }
       }
     }
   } catch (err) {

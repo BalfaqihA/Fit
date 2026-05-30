@@ -11,8 +11,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackButton } from '@/components/back-button';
 import { UserListRow } from '@/components/user-list-row';
 import { type Palette } from '@/constants/design';
-import { useCommunity } from '@/hooks/use-community';
+import { useFollowing } from '@/hooks/use-follows';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserById } from '@/hooks/use-user-by-id';
 import { useUserProfile } from '@/hooks/use-user-profile';
 
 export default function FollowingList() {
@@ -20,10 +21,8 @@ export default function FollowingList() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { profile } = useUserProfile();
-  const { getUserById, getFollowing } = useCommunity();
-
-  const user = id ? getUserById(id) : undefined;
-  const following = id ? getFollowing(id) : [];
+  const { user } = useUserById(id);
+  const { users: following } = useFollowing(id);
 
   return (
     <SafeAreaView style={styles.safeArea}>

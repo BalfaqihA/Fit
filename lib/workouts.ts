@@ -17,14 +17,27 @@ export const exerciseXp = (e: Pick<PlanExercise, 'sets' | 'reps'>) =>
 export type WorkoutSource = 'workout' | 'manual_log' | 'partial';
 
 export type CompletedExerciseLog = {
+  exerciseId?: string;
   name: string;
   primaryMuscle?: string;
+  secondaryMuscles?: string[];
+  category?: string;
+  equipment?: string;
   imageId?: string;
   plannedSets: number;
   plannedReps: number;
   actualSets: number;
+  actualReps?: number;
   weightKg?: number;
   rpe?: number;
+  /** ISO timestamp when this exercise was started within the session. */
+  startedAt?: string;
+  /** ISO timestamp when this exercise was completed. */
+  endedAt?: string;
+  durationSec?: number;
+  durationMin?: number;
+  caloriesKcal?: number;
+  xp?: number;
 };
 
 export type CompletedWorkoutPayload = {

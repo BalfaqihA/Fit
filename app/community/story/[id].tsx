@@ -4,10 +4,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Easing,
+  Modal,
   Pressable,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -15,54 +18,60 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useCommunity } from '@/hooks/use-community';
-import { useUserById } from '@/hooks/use-user-by-id';
-import { timeRemaining } from '@/lib/format';
+import { useStories, useStoryViews } from '@/hooks/use-stories';
+import { useUserProfile } from '@/hooks/use-user-profile';
+import { relativeTime, timeRemaining } from '@/lib/format';
+import { recordStoryView } from '@/lib/stories';
 
 const STORY_DURATION_MS = 5000;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function StoryViewer() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getStoriesGrouped, stories } = useCommunity();
-  const { user: remoteUser } = useUserById(id);
+  const { profile } = useUserProfile();
+  const { groups, loading } = useStories();
 
-  const groups = getStoriesGrouped();
-  // Prefer the pre-grouped result for seed/current users; otherwise compose
-  // a group on the fly so Firestore-resolved users still play their stories.
-  const group = useMemo(() => {
-    const match = groups.find((g) => g.user.id === id);
-    if (match) return match;
-    if (!remoteUser) return undefined;
-    const ownStories = stories
-      .filter((s) => s.authorId === id && s.expiresAt > Date.now())
-      .sort((a, b) => a.createdAt - b.createdAt);
-    if (ownStories.length === 0) return undefined;
-    return { user: remoteUser, stories: ownStories };
-  }, [groups, id, remoteUser, stories]);
+  const group = useMemo(
+    () => groups.find((g) => g.authorId === id),
+    [groups, id]
+  );
 
   const [index, setIndex] = useState(0);
+  const [viewersOpen, setViewersOpen] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
   const animationRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const currentStory = group?.stories[index];
-  const isVideo = currentStory?.mediaType === 'video' && !!currentStory.videoUri;
+  const isAuthor = !!group && group.authorId === profile.id;
+  const isVideo =
+    currentStory?.mediaType === 'video' && !!currentStory.videoUrl;
+
+  // Author's "Seen by" list for the visible story (realtime).
+  const viewers = useStoryViews(isAuthor ? currentStory?.id : undefined);
 
   const videoPlayer = useVideoPlayer(
-    isVideo ? (currentStory?.videoUri ?? '') : '',
+    isVideo ? (currentStory?.videoUrl ?? '') : '',
     (p) => {
       p.loop = false;
       p.muted = false;
-    },
+    }
   );
+
+  // Record that the signed-in viewer saw this story (skips the author).
+  useEffect(() => {
+    if (!currentStory || !group) return;
+    if (group.authorId === profile.id) return;
+    recordStoryView(currentStory.id, group.authorId, {
+      name: profile.displayName || 'Someone',
+      avatarUrl: profile.avatarUri ?? null,
+    });
+  }, [currentStory, group, profile.id, profile.displayName, profile.avatarUri]);
 
   useEffect(() => {
     if (!group || group.stories.length === 0) return;
     progress.setValue(0);
     animationRef.current?.stop();
     if (isVideo) {
-      // For videos, the progress bar is driven by the player position below,
-      // and advance happens when playback finishes.
       videoPlayer.play();
       return;
     }
@@ -80,8 +89,6 @@ export default function StoryViewer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, group?.stories.length, isVideo]);
 
-  // Drive the progress bar from the video's playback position and advance
-  // to the next story when the clip ends.
   useEffect(() => {
     if (!isVideo) return;
     const interval = setInterval(() => {
@@ -98,8 +105,6 @@ export default function StoryViewer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVideo, index]);
 
-  // Always pause/release the player on unmount so audio doesn't keep playing
-  // after the user navigates away.
   useEffect(() => {
     return () => {
       try {
@@ -116,10 +121,19 @@ export default function StoryViewer() {
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="light-content" />
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>Story unavailable</Text>
-          <Pressable onPress={() => router.back()} style={styles.closeFallback}>
-            <Text style={styles.closeFallbackText}>Close</Text>
-          </Pressable>
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <Text style={styles.emptyText}>Story unavailable</Text>
+              <Pressable
+                onPress={() => router.back()}
+                style={styles.closeFallback}
+              >
+                <Text style={styles.closeFallbackText}>Close</Text>
+              </Pressable>
+            </>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -152,8 +166,12 @@ export default function StoryViewer() {
           contentFit="cover"
         />
       ) : (
-        story.imageUri && (
-          <Image source={{ uri: story.imageUri }} style={styles.image} contentFit="cover" />
+        story.imageUrl && (
+          <Image
+            source={{ uri: story.imageUrl }}
+            style={styles.image}
+            contentFit="cover"
+          />
         )
       )}
 
@@ -172,19 +190,26 @@ export default function StoryViewer() {
               : '0%';
             return (
               <View key={s.id} style={styles.progressTrack}>
-                <Animated.View style={[styles.progressFill, { width: fillWidth as never }]} />
+                <Animated.View
+                  style={[styles.progressFill, { width: fillWidth as never }]}
+                />
               </View>
             );
           })}
         </View>
 
         <View style={styles.headerRow}>
-          {group.user.avatarUri && (
-            <Image source={{ uri: group.user.avatarUri }} style={styles.headerAvatar} />
+          {group.authorAvatarUrl && (
+            <Image
+              source={{ uri: group.authorAvatarUrl }}
+              style={styles.headerAvatar}
+            />
           )}
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerName}>{group.user.displayName}</Text>
-            <Text style={styles.headerMeta}>{timeRemaining(story.expiresAt)}</Text>
+            <Text style={styles.headerName}>{group.authorName}</Text>
+            <Text style={styles.headerMeta}>
+              {timeRemaining(story.expiresAtMs)}
+            </Text>
           </View>
           <Pressable onPress={() => router.back()} hitSlop={10}>
             <Ionicons name="close" size={28} color="#FFFFFF" />
@@ -202,6 +227,73 @@ export default function StoryViewer() {
           <Text style={styles.caption}>{story.caption}</Text>
         </View>
       )}
+
+      {/* Instagram-style: only the author sees who viewed their story. */}
+      {isAuthor && (
+        <Pressable
+          style={styles.seenByBar}
+          onPress={() => setViewersOpen(true)}
+        >
+          <Ionicons name="eye-outline" size={18} color="#FFFFFF" />
+          <Text style={styles.seenByText}>
+            Seen by {viewers.length}
+          </Text>
+        </Pressable>
+      )}
+
+      <Modal
+        visible={viewersOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setViewersOpen(false)}
+      >
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setViewersOpen(false)}
+        >
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>
+              Viewers · {viewers.length}
+            </Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              {viewers.length === 0 ? (
+                <Text style={styles.sheetEmpty}>No views yet.</Text>
+              ) : (
+                viewers.map((v) => (
+                  <Pressable
+                    key={v.viewerId}
+                    style={styles.viewerRow}
+                    onPress={() => {
+                      setViewersOpen(false);
+                      router.push(
+                        `/community/profile/${v.viewerId}` as never
+                      );
+                    }}
+                  >
+                    {v.viewerAvatarUrl ? (
+                      <Image
+                        source={{ uri: v.viewerAvatarUrl }}
+                        style={styles.viewerAvatar}
+                      />
+                    ) : (
+                      <View
+                        style={[styles.viewerAvatar, styles.viewerAvatarFallback]}
+                      >
+                        <Ionicons name="person" size={16} color="#888" />
+                      </View>
+                    )}
+                    <Text style={styles.viewerName}>{v.viewerName}</Text>
+                    <Text style={styles.viewerTime}>
+                      {relativeTime(v.viewedAtMs)}
+                    </Text>
+                  </Pressable>
+                ))
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -254,13 +346,64 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 20,
     right: 20,
-    bottom: 40,
+    bottom: 90,
     backgroundColor: 'rgba(0,0,0,0.45)',
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   caption: { color: '#FFFFFF', fontSize: 14, lineHeight: 20 },
+  seenByBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 18,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  seenByText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 30,
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#DDD',
+    marginBottom: 12,
+  },
+  sheetTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#111',
+    marginBottom: 8,
+  },
+  sheetEmpty: { color: '#888', fontSize: 14, paddingVertical: 16 },
+  viewerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+  },
+  viewerAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#EEE' },
+  viewerAvatarFallback: { alignItems: 'center', justifyContent: 'center' },
+  viewerName: { flex: 1, fontSize: 14, fontWeight: '700', color: '#111' },
+  viewerTime: { fontSize: 12, color: '#999' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
   emptyText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   closeFallback: {

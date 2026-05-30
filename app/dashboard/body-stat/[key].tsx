@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { WeighInModal } from '@/components/weigh-in-modal';
+import { WeightUpdateInsightSheet } from '@/components/weight-update-insight-sheet';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useBodyStats, type BodyStatKey } from '@/hooks/use-body-stats';
 import { useTheme } from '@/hooks/use-theme';
@@ -22,6 +23,7 @@ export default function BodyStatDetail() {
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { stats } = useBodyStats();
   const [logOpen, setLogOpen] = useState(false);
+  const [insightOpen, setInsightOpen] = useState(false);
 
   const stat = stats.find((s) => s.key === (key as BodyStatKey));
 
@@ -180,7 +182,15 @@ export default function BodyStatDetail() {
           />
         </View>
       </ScrollView>
-      <WeighInModal visible={logOpen} onClose={() => setLogOpen(false)} />
+      <WeighInModal
+        visible={logOpen}
+        onClose={() => setLogOpen(false)}
+        onSaved={() => setInsightOpen(true)}
+      />
+      <WeightUpdateInsightSheet
+        visible={insightOpen}
+        onClose={() => setInsightOpen(false)}
+      />
     </SafeAreaView>
   );
 }

@@ -115,6 +115,20 @@ export function buildPostVideoPath(userId: string, ext = 'mp4'): string {
   return `communityPosts/${userId}/${ts}_${rand}.${ext}`;
 }
 
+export function buildStoryImagePath(userId: string): string {
+  assertSafeUid(userId);
+  const ts = Date.now();
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `stories/${userId}/${ts}_${rand}.jpg`;
+}
+
+export function buildStoryVideoPath(userId: string, ext = 'mp4'): string {
+  assertSafeUid(userId);
+  const ts = Date.now();
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `stories/${userId}/${ts}_${rand}.${ext}`;
+}
+
 export function buildProfileImagePath(userId: string, kind: 'avatar' | 'cover'): string {
   assertSafeUid(userId);
   return `users/${userId}/${kind}.jpg`;

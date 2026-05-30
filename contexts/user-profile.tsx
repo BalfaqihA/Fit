@@ -9,6 +9,7 @@ import React, {
 
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
+import { buildUserSearchFields } from '@/lib/users';
 import type { GoalKey, UserProfile } from '@/types/community';
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -69,7 +70,14 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
         }
         setHydrated(true);
       },
-      () => {
+      (err) => {
+        // `permission-denied` is expected during signOut while the listener
+        // is being torn down; treat it as benign and silently reset.
+        if ((err as { code?: string }).code === 'permission-denied') {
+          setProfile(DEFAULT_PROFILE);
+          setHydrated(false);
+          return;
+        }
         setHydrated(true);
       }
     );
@@ -83,14 +91,20 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
         throw new Error('You must be signed in to update your profile.');
       }
       const ref = doc(db, 'users', user.uid);
-      // Mirror displayName/handle to lowercase fields so prefix search in
-      // lib/users.ts can find this user.
-      const mirror: Record<string, string> = {};
-      if (typeof patch.displayName === 'string') {
-        mirror.displayNameLower = patch.displayName.toLowerCase();
-      }
-      if (typeof patch.handle === 'string') {
-        mirror.handleLower = patch.handle.toLowerCase();
+      // Mirror displayName/handle to the lowercase + token fields so smart
+      // search in lib/users.ts can find this user (prefix AND any-word-prefix).
+      let mirror: Record<string, unknown> = {};
+      if (
+        typeof patch.displayName === 'string' ||
+        typeof patch.handle === 'string'
+      ) {
+        const nextName =
+          typeof patch.displayName === 'string'
+            ? patch.displayName
+            : profile.displayName;
+        const nextHandle =
+          typeof patch.handle === 'string' ? patch.handle : profile.handle;
+        mirror = buildUserSearchFields(nextName, nextHandle);
       }
       await setDoc(
         ref,
@@ -98,7 +112,7 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
         { merge: true }
       );
     },
-    [user]
+    [user, profile.displayName, profile.handle]
   );
 
   const setGoals = useCallback(

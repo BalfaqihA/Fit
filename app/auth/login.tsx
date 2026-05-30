@@ -108,7 +108,10 @@ export default function LoginPage() {
     try {
       setLoading(true);
       await signInWithEmail({ email: parsedEmail.value, password });
-      // The AuthGate in app/_layout.tsx will redirect to /(tabs) once user is set.
+      // Navigate explicitly: on web, expo-router occasionally drops the
+      // AuthGate effect-based redirect after a Firebase auth state change,
+      // leaving the user stuck on /auth/login.
+      router.replace('/(tabs)' as never);
     } catch (e) {
       setError(mapAuthError(e));
     } finally {
@@ -121,10 +124,11 @@ export default function LoginPage() {
     try {
       setGoogleLoading(true);
       const result = await signInWithGoogle();
-      if (result.status === 'signed-in' && result.isNewUser) {
-        router.replace('/onboarding' as never);
+      if (result.status === 'signed-in') {
+        router.replace(
+          (result.isNewUser ? '/onboarding' : '/(tabs)') as never,
+        );
       }
-      // Otherwise AuthGate routes the existing user to /(tabs).
     } catch (e) {
       setError(mapAuthError(e));
     } finally {

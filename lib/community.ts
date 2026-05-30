@@ -29,9 +29,18 @@ export const LIKES = 'likes';
 export const REPORTS = 'reports';
 
 export const POST_PAGE_SIZE = 10;
+// Hard ceiling for paginated reads. A caller asking for thousands of docs in
+// one shot would bypass pagination and inflate cost; clamp here so a single
+// caller bug can't fan out into a huge read.
+export const MAX_POST_PAGE_SIZE = 100;
 export const MAX_CAPTION_LEN = 500;
 export const MAX_COMMENT_LEN = 500;
 export const MAX_REPORT_REASON_LEN = 300;
+
+function clampPageSize(n: number): number {
+  if (!Number.isFinite(n) || n < 1) return POST_PAGE_SIZE;
+  return Math.min(Math.floor(n), MAX_POST_PAGE_SIZE);
+}
 
 export type FeedPost = {
   id: string;
@@ -216,7 +225,7 @@ export function subscribeToFeed(
     collection(db, POSTS),
     where('moderationStatus', 'in', ['visible']),
     orderBy('createdAt', 'desc'),
-    limit(pageSize)
+    limit(clampPageSize(pageSize))
   );
   return onSnapshot(
     q,
@@ -241,7 +250,7 @@ export async function loadMorePosts(
     where('moderationStatus', 'in', ['visible']),
     orderBy('createdAt', 'desc'),
     startAfter(cursor),
-    limit(pageSize)
+    limit(clampPageSize(pageSize))
   );
   const snap = await getDocs(q);
   return {
@@ -378,6 +387,64 @@ export function subscribeToComments(
     (snap) => onChange(snap.docs.map(mapComment)),
     (err) => {
       captureException(err, { tags: { area: 'community', op: 'subscribeToComments' } });
+      onError(err);
+    }
+  );
+}
+
+// -------- Profile (a user's own posts & comments) --------
+
+/**
+ * A user's posts, newest first (realtime). Indexed by
+ * (`authorId` ASC, `createdAt` DESC). `moderationStatus` is filtered
+ * client-side so a single composite index covers this query.
+ */
+export function subscribeToUserPosts(
+  uid: string,
+  onChange: (posts: FeedPost[]) => void,
+  onError: (err: Error) => void
+): () => void {
+  const q = query(
+    collection(db, POSTS),
+    where('authorId', '==', uid),
+    orderBy('createdAt', 'desc')
+  );
+  return onSnapshot(
+    q,
+    (snap) =>
+      onChange(
+        snap.docs
+          .map(mapPost)
+          .filter((p) => p.moderationStatus !== 'removed' && p.moderationStatus !== 'hidden')
+      ),
+    (err) => {
+      captureException(err, { tags: { area: 'community', op: 'subscribeUserPosts' } });
+      onError(err);
+    }
+  );
+}
+
+/** Comments authored by a user, newest first (realtime). */
+export function subscribeToUserComments(
+  uid: string,
+  onChange: (comments: FeedComment[]) => void,
+  onError: (err: Error) => void
+): () => void {
+  const q = query(
+    collection(db, COMMENTS),
+    where('authorId', '==', uid),
+    orderBy('createdAt', 'desc')
+  );
+  return onSnapshot(
+    q,
+    (snap) =>
+      onChange(
+        snap.docs.map(mapComment).filter((c) => c.moderationStatus !== 'removed')
+      ),
+    (err) => {
+      captureException(err, {
+        tags: { area: 'community', op: 'subscribeUserComments' },
+      });
       onError(err);
     }
   );

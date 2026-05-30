@@ -1,15 +1,22 @@
-import { firestoreMock } from '../../__mocks__/firestore-mock';
-
-const mockApi = firestoreMock();
-
+// jest.mock factories are hoisted ABOVE local const declarations, so build the
+// mock inside the factory and retrieve the same instance via requireMock for
+// per-test reset/inspection.
+jest.mock('firebase/firestore', () =>
+  require('../../__mocks__/firestore-mock').firestoreMock(),
+);
 jest.mock('@/lib/firebase', () => ({ db: {} }));
-jest.mock('firebase/firestore', () => mockApi);
 jest.mock('@/lib/plan-day', () => ({ todayIso: () => '2026-05-07' }));
 jest.mock('@/lib/gamification', () => ({
   xpForExercise: () => 0,
 }));
 
+import type { firestoreMock } from '../../__mocks__/firestore-mock';
+
 import { recordCompletedWorkout } from '../workouts';
+
+const mockApi = jest.requireMock('firebase/firestore') as ReturnType<
+  typeof firestoreMock
+>;
 
 const KEY = 'test-attempt-key-1';
 

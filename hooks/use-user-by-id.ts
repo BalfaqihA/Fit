@@ -1,34 +1,29 @@
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
+import { useUserProfile } from '@/hooks/use-user-profile';
 import { db } from '@/lib/firebase';
-import type { SeedUser, UserProfile } from '@/types/community';
-
-import { useCommunity } from './use-community';
-
-type ResolvedUser = SeedUser | UserProfile;
+import type { UserProfile } from '@/types/community';
 
 /**
- * Resolves a user id to a profile, preferring the in-memory community context
- * (current user + SEED_USERS) and falling back to a Firestore read at
- * `users/{id}` for arbitrary uids. Returns `undefined` while loading the
- * Firestore fallback so callers can render a "loading" state distinctly from
- * "not found" — `notFound` flips to `true` only after the Firestore lookup
- * resolves to a missing doc.
+ * Resolves a user id to a profile. The signed-in user is served instantly
+ * from the live profile context; any other id is read from Firestore at
+ * `users/{id}`. `notFound` flips to `true` only after the lookup resolves to
+ * a missing doc (so callers can show "loading" vs "not found" distinctly).
  */
 export function useUserById(id: string | undefined): {
-  user: ResolvedUser | undefined;
+  user: UserProfile | undefined;
   loading: boolean;
   notFound: boolean;
 } {
-  const { getUserById } = useCommunity();
-  const seed = id ? getUserById(id) : undefined;
-  const [remote, setRemote] = useState<ResolvedUser | null>(null);
+  const { profile } = useUserProfile();
+  const isSelf = !!id && id === profile.id;
+  const [remote, setRemote] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    if (!id || seed) {
+    if (!id || isSelf) {
       setRemote(null);
       setLoading(false);
       setNotFound(false);
@@ -61,8 +56,6 @@ export function useUserById(id: string | undefined): {
         });
       })
       .catch(() => {
-        // Network errors leave the user undefined; UI shows "not found"
-        // rather than crashing. Sentry already captures via global handler.
         if (!cancelled) setNotFound(true);
       })
       .finally(() => {
@@ -71,11 +64,11 @@ export function useUserById(id: string | undefined): {
     return () => {
       cancelled = true;
     };
-  }, [id, seed]);
+  }, [id, isSelf]);
 
   return {
-    user: seed ?? remote ?? undefined,
+    user: isSelf ? profile : remote ?? undefined,
     loading,
-    notFound: notFound && !seed && !remote,
+    notFound: notFound && !isSelf,
   };
 }

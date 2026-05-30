@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -18,6 +18,8 @@ import { useUserProfile } from '@/hooks/use-user-profile';
 import { useWeeklyStats } from '@/hooks/use-weekly-stats';
 import { useDerivedRecords } from '@/hooks/use-derived-records';
 import { useMeasurements } from '@/hooks/use-measurements';
+import { useWeightUpdateInsights } from '@/hooks/use-weight-update-insights';
+import { WeightUpdateInsightSheet } from '@/components/weight-update-insight-sheet';
 import { LEVEL_XP, levelFromXp } from '@/lib/gamification';
 import { bmiFromKg } from '@/lib/measurements';
 
@@ -29,6 +31,8 @@ export default function DashboardTab() {
   const { bars, totals, currentStreak } = useWeeklyStats();
   const records = useDerivedRecords();
   const { latestWeight, measurements } = useMeasurements();
+  const { insight: weightInsight } = useWeightUpdateInsights();
+  const [insightOpen, setInsightOpen] = useState(false);
 
   const totalXp = profile.stats?.totalXp ?? 0;
   const { level, currentLevelXp, progress, remainingXp } = levelFromXp(totalXp);
@@ -268,7 +272,41 @@ export default function DashboardTab() {
             </Pressable>
           ))}
         </View>
+
+        {weightInsight ? (
+          <Pressable
+            style={({ pressed }) => [
+              styles.insightCard,
+              pressed && { opacity: 0.9 },
+            ]}
+            onPress={() => setInsightOpen(true)}
+          >
+            <View style={styles.insightHeader}>
+              <Ionicons name="sparkles" size={16} color={COLORS.primary} />
+              <Text style={styles.insightTitle}>Latest weigh-in insight</Text>
+            </View>
+            <Text style={styles.insightValue}>
+              {weightInsight.weight.currentKg != null
+                ? `${weightInsight.weight.currentKg.toFixed(1)} kg`
+                : '--'}
+              {weightInsight.weight.deltaSinceLastKg !== 0
+                ? `  (${weightInsight.weight.deltaSinceLastKg > 0 ? '+' : ''}${weightInsight.weight.deltaSinceLastKg.toFixed(1)} kg)`
+                : ''}
+            </Text>
+            <Text style={styles.insightMeta}>
+              This week: {weightInsight.currentWeek.caloriesKcal} kcal
+              {weightInsight.topExercises[0]
+                ? ` · Top: ${weightInsight.topExercises[0].name}`
+                : ''}
+            </Text>
+            <Text style={styles.insightLink}>View insight</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
+      <WeightUpdateInsightSheet
+        visible={insightOpen}
+        onClose={() => setInsightOpen(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -446,6 +484,37 @@ const makeStyles = (COLORS: Palette) =>
       fontWeight: '700',
     },
     bodyRow: { flexDirection: 'row', gap: 10 },
+    insightCard: {
+      backgroundColor: COLORS.card,
+      borderRadius: RADIUS.md,
+      padding: 16,
+      marginTop: 12,
+      ...SHADOWS.card,
+    },
+    insightHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 8,
+    },
+    insightTitle: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: COLORS.text,
+    },
+    insightValue: { fontSize: 20, fontWeight: '800', color: COLORS.text },
+    insightMeta: {
+      fontSize: 12,
+      color: COLORS.muted,
+      marginTop: 4,
+      fontWeight: '600',
+    },
+    insightLink: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: COLORS.primary,
+      marginTop: 10,
+    },
     bodyCard: {
       flex: 1,
       backgroundColor: COLORS.card,

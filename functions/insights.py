@@ -19,6 +19,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 SCHEMA_VERSION = 1
+# Bumped independently of SCHEMA_VERSION — the weight-update insight lives in a
+# separate doc (users/{uid}/insights/latestWeightUpdate).
+WEIGHT_UPDATE_SCHEMA_VERSION = 1
 
 GOAL_LABELS: Dict[str, str] = {
     "lose_weight": "lose weight",
@@ -57,6 +60,18 @@ def _iso_date(dt: Optional[datetime]) -> Optional[str]:
 
 def _days_between(later: datetime, earlier: datetime) -> int:
     return (later.date() - earlier.date()).days
+
+
+def _week_start(dt: datetime) -> datetime:
+    """Monday 00:00 UTC of the week containing `dt` (weekday(): Mon=0..Sun=6)."""
+    d = dt.astimezone(timezone.utc)
+    monday = d.date() - timedelta(days=d.weekday())
+    return datetime(monday.year, monday.month, monday.day, tzinfo=timezone.utc)
+
+
+def _week_end(week_start_dt: datetime) -> datetime:
+    """Sunday of the week (the Monday `week_start_dt` belongs to)."""
+    return week_start_dt + timedelta(days=6)
 
 
 # ---------- Compute helpers (pure) ----------
@@ -384,6 +399,506 @@ def compute_flags(
     }
 
 
+# ---------- Weight-update insight (pure) ----------
+
+
+def _exercise_calorie_split(
+    workout: Dict[str, Any],
+) -> List[tuple]:
+    """Attribute a session's calories to its exercises.
+
+    Returns a list of (exercise_dict, calories_float, source) where source is
+    'tracked' (per-exercise calories present on every row) or 'estimated'
+    (effort-proportional split, falling back to an equal split). Never raises
+    or divides by zero — robust to all-missing data.
+    """
+    exs = workout.get("exercises") or []
+    n = len(exs)
+    if n == 0:
+        return []
+    try:
+        session_cal = float(workout.get("caloriesKcal") or 0)
+    except (TypeError, ValueError):
+        session_cal = 0.0
+
+    if all(ex.get("caloriesKcal") is not None for ex in exs):
+        out = []
+        for ex in exs:
+            try:
+                out.append((ex, float(ex.get("caloriesKcal") or 0), "tracked"))
+            except (TypeError, ValueError):
+                out.append((ex, 0.0, "tracked"))
+        return out
+
+    efforts = [
+        max(1, int(ex.get("actualSets") or 0) * int(ex.get("plannedReps") or 0))
+        for ex in exs
+    ]
+    total = sum(efforts)
+    if session_cal > 0 and total > 0:
+        return [
+            (ex, session_cal * (e / total), "estimated")
+            for ex, e in zip(exs, efforts)
+        ]
+    per = (session_cal / n) if n else 0.0
+    return [(ex, per, "estimated") for ex in exs]
+
+
+def _empty_week(week_start_dt: datetime, days_per_week: int = 0) -> Dict[str, Any]:
+    week = {
+        "weekStartIso": _iso_date(week_start_dt),
+        "weekEndIso": _iso_date(_week_end(week_start_dt)),
+        "workouts": 0,
+        "activeDays": 0,
+        "minutes": 0,
+        "caloriesKcal": 0,
+        "xp": 0,
+        "topDay": None,
+    }
+    if days_per_week:
+        week["plannedWorkouts"] = days_per_week
+        week["adherencePercent"] = 0
+    return week
+
+
+def compute_weekly_activity(
+    workouts: List[Dict[str, Any]], days_per_week: int = 0
+) -> Dict[str, Any]:
+    """Group workouts into Monday-anchored weeks.
+
+    Returns {currentWeek, mostActiveWeek, weeklyHistory}. `currentWeek` always
+    exists (zeroed over the live Mon-Sun range if there were no workouts this
+    week). `mostActiveWeek` is None only when there are no workouts at all.
+    """
+    now = datetime.now(timezone.utc)
+    live_ws = _week_start(now)
+    live_key = _iso_date(live_ws)
+
+    weeks: Dict[str, Dict[str, Any]] = {}
+    for w in workouts:
+        dt = _to_dt(w.get("completedAt"))
+        if dt is None:
+            continue
+        ws = _week_start(dt)
+        key = _iso_date(ws)
+        day_key = _iso_date(dt)
+        minutes = int(w.get("durationMin") or 0)
+        calories = int(w.get("caloriesKcal") or 0)
+        xp = int(w.get("xp") or 0)
+
+        bucket = weeks.get(key)
+        if bucket is None:
+            bucket = {
+                "weekStartIso": key,
+                "weekEndIso": _iso_date(_week_end(ws)),
+                "workouts": 0,
+                "_activeDays": set(),
+                "minutes": 0,
+                "caloriesKcal": 0,
+                "xp": 0,
+                "_days": {},
+            }
+            weeks[key] = bucket
+
+        bucket["workouts"] += 1
+        bucket["_activeDays"].add(day_key)
+        bucket["minutes"] += minutes
+        bucket["caloriesKcal"] += calories
+        bucket["xp"] += xp
+
+        day = bucket["_days"].get(day_key)
+        if day is None:
+            day = {"dateIso": day_key, "minutes": 0, "caloriesKcal": 0, "workouts": 0}
+            bucket["_days"][day_key] = day
+        day["minutes"] += minutes
+        day["caloriesKcal"] += calories
+        day["workouts"] += 1
+
+    def _finalize(bucket: Dict[str, Any]) -> Dict[str, Any]:
+        days = list(bucket["_days"].values())
+        top_day = None
+        if days:
+            top_day = sorted(
+                days,
+                key=lambda d: (d["caloriesKcal"], d["minutes"], d["dateIso"]),
+                reverse=True,
+            )[0]
+        return {
+            "weekStartIso": bucket["weekStartIso"],
+            "weekEndIso": bucket["weekEndIso"],
+            "workouts": bucket["workouts"],
+            "activeDays": len(bucket["_activeDays"]),
+            "minutes": bucket["minutes"],
+            "caloriesKcal": bucket["caloriesKcal"],
+            "xp": bucket["xp"],
+            "topDay": top_day,
+        }
+
+    finalized = {k: _finalize(v) for k, v in weeks.items()}
+
+    # Current week.
+    if live_key in finalized:
+        current_week = dict(finalized[live_key])
+    else:
+        current_week = _empty_week(live_ws)
+    if days_per_week:
+        current_week["plannedWorkouts"] = days_per_week
+        current_week["adherencePercent"] = round(
+            100 * min(1.0, current_week["workouts"] / days_per_week)
+        )
+
+    # Most active week: calories, then minutes, then workouts, then recency.
+    most_active = None
+    if finalized:
+        ordered = sorted(
+            finalized.values(),
+            key=lambda wk: (
+                wk["caloriesKcal"],
+                wk["minutes"],
+                wk["workouts"],
+                wk["weekStartIso"],
+            ),
+            reverse=True,
+        )
+        most_active = dict(ordered[0])
+        count = len(finalized)
+        avg_minutes = sum(wk["minutes"] for wk in finalized.values()) / count
+        avg_active = sum(wk["activeDays"] for wk in finalized.values()) / count
+        bits = []
+        if most_active["minutes"] >= avg_minutes:
+            bits.append("workout duration")
+        if most_active["activeDays"] >= avg_active:
+            bits.append("active days")
+        if bits and count > 1:
+            most_active["reason"] = (
+                "This was your strongest week because your "
+                + " and ".join(bits)
+                + " were higher than your average."
+            )
+        else:
+            most_active["reason"] = "This was your highest calorie-burning week."
+
+    weekly_history = sorted(
+        finalized.values(), key=lambda wk: wk["weekStartIso"], reverse=True
+    )[:12]
+
+    return {
+        "currentWeek": current_week,
+        "mostActiveWeek": most_active,
+        "weeklyHistory": weekly_history,
+    }
+
+
+def compute_exercise_leaderboard(
+    workouts: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Top 10 exercises by total (tracked or estimated) calories burned."""
+    agg: Dict[str, Dict[str, Any]] = {}
+    for w in workouts:
+        completed_at = _iso_date(_to_dt(w.get("completedAt")))
+        for ex, cal, source in _exercise_calorie_split(w):
+            name = str(ex.get("name") or "").strip()
+            ex_id = ex.get("exerciseId")
+            key = ex_id or name.lower()
+            if not key:
+                continue
+            row = agg.get(key)
+            if row is None:
+                row = {
+                    "exerciseId": ex_id,
+                    "name": name or key,
+                    "primaryMuscle": ex.get("primaryMuscle"),
+                    "category": ex.get("category"),
+                    "equipment": ex.get("equipment"),
+                    "timesCompleted": 0,
+                    "totalSets": 0,
+                    "totalReps": 0,
+                    "totalDurationMin": 0.0,
+                    "totalCaloriesKcal": 0.0,
+                    "totalXp": 0,
+                    "_rpe": [],
+                    "bestWeightKg": None,
+                    "lastPerformedAt": None,
+                    "_allTracked": True,
+                }
+                agg[key] = row
+
+            sets = int(ex.get("actualSets") or 0)
+            reps_each = int(ex.get("actualReps") or ex.get("plannedReps") or 0)
+            row["timesCompleted"] += 1
+            row["totalSets"] += sets
+            row["totalReps"] += sets * reps_each
+            try:
+                dur = float(
+                    ex.get("durationMin")
+                    if ex.get("durationMin") is not None
+                    else (int(ex.get("durationSec") or 0) / 60)
+                )
+            except (TypeError, ValueError):
+                dur = 0.0
+            row["totalDurationMin"] += dur
+            row["totalCaloriesKcal"] += cal
+            row["totalXp"] += int(ex.get("xp") or 0)
+            if source != "tracked":
+                row["_allTracked"] = False
+            rpe = ex.get("rpe")
+            if rpe is not None:
+                try:
+                    row["_rpe"].append(float(rpe))
+                except (TypeError, ValueError):
+                    pass
+            weight = ex.get("weightKg")
+            if weight is not None:
+                try:
+                    wf = float(weight)
+                    if row["bestWeightKg"] is None or wf > row["bestWeightKg"]:
+                        row["bestWeightKg"] = wf
+                except (TypeError, ValueError):
+                    pass
+            if completed_at and (
+                row["lastPerformedAt"] is None
+                or completed_at > row["lastPerformedAt"]
+            ):
+                row["lastPerformedAt"] = completed_at
+
+    grand_total = sum(r["totalCaloriesKcal"] for r in agg.values()) or 0.0
+    out: List[Dict[str, Any]] = []
+    for r in agg.values():
+        rpe_list = r.pop("_rpe")
+        all_tracked = r.pop("_allTracked")
+        out.append(
+            {
+                "exerciseId": r["exerciseId"],
+                "name": r["name"],
+                "primaryMuscle": r["primaryMuscle"],
+                "category": r["category"],
+                "equipment": r["equipment"],
+                "timesCompleted": r["timesCompleted"],
+                "totalSets": r["totalSets"],
+                "totalReps": r["totalReps"],
+                "totalDurationMin": round(r["totalDurationMin"], 1),
+                "totalCaloriesKcal": round(r["totalCaloriesKcal"]),
+                "totalXp": r["totalXp"],
+                "avgRpe": round(sum(rpe_list) / len(rpe_list), 1)
+                if rpe_list
+                else None,
+                "bestWeightKg": r["bestWeightKg"],
+                "lastPerformedAt": r["lastPerformedAt"],
+                "contributionPercent": round(
+                    (r["totalCaloriesKcal"] / grand_total * 100), 1
+                )
+                if grand_total > 0
+                else 0.0,
+                "calorieSource": "tracked" if all_tracked else "estimated",
+            }
+        )
+
+    return sorted(
+        out,
+        key=lambda r: (r["totalCaloriesKcal"], r["timesCompleted"], r["totalXp"]),
+        reverse=True,
+    )[:10]
+
+
+def compute_muscle_leaderboard(
+    workouts: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Top 8 trained muscle groups by total calories burned."""
+    agg: Dict[str, Dict[str, Any]] = {}
+    for w in workouts:
+        seen_in_session: set = set()
+        for ex, cal, _src in _exercise_calorie_split(w):
+            muscle = str(ex.get("primaryMuscle") or "").strip().lower()
+            if not muscle:
+                continue
+            row = agg.get(muscle)
+            if row is None:
+                row = {
+                    "muscle": muscle,
+                    "sessions": 0,
+                    "exercises": 0,
+                    "totalCaloriesKcal": 0.0,
+                    "totalSets": 0,
+                    "totalReps": 0,
+                }
+                agg[muscle] = row
+            sets = int(ex.get("actualSets") or 0)
+            reps_each = int(ex.get("actualReps") or ex.get("plannedReps") or 0)
+            row["exercises"] += 1
+            row["totalCaloriesKcal"] += cal
+            row["totalSets"] += sets
+            row["totalReps"] += sets * reps_each
+            if muscle not in seen_in_session:
+                row["sessions"] += 1
+                seen_in_session.add(muscle)
+
+    out = [
+        {**r, "totalCaloriesKcal": round(r["totalCaloriesKcal"])}
+        for r in agg.values()
+    ]
+    return sorted(
+        out, key=lambda r: r["totalCaloriesKcal"], reverse=True
+    )[:8]
+
+
+def _goal_alignment(goal: Optional[str], direction: str, delta_since: float) -> str:
+    if goal == "lose_weight":
+        if direction == "down":
+            return "good"
+        if direction == "flat":
+            return "neutral"
+        return "needs_attention"
+    if goal == "build_muscle":
+        if delta_since <= -1.0:
+            return "needs_attention"
+        return "good" if direction == "up" else "neutral"
+    if goal == "stay_fit":
+        if direction == "flat":
+            return "good"
+        return "neutral" if abs(delta_since) < 1.0 else "needs_attention"
+    return "neutral"
+
+
+def _weight_message(
+    current_kg: Optional[float],
+    delta_since: float,
+    current_week: Dict[str, Any],
+    most_active: Optional[Dict[str, Any]],
+    top_exercise: Optional[Dict[str, Any]],
+) -> str:
+    parts: List[str] = []
+    if current_kg is not None:
+        if abs(delta_since) < 0.05:
+            parts.append(
+                f"Your weight is now {round(current_kg, 1)} kg, unchanged "
+                "from your last weigh-in."
+            )
+        else:
+            word = "down" if delta_since < 0 else "up"
+            parts.append(
+                f"Your weight is now {round(current_kg, 1)} kg, {word} "
+                f"{abs(round(delta_since, 1))} kg from your last weigh-in."
+            )
+    cw_workouts = current_week.get("workouts", 0)
+    if cw_workouts:
+        msg = (
+            f"This week you completed {cw_workouts} "
+            f"workout{'s' if cw_workouts != 1 else ''}, burned "
+            f"{current_week.get('caloriesKcal', 0)} kcal"
+        )
+        if top_exercise:
+            msg += (
+                f", and your most active exercise was {top_exercise['name']} "
+                f"with {top_exercise['totalCaloriesKcal']} kcal"
+            )
+        parts.append(msg + ".")
+    else:
+        parts.append("You have no workouts logged this week yet.")
+    if most_active:
+        parts.append(
+            "Your strongest calorie-burning week was "
+            f"{most_active['weekStartIso']} - {most_active['weekEndIso']} "
+            f"with {most_active['caloriesKcal']} kcal."
+        )
+    return " ".join(parts)
+
+
+def _weight_suggestions(goal: Optional[str], alignment: str) -> List[str]:
+    if goal == "lose_weight":
+        if alignment == "good":
+            return [
+                "You're trending toward your weight-loss goal — keep your "
+                "weekly calories burned close to your best active week.",
+                "Avoid increasing training volume too quickly to prevent fatigue.",
+            ]
+        return [
+            "Your weight isn't moving toward your loss goal yet — keep "
+            "sessions consistent and review your nutrition.",
+        ]
+    if goal == "build_muscle":
+        return [
+            "Keep progressive overload steady and ensure enough protein and "
+            "recovery between sessions.",
+        ]
+    if goal == "stay_fit":
+        return [
+            "Your weight is stable — maintain your current routine and "
+            "consistency.",
+        ]
+    return ["Keep logging workouts and weigh-ins so your insights stay accurate."]
+
+
+def build_weight_update_insight(
+    profile: Dict[str, Any],
+    measurements: List[Dict[str, Any]],
+    workouts: List[Dict[str, Any]],
+    measurement_id: Optional[str],
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build the users/{uid}/insights/latestWeightUpdate payload (pure).
+
+    `generatedAt` is intentionally NOT set here — the trigger stamps it with
+    SERVER_TIMESTAMP.
+    """
+    trend = compute_weight_trend(measurements)
+
+    entries: List[Dict[str, Any]] = []
+    for m in measurements:
+        dt = _to_dt(m.get("recordedAt") or m.get("createdAt") or m.get("date"))
+        weight = m.get("weightKg") or m.get("value")
+        if dt is None or weight is None:
+            continue
+        try:
+            entries.append({"dt": dt, "weight": float(weight)})
+        except (TypeError, ValueError):
+            continue
+    entries.sort(key=lambda e: e["dt"])
+
+    current_kg = trend["current"]
+    previous_kg = None
+    delta_since = 0.0
+    if len(entries) >= 2:
+        previous_kg = round(entries[-2]["weight"], 2)
+        delta_since = round(entries[-1]["weight"] - entries[-2]["weight"], 2)
+
+    direction = trend["direction"]
+    goal = profile.get("primaryGoal")
+    alignment = _goal_alignment(goal, direction, delta_since)
+
+    days_per_week = int(profile.get("daysPerWeek") or 0)
+    weekly = compute_weekly_activity(workouts, days_per_week)
+    current_week = weekly["currentWeek"]
+    most_active = weekly["mostActiveWeek"]
+    top_exercises = compute_exercise_leaderboard(workouts)[:5]
+    top_muscles = compute_muscle_leaderboard(workouts)[:5]
+    top_exercise = top_exercises[0] if top_exercises else None
+
+    message = _weight_message(
+        current_kg, delta_since, current_week, most_active, top_exercise
+    )
+
+    return {
+        "userId": user_id,
+        "measurementId": measurement_id,
+        "schemaVersion": WEIGHT_UPDATE_SCHEMA_VERSION,
+        "weight": {
+            "currentKg": current_kg,
+            "previousKg": previous_kg,
+            "deltaSinceLastKg": delta_since,
+            "delta30dKg": trend["deltaKg"],
+            "delta30dPercent": trend["deltaPercent"],
+            "direction": direction,
+            "goalAlignment": alignment,
+            "message": message,
+        },
+        "currentWeek": current_week,
+        "mostActiveWeek": most_active,
+        "topExercises": top_exercises,
+        "topMuscles": top_muscles,
+        "suggestions": _weight_suggestions(goal, alignment),
+    }
+
+
 # ---------- Full-rebuild orchestrator ----------
 
 
@@ -516,8 +1031,13 @@ def refresh_achievement_sections(uid: str, db: Any) -> Dict[str, Any]:
 
 __all__ = [
     "SCHEMA_VERSION",
+    "WEIGHT_UPDATE_SCHEMA_VERSION",
     "GOAL_LABELS",
     "build_full_snapshot",
+    "build_weight_update_insight",
+    "compute_weekly_activity",
+    "compute_exercise_leaderboard",
+    "compute_muscle_leaderboard",
     "compute_streaks",
     "compute_consistency",
     "compute_personal_records",

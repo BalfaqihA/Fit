@@ -7,7 +7,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ErrorBoundary } from '@/components/error-boundary';
 import { AuthProvider } from '@/contexts/auth';
-import { CommunityProvider } from '@/contexts/community';
 import { OnboardingProvider } from '@/contexts/onboarding';
 import { PlanProvider } from '@/contexts/plan';
 import { ThemeProvider } from '@/contexts/theme';
@@ -141,26 +140,24 @@ export default function RootLayout() {
           <WorkoutHistoryProvider>
             <PlanProvider>
               <OnboardingProvider>
-                <CommunityProvider>
-                  <WorkoutSessionProvider>
-                    <AuthGate>
-                      <WeighInScheduler />
-                      <Stack screenOptions={{ headerShown: false }}>
-                        <Stack.Screen name="index" />
-                        <Stack.Screen name="auth" />
-                        <Stack.Screen name="onboarding" />
-                        <Stack.Screen name="workout" />
-                        <Stack.Screen name="community" />
-                        <Stack.Screen name="dashboard" />
-                        <Stack.Screen name="(tabs)" />
-                        <Stack.Screen name="admin" />
-                        <Stack.Screen name="admin-bootstrap" />
-                        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-                      </Stack>
-                    </AuthGate>
-                    <ThemedStatusBar />
-                  </WorkoutSessionProvider>
-                </CommunityProvider>
+                <WorkoutSessionProvider>
+                  <AuthGate>
+                    <WeighInScheduler />
+                    <Stack screenOptions={{ headerShown: false }}>
+                      <Stack.Screen name="index" />
+                      <Stack.Screen name="auth" />
+                      <Stack.Screen name="onboarding" />
+                      <Stack.Screen name="workout" />
+                      <Stack.Screen name="community" />
+                      <Stack.Screen name="dashboard" />
+                      <Stack.Screen name="(tabs)" />
+                      <Stack.Screen name="admin" />
+                      <Stack.Screen name="admin-bootstrap" />
+                      <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                    </Stack>
+                  </AuthGate>
+                  <ThemedStatusBar />
+                </WorkoutSessionProvider>
               </OnboardingProvider>
             </PlanProvider>
           </WorkoutHistoryProvider>

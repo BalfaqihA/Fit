@@ -101,6 +101,14 @@ export function WorkoutHistoryProvider({
         setError(null);
       },
       (err) => {
+        // `permission-denied` fires briefly during signOut before the listener
+        // tears down — expected, not an error. Don't surface or report it.
+        if ((err as { code?: string }).code === 'permission-denied') {
+          setSessions([]);
+          setLoading(false);
+          setError(null);
+          return;
+        }
         captureException(err, {
           tags: { area: 'workout-history', op: 'subscribe' },
         });

@@ -31,7 +31,14 @@ service cloud.firestore {
       // document so the community search and "other user profile" screens
       // work. Subcollections (workouts, measurements, etc.) remain owner-only.
       allow read: if isSignedIn();
-      allow create, update: if isOwner(uid);
+      allow create: if isOwner(uid);
+      // `followerCount` / `followingCount` are derived counters maintained by
+      // the `on_follow_created` / `on_follow_deleted` triggers (Admin SDK
+      // bypasses these rules). A user can edit the rest of their own doc but
+      // must NOT be able to forge their own follower numbers.
+      allow update: if isOwner(uid)
+        && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['followerCount', 'followingCount']);
       allow delete: if false;
 
       match /workouts/{workoutId} {
@@ -136,12 +143,76 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Follow graph. Composite id `{followerId}_{followingId}` makes
+    // one-follow-per-pair a structural property (mirrors /likes). The
+    // follower/following counters on /users are moved only by the
+    // on_follow_created / on_follow_deleted triggers.
+    match /follows/{followId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && followId == request.resource.data.followerId + '_' + request.resource.data.followingId
+        && request.resource.data.followerId == request.auth.uid
+        && request.resource.data.followingId is string
+        && request.resource.data.followingId != request.auth.uid;
+      allow update: if false;
+      allow delete: if isOwner(resource.data.followerId);
+    }
+
+    // Stories: 24h ephemeral posts visible to all signed-in users. The app
+    // filters expired stories client-side (expiresAt > now); a scheduled
+    // function hard-deletes them. Author-only create/delete; never updated.
+    match /stories/{storyId} {
+      allow read: if isSignedIn();
+      // `expiresAt` is milliseconds since epoch and must land inside the
+      // published TTL window (24h + 1h slack for client clock skew). Without a
+      // cap, a client could write effectively-permanent stories.
+      allow create: if isSignedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.expiresAt is number
+        && request.resource.data.expiresAt > request.time.toMillis()
+        && request.resource.data.expiresAt <=
+            request.time.toMillis() + 25 * 60 * 60 * 1000;
+      allow update: if false;
+      allow delete: if isOwner(resource.data.authorId);
+
+      // "Seen by" — one doc per viewer, id == viewerId, idempotent.
+      match /views/{viewerId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+          && viewerId == request.auth.uid
+          && request.resource.data.viewerId == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
+
+    // Notifications are SERVER-ONLY writes (created by the like/comment/
+    // follow/post triggers via the Admin SDK, which bypasses these rules).
+    // The recipient can read their own and flip `read` to mark them seen.
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn()
+        && resource.data.recipientId == request.auth.uid;
+      allow create: if false;
+      allow update: if isSignedIn()
+        && resource.data.recipientId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['read']);
+      allow delete: if isSignedIn()
+        && resource.data.recipientId == request.auth.uid;
+    }
+
     // ---- Chatbot collections (Gemini-backed) ----
     // All chatbot writes go through Cloud Functions using the admin SDK,
     // which bypasses these rules. Owner-read is what the rules control.
 
     // Knowledge base — readable by any signed-in user, never client-writable.
     match /fitness_knowledge/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // Exercise dataset — read-only reference data seeded by the admin SDK
+    // (scripts/seed-exercise-library.ts). The chatbot reads it server-side.
+    match /exercise_library/{exerciseId} {
       allow read: if isSignedIn();
       allow write: if false;
     }

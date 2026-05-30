@@ -209,7 +209,9 @@ export default function SettingsHub() {
                 onPress: async () => {
                   try {
                     await signOut();
-                    // AuthGate redirects to /auth/login.
+                    // Navigate explicitly: AuthGate handles this on native, but
+                    // on web the effect-based redirect occasionally misses.
+                    router.replace('/auth/login' as never);
                   } catch (e) {
                     Alert.alert('Error', mapAuthError(e));
                   }

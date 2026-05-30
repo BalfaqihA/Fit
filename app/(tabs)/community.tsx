@@ -17,27 +17,30 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PostCard } from '@/components/post-card';
+import { ReportModal } from '@/components/report-modal';
 import { StoryRing } from '@/components/story-ring';
 import { type Palette, SHADOWS } from '@/constants/design';
-import { useCommunity } from '@/hooks/use-community';
+import { useCommunityNotifications } from '@/hooks/use-community-notifications';
 import { usePosts } from '@/hooks/use-posts';
+import { useStories } from '@/hooks/use-stories';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import {
   deletePost,
   likePost,
-  reportPost,
   unlikePost,
   type FeedPost,
 } from '@/lib/community';
+import { addReportedPost, useReportedPostIds } from '@/lib/reported-posts';
 
 export default function CommunityTab() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { profile } = useUserProfile();
-  const { getStoriesGrouped, unreadNotificationCount } = useCommunity();
+  const { groups: storyGroups, myGroup } = useStories();
+  const { unreadCount } = useCommunityNotifications();
   const {
-    posts,
+    posts: allPosts,
     loading,
     error,
     likedIds,
@@ -47,7 +50,14 @@ export default function CommunityTab() {
     retry,
   } = usePosts();
 
-  const storyGroups = getStoriesGrouped();
+  const reportedIds = useReportedPostIds();
+  // Hide posts the user reported (their report is queued for moderation;
+  // they shouldn't keep seeing the content in the meantime).
+  const posts = useMemo(
+    () => allPosts.filter((p) => !reportedIds.has(p.id)),
+    [allPosts, reportedIds]
+  );
+  const [reportTarget, setReportTarget] = useState<FeedPost | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
   // viewabilityConfig must be stable across renders — FlatList warns otherwise.
@@ -83,23 +93,10 @@ export default function CommunityTab() {
     [likedIds]
   );
 
+  // Alert.prompt is iOS-only (it silently no-ops on Android), so reporting
+  // used to be impossible on Android. Use a cross-platform modal instead.
   const handlePromptReport = useCallback((post: FeedPost) => {
-    Alert.prompt(
-      'Report this post',
-      'Tell us briefly what is wrong.',
-      async (reason) => {
-        if (!reason) return;
-        try {
-          await reportPost(post.id, reason);
-          Alert.alert('Thanks', 'Your report has been submitted.');
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : 'Could not report.';
-          Alert.alert('Error', msg);
-        }
-      },
-      'plain-text',
-      ''
-    );
+    setReportTarget(post);
   }, []);
 
   const handleConfirmDelete = useCallback((post: FeedPost) => {
@@ -148,19 +145,29 @@ export default function CommunityTab() {
           <Pressable
             style={styles.headerIconBtn}
             onPress={() => router.push('/community/search' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Search people"
           >
             <Ionicons name="search" size={20} color={COLORS.text} />
           </Pressable>
           <Pressable
             style={styles.headerIconBtn}
             onPress={() => router.push('/community/notifications' as never)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              unreadCount > 0
+                ? `Notifications, ${unreadCount} unread`
+                : 'Notifications'
+            }
           >
             <Ionicons name="notifications-outline" size={20} color={COLORS.text} />
-            {unreadNotificationCount > 0 && <View style={styles.badge} />}
+            {unreadCount > 0 && <View style={styles.badge} />}
           </Pressable>
           <Pressable
             style={styles.headerAvatarBtn}
             onPress={() => router.push(`/community/profile/${profile.id}` as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Open your profile"
           >
             {profile.avatarUri ? (
               <Image source={{ uri: profile.avatarUri }} style={styles.headerAvatarImage} />
@@ -176,32 +183,33 @@ export default function CommunityTab() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.storiesRow}
       >
-        <Pressable
-          style={styles.addStoryTile}
-          onPress={() => router.push('/community/story-compose' as never)}
-        >
-          <View style={[styles.addStoryRing, { borderColor: COLORS.primary }]}>
-            <View style={[styles.addStoryInner, { backgroundColor: COLORS.primarySoft }]}>
-              <Ionicons name="add" size={26} color={COLORS.primary} />
-            </View>
-          </View>
-          <Text style={styles.addStoryLabel} numberOfLines={1}>
-            Add Story
-          </Text>
-        </Pressable>
-        {storyGroups.map((group) => {
-          const isOwn = group.user.id === profile.id;
-          return (
+        {/* Your Story + Add are one item: tap opens your story if you have
+            one (else the composer); the small "+" always adds another. */}
+        <StoryRing
+          name="Your Story"
+          avatarUri={profile.avatarUri}
+          own
+          hasStory={!!myGroup}
+          onPress={() =>
+            myGroup
+              ? router.push(`/community/story/${profile.id}` as never)
+              : router.push('/community/story-compose' as never)
+          }
+          onPressAdd={() => router.push('/community/story-compose' as never)}
+        />
+        {storyGroups
+          .filter((group) => group.authorId !== profile.id)
+          .map((group) => (
             <StoryRing
-              key={group.user.id}
-              name={isOwn ? 'Your Story' : group.user.displayName}
-              avatarUri={group.user.avatarUri}
-              own={isOwn}
+              key={group.authorId}
+              name={group.authorName}
+              avatarUri={group.authorAvatarUrl ?? undefined}
               hasStory
-              onPress={() => router.push(`/community/story/${group.user.id}` as never)}
+              onPress={() =>
+                router.push(`/community/story/${group.authorId}` as never)
+              }
             />
-          );
-        })}
+          ))}
       </ScrollView>
     </View>
   );
@@ -229,8 +237,19 @@ export default function CommunityTab() {
     }
     return (
       <View style={styles.statePane}>
+        <Ionicons name="people-outline" size={32} color={COLORS.muted} />
         <Text style={styles.stateTitle}>No posts yet</Text>
-        <Text style={styles.stateSub}>Tap the + button to share your first post.</Text>
+        <Text style={styles.stateSub}>
+          Follow other members to fill your feed, or tap + to share your own.
+        </Text>
+        <Pressable
+          style={styles.retryBtn}
+          onPress={() => router.push('/community/search' as never)}
+          accessibilityRole="button"
+          accessibilityLabel="Find people to follow"
+        >
+          <Text style={styles.retryBtnText}>Find people</Text>
+        </Pressable>
       </View>
     );
   };
@@ -297,9 +316,18 @@ export default function CommunityTab() {
       <Pressable
         style={({ pressed }) => [styles.fab, pressed && { opacity: 0.85 }]}
         onPress={() => router.push('/community/compose' as never)}
+        accessibilityRole="button"
+        accessibilityLabel="New post"
       >
         <Ionicons name="add" size={28} color="#FFFFFF" />
       </Pressable>
+
+      <ReportModal
+        visible={!!reportTarget}
+        postId={reportTarget?.id ?? null}
+        onClose={() => setReportTarget(null)}
+        onReported={(postId) => addReportedPost(postId)}
+      />
     </SafeAreaView>
   );
 }

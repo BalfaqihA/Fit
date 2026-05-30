@@ -10,10 +10,44 @@ import type { BroadIntent, KnowledgeDoc } from './types';
 // users, so this is fine for a long time. When it gets too big, swap the
 // in-memory scoring for Firestore vector search by replacing
 // `scoreDocsAgainstQuery` — the function signature stays.
+//
+// A module-level TTL cache keeps warm invocations from re-reading Firestore
+// every chat turn (mirrors exerciseRetriever.ts). Authors editing knowledge
+// docs see updates within CACHE_TTL_MS of the next chat turn.
 
 const COLLECTION = 'fitness_knowledge';
 const TOP_K = 5;
 const MAX_DOCS = 200;
+const CACHE_TTL_MS = 10 * 60 * 1000;
+
+type CacheEntry = { at: number; docs: KnowledgeDoc[] };
+let cache: CacheEntry | null = null;
+
+async function loadKnowledge(): Promise<KnowledgeDoc[]> {
+  if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.docs;
+  try {
+    const snap = await getFirestore()
+      .collection(COLLECTION)
+      .limit(MAX_DOCS)
+      .get();
+    const docs = snap.docs
+      // Skip admin-archived docs. Done in memory (not a Firestore
+      // `where('status','!=','archived')`) so legacy docs that predate the
+      // `status` field — which `!=` would wrongly exclude — stay retrievable.
+      .filter((d) => (d.data() as { status?: string }).status !== 'archived')
+      .map((d) => ({ id: d.id, ...(d.data() as Omit<KnowledgeDoc, 'id'>) }));
+    cache = { at: Date.now(), docs };
+    return docs;
+  } catch (err) {
+    console.warn('[chatbot] retrieveKnowledge load failed', err);
+    return cache?.docs ?? [];
+  }
+}
+
+/** Test-only: drop the cached library so a fresh load happens on next call. */
+export function __resetKnowledgeCache(): void {
+  cache = null;
+}
 
 export type RetrievalQuery = {
   message: string;
@@ -28,6 +62,12 @@ type ScoredDoc = { doc: KnowledgeDoc; score: number };
 // those categories when the user's intent overlaps.
 const INTENT_CATEGORIES: Record<BroadIntent, string[]> = {
   workout_plan: ['workout', 'exercise', 'training', 'plan', 'form'],
+  todays_workout: ['workout', 'exercise', 'training', 'plan'],
+  exercise_substitution: ['exercise', 'equipment', 'workout', 'substitution'],
+  exercise_form: ['form', 'technique', 'exercise', 'injury'],
+  weight_progress: ['weight_loss', 'progress', 'fat_loss', 'tracking'],
+  weekly_stats: ['progress', 'consistency', 'tracking'],
+  exercise_stats: ['exercise', 'progress', 'strength', 'training'],
   nutrition_advice: ['nutrition', 'diet', 'food', 'macros', 'supplement'],
   weight_loss: ['weight_loss', 'fat_loss', 'cardio', 'deficit'],
   muscle_gain: ['muscle_gain', 'hypertrophy', 'strength', 'protein'],
@@ -97,21 +137,7 @@ function scoreDocsAgainstQuery(
 export async function retrieveKnowledge(
   q: RetrievalQuery,
 ): Promise<KnowledgeDoc[]> {
-  const db = getFirestore();
-  let docs: KnowledgeDoc[] = [];
-  try {
-    const snap = await db.collection(COLLECTION).limit(MAX_DOCS).get();
-    docs = snap.docs
-      // Skip admin-archived docs. Done in memory (not a Firestore
-      // `where('status','!=','archived')`) so legacy docs that predate the
-      // `status` field — which `!=` would wrongly exclude — stay retrievable.
-      .filter((d) => (d.data() as { status?: string }).status !== 'archived')
-      .map((d) => ({ id: d.id, ...(d.data() as Omit<KnowledgeDoc, 'id'>) }));
-  } catch (err) {
-    console.warn('[chatbot] retrieveKnowledge failed', err);
-    return [];
-  }
-
+  const docs = await loadKnowledge();
   if (docs.length === 0) return [];
   return scoreDocsAgainstQuery(docs, q).map((s) => s.doc);
 }

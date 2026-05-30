@@ -18,8 +18,8 @@ import random
 from typing import Any, Dict, List
 
 from firebase_admin import auth as admin_auth, firestore, initialize_app
-from firebase_functions import firestore_fn, https_fn, options
-from google.cloud.firestore_v1 import Increment
+from firebase_functions import firestore_fn, https_fn, options, scheduler_fn
+from google.cloud.firestore_v1 import FieldFilter, Increment
 
 import insights
 
@@ -263,6 +263,50 @@ def delete_account(req: https_fn.CallableRequest) -> Dict[str, Any]:
 # unforgeable by malicious clients.
 
 
+# Cap on how many followers receive a `new_post` notification per post.
+_MAX_FANOUT = 500
+
+
+def _actor_public(db: Any, uid: str) -> Dict[str, Any]:
+    """Denormalized actor fields so the notifications screen needs no joins."""
+    data = db.collection("users").document(uid).get().to_dict() or {}
+    return {
+        "actorName": data.get("displayName") or "Someone",
+        "actorAvatarUrl": data.get("avatarUri") or None,
+    }
+
+
+def _create_notification(
+    db: Any,
+    recipient_id: Any,
+    actor_id: Any,
+    n_type: str,
+    *,
+    post_id: Any = None,
+    comment_text: Any = None,
+) -> None:
+    """Write one notification doc. Never notify yourself / on bad input."""
+    if not isinstance(recipient_id, str) or not recipient_id:
+        return
+    if not isinstance(actor_id, str) or not actor_id:
+        return
+    if recipient_id == actor_id:
+        return
+    payload: Dict[str, Any] = {
+        "recipientId": recipient_id,
+        "actorId": actor_id,
+        "type": n_type,
+        "read": False,
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        **_actor_public(db, actor_id),
+    }
+    if isinstance(post_id, str) and post_id:
+        payload["postId"] = post_id
+    if isinstance(comment_text, str) and comment_text:
+        payload["commentText"] = comment_text[:140]
+    db.collection("notifications").add(payload)
+
+
 @firestore_fn.on_document_created(document="likes/{likeId}", region="us-central1")
 def on_like_created(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> None:
     snap = event.data
@@ -274,6 +318,10 @@ def on_like_created(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) ->
     db = firestore.client()
     db.collection("communityPosts").document(post_id).update(
         {"likeCount": Increment(1)}
+    )
+    # Notify the post owner that someone liked their post.
+    _create_notification(
+        db, snap.get("postOwnerId"), snap.get("userId"), "like", post_id=post_id
     )
 
 
@@ -305,6 +353,15 @@ def on_comment_created(
     db.collection("communityPosts").document(post_id).update(
         {"commentCount": Increment(1)}
     )
+    # Notify the post owner that someone commented on their post.
+    _create_notification(
+        db,
+        snap.get("postOwnerId"),
+        snap.get("authorId"),
+        "comment",
+        post_id=post_id,
+        comment_text=snap.get("text"),
+    )
 
 
 @firestore_fn.on_document_deleted(document="comments/{commentId}", region="us-central1")
@@ -321,6 +378,117 @@ def on_comment_deleted(
     db.collection("communityPosts").document(post_id).update(
         {"commentCount": Increment(-1)}
     )
+
+
+# -------- Community social graph: follows + notifications --------
+#
+# Follow edges live in `follows/{followerId}_{followingId}`. These triggers
+# keep `followerCount` / `followingCount` on the user docs unforgeable
+# (clients cannot write those fields — see firestore.rules), notify the
+# followed user, and fan out `new_post` notifications to a poster's followers.
+
+
+@firestore_fn.on_document_created(
+    document="follows/{followId}", region="us-central1"
+)
+def on_follow_created(
+    event: firestore_fn.Event[firestore_fn.DocumentSnapshot],
+) -> None:
+    snap = event.data
+    if snap is None:
+        return
+    follower_id = snap.get("followerId")
+    following_id = snap.get("followingId")
+    if not isinstance(follower_id, str) or not isinstance(following_id, str):
+        return
+    if not follower_id or not following_id or follower_id == following_id:
+        return
+    db = firestore.client()
+    db.collection("users").document(following_id).set(
+        {"followerCount": Increment(1)}, merge=True
+    )
+    db.collection("users").document(follower_id).set(
+        {"followingCount": Increment(1)}, merge=True
+    )
+    _create_notification(db, following_id, follower_id, "follow")
+
+
+@firestore_fn.on_document_deleted(
+    document="follows/{followId}", region="us-central1"
+)
+def on_follow_deleted(
+    event: firestore_fn.Event[firestore_fn.DocumentSnapshot],
+) -> None:
+    snap = event.data
+    if snap is None:
+        return
+    follower_id = snap.get("followerId")
+    following_id = snap.get("followingId")
+    if not isinstance(follower_id, str) or not isinstance(following_id, str):
+        return
+    if not follower_id or not following_id:
+        return
+    db = firestore.client()
+    db.collection("users").document(following_id).set(
+        {"followerCount": Increment(-1)}, merge=True
+    )
+    db.collection("users").document(follower_id).set(
+        {"followingCount": Increment(-1)}, merge=True
+    )
+
+
+@firestore_fn.on_document_created(
+    document="communityPosts/{postId}", region="us-central1"
+)
+def on_post_created(
+    event: firestore_fn.Event[firestore_fn.DocumentSnapshot],
+) -> None:
+    """Fan out a `new_post` notification to every follower of the author."""
+    snap = event.data
+    if snap is None:
+        return
+    author_id = snap.get("authorId")
+    if not isinstance(author_id, str) or not author_id:
+        return
+    post_id = event.params.get("postId")
+    if not post_id:
+        return
+    db = firestore.client()
+    actor = _actor_public(db, author_id)
+    followers = (
+        db.collection("follows")
+        .where(filter=FieldFilter("followingId", "==", author_id))
+        .limit(_MAX_FANOUT)
+        .stream()
+    )
+    batch = db.batch()
+    pending = 0
+    for f in followers:
+        follower_id = (f.to_dict() or {}).get("followerId")
+        if not isinstance(follower_id, str) or not follower_id:
+            continue
+        if follower_id == author_id:
+            continue
+        ref = db.collection("notifications").document()
+        batch.set(
+            ref,
+            {
+                "recipientId": follower_id,
+                "actorId": author_id,
+                "type": "new_post",
+                "postId": post_id,
+                "read": False,
+                "createdAt": firestore.SERVER_TIMESTAMP,
+                **actor,
+            },
+        )
+        pending += 1
+        if pending == 450:
+            batch.commit()
+            batch = db.batch()
+            pending = 0
+    if pending:
+        batch.commit()
 
 
 # -------- Per-user insights snapshot triggers --------
@@ -351,6 +519,59 @@ def _merge_insights(uid: str, payload: Dict[str, Any]) -> None:
         "updatedAt": firestore.SERVER_TIMESTAMP,
     }
     _insights_ref(db, uid).set(payload, merge=True)
+
+
+def _latest_weight_update_ref(db: Any, uid: str):
+    return db.collection("users").document(uid).collection("insights").document(
+        "latestWeightUpdate"
+    )
+
+
+def _weight_update_summary(latest: Dict[str, Any]) -> Dict[str, Any]:
+    """Small, flat digest of the latest-weight-update doc.
+
+    Merged into the snapshot so the Node chatbot can read one cheap doc
+    instead of re-deriving weekly analytics per chat turn.
+    """
+    weight = latest.get("weight") or {}
+    cw = latest.get("currentWeek") or {}
+    ma = latest.get("mostActiveWeek") or {}
+    top = latest.get("topExercises") or []
+    return {
+        "currentKg": weight.get("currentKg"),
+        "deltaSinceLastKg": weight.get("deltaSinceLastKg"),
+        "delta30dKg": weight.get("delta30dKg"),
+        "currentWeekCalories": cw.get("caloriesKcal"),
+        "mostActiveWeekCalories": ma.get("caloriesKcal") if ma else None,
+        "mostActiveWeekRange": (
+            f'{ma.get("weekStartIso")} - {ma.get("weekEndIso")}' if ma else None
+        ),
+        "topExercise": top[0]["name"] if top else None,
+        "measurementId": latest.get("measurementId"),
+    }
+
+
+def _write_weight_update(
+    db: Any, uid: str, measurement_id: Any
+) -> None:
+    """Rebuild + write users/{uid}/insights/latestWeightUpdate and merge a
+    compact summary into the snapshot."""
+    user_ref = db.collection("users").document(uid)
+    profile = user_ref.get().to_dict() or {}
+    workouts = [
+        w.to_dict() | {"id": w.id} for w in user_ref.collection("workouts").stream()
+    ]
+    measurements = [
+        m.to_dict() | {"id": m.id}
+        for m in user_ref.collection("measurements").stream()
+    ]
+    latest = insights.build_weight_update_insight(
+        profile, measurements, workouts, measurement_id, uid
+    )
+    _latest_weight_update_ref(db, uid).set(
+        {**latest, "generatedAt": firestore.SERVER_TIMESTAMP}, merge=True
+    )
+    _merge_insights(uid, {"latestWeightUpdateSummary": _weight_update_summary(latest)})
 
 
 @firestore_fn.on_document_written(
@@ -393,13 +614,23 @@ def on_workout_write(
 def on_measurement_write(
     event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],
 ) -> None:
-    """Refresh weightTrend + needsWeighIn flag when a weight is logged."""
+    """Refresh weightTrend + needsWeighIn flag when a weight is logged, and
+    rebuild the post-weight-update insight doc."""
     uid = event.params.get("uid")
     if not uid:
         return
     db = firestore.client()
+    # Always keep weightTrend/flags fresh — this never blocks the save (the
+    # client does not await this async trigger).
     sections = insights.refresh_measurement_sections(uid, db)
     _merge_insights(uid, sections)
+
+    after = event.data.after if event.data else None
+    if after is None or not after.exists:
+        # Measurement deleted — leave the existing latestWeightUpdate doc as-is
+        # rather than rebuilding against a removed measurement.
+        return
+    _write_weight_update(db, uid, event.params.get("measurementId"))
 
 
 @firestore_fn.on_document_written(
@@ -458,4 +689,102 @@ def bootstrap_insights(req: https_fn.CallableRequest) -> Dict[str, Any]:
     db = firestore.client()
     snapshot = insights.build_full_snapshot(uid, db)
     _merge_insights(uid, snapshot)
+
+    # Back-fill the post-weight-update insight for users who have not weighed
+    # in since this feature shipped. Identify the most recent measurement.
+    user_ref = db.collection("users").document(uid)
+    dated = []
+    for m in user_ref.collection("measurements").stream():
+        data = m.to_dict() or {}
+        dt = insights._to_dt(
+            data.get("recordedAt") or data.get("createdAt") or data.get("date")
+        )
+        if dt is not None:
+            dated.append((dt, m.id))
+    latest_measurement_id = max(dated, key=lambda t: t[0])[1] if dated else None
+    _write_weight_update(db, uid, latest_measurement_id)
+
     return {"ok": True, "schemaVersion": insights.SCHEMA_VERSION}
+
+
+# -------- Scheduled counter reconciliation --------
+#
+# `likeCount` / `commentCount` on posts and `followerCount` / `followingCount`
+# on users are maintained by the triggers above. If a trigger ever fails
+# (transient outage, hot partition), the counters drift. This nightly job
+# recomputes them from source collections and corrects any drift.
+#
+# Idempotent: writes the recomputed value unconditionally (Firestore won't
+# bump version when the value is unchanged). Bounded by collection size, so
+# safe at the project's current scale; revisit if user/post counts approach
+# Firestore admin SDK practical limits (~10^6 docs).
+
+
+def _count_where(db: Any, collection: str, field: str, value: str) -> int:
+    """count() aggregation; falls back to streaming on older SDKs."""
+    coll = db.collection(collection).where(filter=FieldFilter(field, "==", value))
+    try:
+        snap = coll.count().get()
+        return int(snap[0][0].value)
+    except Exception:
+        return sum(1 for _ in coll.stream())
+
+
+def _reconcile_post_counters(db: Any) -> Dict[str, int]:
+    """Recompute likeCount/commentCount on every post."""
+    fixed_likes = 0
+    fixed_comments = 0
+    for post in db.collection("communityPosts").stream():
+        pid = post.id
+        actual_likes = _count_where(db, "likes", "postId", pid)
+        actual_comments = _count_where(db, "comments", "postId", pid)
+        data = post.to_dict() or {}
+        if data.get("likeCount") != actual_likes:
+            fixed_likes += 1
+        if data.get("commentCount") != actual_comments:
+            fixed_comments += 1
+        post.reference.set(
+            {"likeCount": actual_likes, "commentCount": actual_comments},
+            merge=True,
+        )
+    return {"posts_likeCount_fixed": fixed_likes,
+            "posts_commentCount_fixed": fixed_comments}
+
+
+def _reconcile_follow_counters(db: Any) -> Dict[str, int]:
+    """Recompute followerCount/followingCount on every user."""
+    fixed_followers = 0
+    fixed_following = 0
+    for user in db.collection("users").stream():
+        uid = user.id
+        actual_followers = _count_where(db, "follows", "followingId", uid)
+        actual_following = _count_where(db, "follows", "followerId", uid)
+        data = user.to_dict() or {}
+        if data.get("followerCount") != actual_followers:
+            fixed_followers += 1
+        if data.get("followingCount") != actual_following:
+            fixed_following += 1
+        user.reference.set(
+            {"followerCount": actual_followers,
+             "followingCount": actual_following},
+            merge=True,
+        )
+    return {"users_followerCount_fixed": fixed_followers,
+            "users_followingCount_fixed": fixed_following}
+
+
+def _reconcile_counters_impl(db: Any) -> Dict[str, int]:
+    """Pure entry point — easy to call from a manual admin endpoint or tests."""
+    out: Dict[str, int] = {}
+    out.update(_reconcile_post_counters(db))
+    out.update(_reconcile_follow_counters(db))
+    return out
+
+
+@scheduler_fn.on_schedule(schedule="every day 03:00", region="us-central1")
+def reconcile_counters(event: scheduler_fn.ScheduledEvent) -> None:
+    """Nightly drift correction for community counters."""
+    del event  # unused
+    db = firestore.client()
+    summary = _reconcile_counters_impl(db)
+    print(f"[reconcile_counters] {summary}")

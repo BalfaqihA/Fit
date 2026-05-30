@@ -10,6 +10,8 @@
     "build:watch": "tsc --watch",
     "train": "tsc && npm run copy-intents && node lib/train.js",
     "serve": "npm run build && firebase emulators:start --only functions",
+    "test": "jest",
+    "seed:exercises": "npx ts-node scripts/seed-exercise-library.ts",
     "deploy": "firebase deploy --only functions:chatbot"
   },
   "dependencies": {
@@ -20,8 +22,11 @@
     "natural": "^7.1.0"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.14",
     "@types/natural": "^5.1.5",
     "@types/node": "^20.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.9",
     "typescript": "~5.4.0"
   },
   "private": true

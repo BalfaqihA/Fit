@@ -96,6 +96,51 @@ function renderActivityBlock(ctx: PersonalContext): string {
   ].join('\n');
 }
 
+function renderPlanBlock(ctx: PersonalContext): string {
+  const goal = tokenOrFallback(
+    ctx.planGoal,
+    tokenOrFallback(ctx.goal, 'general fitness'),
+  );
+  const dpw = tokenOrFallback(
+    ctx.planDaysPerWeek,
+    tokenOrFallback(ctx.daysPerWeek, 'unknown'),
+  );
+  const session = tokenOrFallback(
+    ctx.planSessionMinutes,
+    tokenOrFallback(ctx.sessionMinutes, '30'),
+  );
+  const completed = tokenOrFallback(ctx.planCompletedThisWeek, '0');
+  const planned = tokenOrFallback(ctx.planPlannedThisWeek, dpw);
+  const todayLine = tokenOrFallback(ctx.todayPlanLine, 'rest day');
+  const exercises = tokenOrFallback(ctx.todayPlanExercises, '(none scheduled)');
+
+  return [
+    'CURRENT WORKOUT PLAN',
+    `- Plan goal: ${goal}`,
+    `- Days/week: ${dpw}`,
+    `- Session length: ${session} min`,
+    `- Completed this week: ${completed}/${planned}`,
+    `- Today's workout: ${todayLine}`,
+    '',
+    "Today's exercises:",
+    exercises,
+    '',
+    "If the user asks for today's plan, answer from this block. If the user asks for replacements, match the same muscle, level, and available equipment.",
+  ].join('\n');
+}
+
+function renderWeightUpdateBlock(ctx: PersonalContext): string {
+  return [
+    'LATEST WEIGHT UPDATE',
+    `- Current weight: ${tokenOrFallback(ctx.wuCurrentKg, 'unknown')} kg`,
+    `- Change since last weigh-in: ${tokenOrFallback(ctx.wuDeltaSinceLastKg, '0')} kg`,
+    `- 30-day change: ${tokenOrFallback(ctx.wuDelta30dKg, '0')} kg`,
+    `- Current week calories: ${tokenOrFallback(ctx.wuCurrentWeekCalories, '0')} kcal`,
+    `- Most active week: ${tokenOrFallback(ctx.wuMostActiveWeek, 'n/a')} (${tokenOrFallback(ctx.wuMostActiveWeekCalories, '0')} kcal)`,
+    `- Top exercises: ${tokenOrFallback(ctx.wuTopExercises, 'n/a')}`,
+  ].join('\n');
+}
+
 function renderMemoryBlock(m: ChatMemoryDoc): string {
   const lines = ['CHAT MEMORY'];
   lines.push(`- Summary: ${m.summary?.trim() || '(none yet)'}`);
@@ -144,6 +189,10 @@ export function buildGeminiPrompt(inputs: PromptInputs): {
     renderProfileBlock(inputs.personal),
     '',
     renderActivityBlock(inputs.personal),
+    '',
+    renderPlanBlock(inputs.personal),
+    '',
+    renderWeightUpdateBlock(inputs.personal),
     '',
     renderMemoryBlock(inputs.memory),
     '',

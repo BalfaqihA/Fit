@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackButton } from '@/components/back-button';
 import { CommentRow } from '@/components/comment-row';
 import { PostCard } from '@/components/post-card';
+import { ReportModal } from '@/components/report-modal';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useComments } from '@/hooks/use-comments';
 import { useSubmit } from '@/hooks/use-submit';
@@ -33,12 +34,12 @@ import {
   deletePost,
   likePost,
   mapPost,
-  reportPost,
   subscribeToLikedPostIds,
   unlikePost,
   type FeedPost,
 } from '@/lib/community';
 import { db } from '@/lib/firebase';
+import { addReportedPost } from '@/lib/reported-posts';
 
 export default function PostDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,6 +51,7 @@ export default function PostDetail() {
   const [postLoading, setPostLoading] = useState(true);
   const [postError, setPostError] = useState<Error | null>(null);
   const [liked, setLiked] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const { comments, loading: commentsLoading } = useComments(id);
   const [draft, setDraft] = useState('');
   const { run: runComment, pending: submitting } = useSubmit();
@@ -166,23 +168,7 @@ export default function PostDetail() {
         {
           text: 'Report post',
           style: 'destructive',
-          onPress: () =>
-            Alert.prompt(
-              'Report this post',
-              'Tell us briefly what is wrong.',
-              async (reason) => {
-                if (!reason) return;
-                try {
-                  await reportPost(post.id, reason);
-                  Alert.alert('Thanks', 'Your report has been submitted.');
-                } catch (e) {
-                  const msg = e instanceof Error ? e.message : 'Could not report.';
-                  Alert.alert('Error', msg);
-                }
-              },
-              'plain-text',
-              ''
-            ),
+          onPress: () => setReportOpen(true),
         },
         { text: 'Cancel', style: 'cancel' },
       ]);
@@ -327,6 +313,17 @@ export default function PostDetail() {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      <ReportModal
+        visible={reportOpen}
+        postId={post?.id ?? null}
+        onClose={() => setReportOpen(false)}
+        onReported={(postId) => {
+          addReportedPost(postId);
+          setReportOpen(false);
+          router.back();
+        }}
+      />
     </SafeAreaView>
   );
 }

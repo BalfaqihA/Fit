@@ -247,7 +247,16 @@ export default function ProfileCompletePage() {
         | null;
       const code = err?.code;
       const message = err?.message ?? 'Could not generate your plan.';
-      Alert.alert('Error', code ? `${code}: ${message}` : message);
+      // Offer a one-tap retry so a transient network/Cloud-Function blip
+      // doesn't dead-end the user at the last step of onboarding.
+      Alert.alert(
+        'Could not generate plan',
+        code ? `${code}: ${message}` : message,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Retry', onPress: () => { void onGenerate(); } },
+        ],
+      );
     } finally {
       setLoading(false);
     }

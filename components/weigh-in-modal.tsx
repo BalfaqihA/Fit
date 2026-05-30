@@ -26,9 +26,10 @@ import { parseWeight } from '@/lib/validation';
 type Props = {
   visible: boolean;
   onClose: () => void;
+  onSaved?: (measurementId: string) => void;
 };
 
-export function WeighInModal({ visible, onClose }: Props) {
+export function WeighInModal({ visible, onClose, onSaved }: Props) {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { user } = useAuth();
@@ -55,10 +56,14 @@ export function WeighInModal({ visible, onClose }: Props) {
     setSaving(true);
     setError(null);
     try {
-      await recordWeight(user.uid, Math.round(weightKg * 100) / 100);
+      const measurementId = await recordWeight(
+        user.uid,
+        Math.round(weightKg * 100) / 100
+      );
       // Re-arm the weekly reminder so it fires 7 days from now.
       const granted = await requestNotificationPermissionOnce();
       if (granted) await scheduleWeeklyWeighIn();
+      onSaved?.(measurementId);
       onClose();
     } catch {
       setError('Could not save. Please try again.');

@@ -1,13 +1,20 @@
-import { firestoreMock } from '../../__mocks__/firestore-mock';
-
-const mockApi = firestoreMock();
-
+// jest.mock factories are hoisted ABOVE local const declarations, so build the
+// mock inside the factory and retrieve the same instance via requireMock for
+// per-test reset/inspection.
+jest.mock('firebase/firestore', () =>
+  require('../../__mocks__/firestore-mock').firestoreMock(),
+);
 jest.mock('@/lib/firebase', () => ({ auth: { currentUser: { uid: 'uid1' } }, db: {} }));
-jest.mock('firebase/firestore', () => mockApi);
 jest.mock('@/lib/observability', () => ({ captureException: jest.fn() }));
 jest.mock('@/lib/upload', () => ({ deleteImage: jest.fn() }));
 
+import type { firestoreMock } from '../../__mocks__/firestore-mock';
+
 import { addComment, likePost, unlikePost } from '../community';
+
+const mockApi = jest.requireMock('firebase/firestore') as ReturnType<
+  typeof firestoreMock
+>;
 
 describe('community: counter-side-effect removal (P0.1 invariant)', () => {
   beforeEach(() => mockApi.__reset());

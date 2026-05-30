@@ -6,10 +6,18 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { FollowButton } from '@/components/follow-button';
 import { type Palette } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
-import type { SeedUser, UserProfile } from '@/types/community';
+
+/** Minimal user shape rendered by the row — works for search results,
+ * follower/following cards, and full profiles alike. */
+export type UserCard = {
+  id: string;
+  displayName: string;
+  handle: string;
+  avatarUri?: string | null;
+};
 
 type UserListRowProps = {
-  user: SeedUser | UserProfile;
+  user: UserCard;
   onPress?: () => void;
   showFollow?: boolean;
   isCurrentUser?: boolean;

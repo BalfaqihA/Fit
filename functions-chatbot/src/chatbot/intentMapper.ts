@@ -7,19 +7,23 @@ import type { BroadIntent } from './types';
 // still saved alongside on the message for audit / future training.
 
 const TAG_TO_BROAD: Record<string, BroadIntent> = {
-  // workout_plan
-  ask_plan_today: 'workout_plan',
+  // workout_plan + the finer plan/exercise intents (no classifier retrain —
+  // existing fine tags are re-pointed so the new broad intents are reachable).
+  ask_plan_today: 'todays_workout',
   ask_workout_advice: 'workout_plan',
   ask_set_rep_scheme: 'workout_plan',
-  form_check: 'workout_plan',
-  progression_request: 'workout_plan',
-  equipment_swap: 'workout_plan',
-  swap_exercise: 'workout_plan',
-  exercise_squat: 'workout_plan',
-  exercise_deadlift: 'workout_plan',
-  exercise_bench_press: 'workout_plan',
-  exercise_pullup: 'workout_plan',
+  form_check: 'exercise_form',
+  progression_request: 'exercise_stats',
+  equipment_swap: 'exercise_substitution',
+  swap_exercise: 'exercise_substitution',
+  exercise_squat: 'exercise_form',
+  exercise_deadlift: 'exercise_form',
+  exercise_bench_press: 'exercise_form',
+  exercise_pullup: 'exercise_form',
   cardio_advice: 'workout_plan',
+  // NOTE: 'weekly_stats' has no dedicated classifier fine tag — it stays
+  // answerable because the CURRENT WORKOUT PLAN / LATEST WEIGHT UPDATE prompt
+  // blocks always carry weekly context to Gemini.
 
   // nutrition_advice
   nutrition_question: 'nutrition_advice',
@@ -37,8 +41,8 @@ const TAG_TO_BROAD: Record<string, BroadIntent> = {
   motivation: 'motivation',
   greeting: 'motivation',
   consult_me: 'motivation',
-  progress_question: 'motivation',
-  share_progress: 'motivation',
+  progress_question: 'weight_progress',
+  share_progress: 'weight_progress',
 
   // injury_warning
   injury_concern: 'injury_warning',

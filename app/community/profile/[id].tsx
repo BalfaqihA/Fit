@@ -18,9 +18,10 @@ import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { GOAL_META } from '@/constants/goals';
 import { useAchievements } from '@/hooks/use-achievements';
 import { useAuth } from '@/hooks/use-auth';
-import { useCommunity } from '@/hooks/use-community';
+import { useFollowCounts } from '@/hooks/use-follows';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserById } from '@/hooks/use-user-by-id';
+import { useUserPosts } from '@/hooks/use-user-posts';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import { getAchievement } from '@/lib/achievements';
 import { relativeTime } from '@/lib/format';
@@ -35,15 +36,12 @@ export default function ProfileView() {
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { profile } = useUserProfile();
   const { user: authUser } = useAuth();
-  const {
-    posts: allPosts,
-    getPostsByUser,
-    getCommentsByAuthor,
-    getUserById,
-    getFollowerCount,
-    getFollowingCount,
-  } = useCommunity();
   const { user, loading: userLoading, notFound } = useUserById(id);
+  const {
+    posts: userPosts,
+    comments: userComments,
+  } = useUserPosts(user?.id);
+  const { followerCount, followingCount } = useFollowCounts(user?.id);
   const isCurrentUser = !!user && user.id === profile.id;
   const [tab, setTab] = useState<'posts' | 'comments'>('posts');
   const { unlocked } = useAchievements(
@@ -74,14 +72,9 @@ export default function ProfileView() {
     );
   }
 
-  const userPosts = getPostsByUser(user.id);
-  const userComments = getCommentsByAuthor(user.id);
-  const followerCount = getFollowerCount(user.id);
-  const followingCount = getFollowingCount(user.id);
-
-  // Goals visibility: own profile uses the toggle; seeded users always show.
+  // Goals visibility: own profile uses the toggle; other profiles show theirs.
   const showGoals = isCurrentUser ? profile.goalsVisible : true;
-  const goals = isCurrentUser ? profile.goals : ('goals' in user ? user.goals : []);
+  const goals = isCurrentUser ? profile.goals : user.goals ?? [];
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -296,8 +289,8 @@ export default function ProfileView() {
                       onPress={() => router.push(`/community/post/${post.id}` as never)}
                       style={styles.postTile}
                     >
-                      {post.imageUri ? (
-                        <Image source={{ uri: post.imageUri }} style={styles.postTileImage} />
+                      {post.imageUrl ? (
+                        <Image source={{ uri: post.imageUrl }} style={styles.postTileImage} />
                       ) : (
                         <View style={[styles.postTileImage, styles.postTileText]}>
                           <Text style={styles.postTileTextContent} numberOfLines={4}>
@@ -318,30 +311,22 @@ export default function ProfileView() {
               <Text style={styles.emptyText}>No comments yet.</Text>
             ) : (
               <View style={{ gap: 8 }}>
-                {userComments.map((comment) => {
-                  const parentPost = allPosts.find((p) => p.id === comment.postId);
-                  const parentAuthor = parentPost
-                    ? getUserById(parentPost.authorId)
-                    : undefined;
-                  return (
-                    <Pressable
-                      key={comment.id}
-                      onPress={() =>
-                        router.push(`/community/post/${comment.postId}` as never)
-                      }
-                      style={styles.commentRow}
-                    >
-                      <Text style={styles.commentText} numberOfLines={3}>
-                        {comment.text}
-                      </Text>
-                      <Text style={styles.commentMeta}>
-                        {parentAuthor
-                          ? `on @${parentAuthor.handle}'s post · ${relativeTime(comment.createdAt)}`
-                          : relativeTime(comment.createdAt)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                {userComments.map((comment) => (
+                  <Pressable
+                    key={comment.id}
+                    onPress={() =>
+                      router.push(`/community/post/${comment.postId}` as never)
+                    }
+                    style={styles.commentRow}
+                  >
+                    <Text style={styles.commentText} numberOfLines={3}>
+                      {comment.text}
+                    </Text>
+                    <Text style={styles.commentMeta}>
+                      {`on a post · ${relativeTime(comment.createdAtMs)}`}
+                    </Text>
+                  </Pressable>
+                ))}
               </View>
             )}
           </View>

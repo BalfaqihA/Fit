@@ -19,18 +19,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { useCommunity } from '@/hooks/use-community';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserProfile } from '@/hooks/use-user-profile';
+import { createStory } from '@/lib/stories';
 
 export default function StoryCompose() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
-  const { createStory } = useCommunity();
+  const { profile } = useUserProfile();
 
   const [imageUri, setImageUri] = useState<string | undefined>();
   const [videoUri, setVideoUri] = useState<string | undefined>();
   const [caption, setCaption] = useState('');
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const videoPlayer = useVideoPlayer(videoUri ?? '', (p) => {
     p.loop = true;
@@ -82,18 +84,29 @@ export default function StoryCompose() {
     }
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     if (!imageUri && !videoUri) {
       Alert.alert('Pick media', 'Choose a photo or video for your story first.');
       return;
     }
-    createStory({
-      imageUri,
-      videoUri,
-      mediaType: videoUri ? 'video' : 'image',
-      caption: caption.trim() || undefined,
-    });
-    router.back();
+    setSubmitting(true);
+    try {
+      await createStory({
+        imageUri,
+        videoUri,
+        mediaType: videoUri ? 'video' : 'image',
+        caption: caption.trim() || undefined,
+        authorName: profile.displayName || 'You',
+        authorAvatarUrl: profile.avatarUri ?? null,
+      });
+      router.back();
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : 'Could not share your story.';
+      Alert.alert('Upload failed', msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -177,9 +190,9 @@ export default function StoryCompose() {
 
           <View style={{ height: 16 }} />
           <PrimaryButton
-            label="Share Story"
+            label={submitting ? 'Sharing…' : 'Share Story'}
             onPress={handleShare}
-            disabled={!imageUri && !videoUri}
+            disabled={(!imageUri && !videoUri) || submitting}
           />
         </View>
       </KeyboardAvoidingView>

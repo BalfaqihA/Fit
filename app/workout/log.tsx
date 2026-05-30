@@ -1,6 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -109,6 +110,68 @@ export default function WorkoutLog() {
   const [notes, setNotes] = useState('');
   const { run: runSave, pending: saving } = useSubmit();
 
+  // Draft autosave — survives the app being backgrounded mid-entry. Keyed per
+  // user so two accounts on the same device don't see each other's draft.
+  // Hydrates exactly once after mount; subsequent edits persist debounced.
+  const draftKey = user ? `workout-log-draft:${user.uid}` : null;
+  const draftHydrated = useRef(false);
+  useEffect(() => {
+    if (!draftKey || draftHydrated.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(draftKey);
+        if (cancelled || !raw) {
+          draftHydrated.current = true;
+          return;
+        }
+        const d = JSON.parse(raw) as Partial<{
+          exerciseId: string;
+          sets: number;
+          reps: number;
+          weight: string;
+          duration: string;
+          rpe: number;
+          notes: string;
+        }>;
+        if (d.exerciseId) {
+          const found = EXERCISES.find((e) => e.id === d.exerciseId);
+          if (found) setExercise(found);
+        }
+        if (typeof d.sets === 'number') setSets(d.sets);
+        if (typeof d.reps === 'number') setReps(d.reps);
+        if (typeof d.weight === 'string') setWeight(d.weight);
+        if (typeof d.duration === 'string') setDuration(d.duration);
+        if (typeof d.rpe === 'number') setRpe(d.rpe);
+        if (typeof d.notes === 'string') setNotes(d.notes);
+      } catch {
+        // Draft is best-effort — silently ignore a malformed entry.
+      } finally {
+        draftHydrated.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftKey || !draftHydrated.current) return;
+    const t = setTimeout(() => {
+      const payload = {
+        exerciseId: exercise.id,
+        sets,
+        reps,
+        weight,
+        duration,
+        rpe,
+        notes,
+      };
+      AsyncStorage.setItem(draftKey, JSON.stringify(payload)).catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, [draftKey, exercise, sets, reps, weight, duration, rpe, notes]);
+
   const weightUnit = profile.weightUnit ?? 'kg';
 
   const onSave = () =>
@@ -153,12 +216,22 @@ export default function WorkoutLog() {
           xp: workoutXp,
           exercises: [
             {
+              exerciseId: exercise.id,
               name: exercise.name,
               primaryMuscle: exercise.muscle,
+              secondaryMuscles: exercise.secondaryMuscles,
+              category: exercise.category,
+              equipment: exercise.equipment,
               plannedSets: sets,
               plannedReps: reps,
               actualSets: sets,
+              actualReps: reps,
               rpe,
+              // Single-exercise log: the whole session's duration/calories/xp
+              // belong to this one exercise.
+              durationMin,
+              caloriesKcal,
+              xp: exerciseXpSum,
               ...(rawWeight > 0
                 ? { weightKg: Math.round(weightKg * 100) / 100 }
                 : {}),
@@ -168,6 +241,11 @@ export default function WorkoutLog() {
           source: 'manual_log',
           setPlanStartDate: !profile.planStartDate,
         });
+
+        // Successful save — drop the draft so a fresh entry starts blank.
+        if (draftKey) {
+          AsyncStorage.removeItem(draftKey).catch(() => {});
+        }
 
         const prevStats = profile.stats ?? {
           totalWorkouts: 0,

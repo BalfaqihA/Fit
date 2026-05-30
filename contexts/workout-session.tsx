@@ -29,6 +29,8 @@ export type SessionState = {
   accumulatedXp: number;
   startedAt: number;
   startedAtIso: string;
+  /** Epoch ms when the current (in-progress) exercise's clock started. */
+  currentStartedAt: number;
   pausedAt: number | null;
   pausedDurationMs: number;
   completedExercises: CompletedExerciseLog[];
@@ -66,6 +68,7 @@ const emptySession: SessionState = {
   accumulatedXp: 0,
   startedAt: 0,
   startedAtIso: '',
+  currentStartedAt: 0,
   pausedAt: null,
   pausedDurationMs: 0,
   completedExercises: [],
@@ -73,15 +76,31 @@ const emptySession: SessionState = {
 
 function buildLog(
   exercise: PlanExercise,
-  actualSets: number
+  actualSets: number,
+  xpDelta: number,
+  startedAtMs: number,
+  endedAtMs: number
 ): CompletedExerciseLog {
+  const durationSec = Math.max(0, Math.round((endedAtMs - startedAtMs) / 1000));
+  const durationMin = Math.round((durationSec / 60) * 100) / 100;
   return {
+    exerciseId: exercise.exerciseId,
     name: exercise.name,
     primaryMuscle: exercise.primaryMuscles[0],
+    secondaryMuscles: exercise.secondaryMuscles,
+    category: exercise.category,
+    equipment: exercise.equipment,
     imageId: exercise.images?.[0],
     plannedSets: exercise.sets,
     plannedReps: exercise.reps,
     actualSets: Math.max(0, Math.min(actualSets, exercise.sets)),
+    actualReps: exercise.reps,
+    startedAt: new Date(startedAtMs).toISOString(),
+    endedAt: new Date(endedAtMs).toISOString(),
+    durationSec,
+    durationMin,
+    caloriesKcal: Math.round((durationSec / 60) * CALORIES_PER_MINUTE),
+    xp: xpDelta,
   };
 }
 
@@ -171,6 +190,7 @@ export function WorkoutSessionProvider({
       accumulatedXp: 0,
       startedAt: now,
       startedAtIso: dateToIso(new Date(now)),
+      currentStartedAt: now,
       pausedAt: null,
       pausedDurationMs: 0,
       completedExercises: [],
@@ -185,12 +205,18 @@ export function WorkoutSessionProvider({
       setSession((prev) => {
         if (!prev.isActive) return prev;
         const exercise = prev.planExercises[prev.currentIndex];
-        const log = exercise ? buildLog(exercise, actualSets) : null;
+        const now = Date.now();
+        const startedAtMs = prev.currentStartedAt || prev.startedAt || now;
+        const log = exercise
+          ? buildLog(exercise, actualSets, xpDelta, startedAtMs, now)
+          : null;
         return {
           ...prev,
           completedCount: prev.completedCount + 1,
           accumulatedXp: prev.accumulatedXp + xpDelta,
           currentIndex: prev.currentIndex + 1,
+          // Next exercise's clock starts when this one ends.
+          currentStartedAt: now,
           completedExercises: log
             ? [...prev.completedExercises, log]
             : prev.completedExercises,

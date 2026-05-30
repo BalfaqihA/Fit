@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,33 +14,31 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { type Palette, RADIUS } from '@/constants/design';
-import { useCommunity } from '@/hooks/use-community';
+import { useCommunityNotifications } from '@/hooks/use-community-notifications';
 import { useTheme } from '@/hooks/use-theme';
+import type { NotificationType } from '@/lib/community-notifications';
 import { relativeTime } from '@/lib/format';
-import type { AppNotification } from '@/types/community';
 
-const ICON: Record<AppNotification['type'], keyof typeof Ionicons.glyphMap> = {
+const ICON: Record<NotificationType, keyof typeof Ionicons.glyphMap> = {
   like: 'heart',
   comment: 'chatbubble',
   follow: 'person-add',
   new_post: 'image',
-  new_story: 'aperture',
 };
 
 export default function NotificationsScreen() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
-  const { notifications, getUserById, markNotificationsRead } = useCommunity();
+  const { items, loading, markAllRead } = useCommunityNotifications();
 
+  // Mark everything read shortly after the screen opens (gives the unread
+  // highlight a beat to be visible first).
   useEffect(() => {
-    const t = setTimeout(() => markNotificationsRead(), 400);
+    const t = setTimeout(() => {
+      markAllRead();
+    }, 600);
     return () => clearTimeout(t);
-  }, [markNotificationsRead]);
-
-  const sorted = useMemo(
-    () => [...notifications].sort((a, b) => b.createdAt - a.createdAt),
-    [notifications]
-  );
+  }, [markAllRead]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -49,20 +48,22 @@ export default function NotificationsScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {sorted.length === 0 ? (
+      {loading ? (
+        <View style={styles.empty}>
+          <ActivityIndicator color={COLORS.primary} />
+        </View>
+      ) : items.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="notifications-outline" size={36} color={COLORS.muted} />
           <Text style={styles.emptyTitle}>You&apos;re all caught up</Text>
           <Text style={styles.emptySub}>
-            Likes, comments, follows, and new posts or stories from people you
-            follow will show up here.
+            Likes, comments, follows, and new posts from people you follow will
+            show up here.
           </Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingVertical: 8 }}>
-          {sorted.map((n) => {
-            const actor = getUserById(n.actorId);
-            const isOwnAction = n.actorId === 'me';
+          {items.map((n) => {
             const text =
               n.type === 'like'
                 ? 'liked your post'
@@ -70,20 +71,12 @@ export default function NotificationsScreen() {
                 ? `commented: "${n.commentText ?? ''}"`
                 : n.type === 'follow'
                 ? 'started following you'
-                : n.type === 'new_post'
-                ? isOwnAction
-                  ? 'You shared a new post'
-                  : 'shared a new post'
-                : isOwnAction
-                ? 'You added a new story'
-                : 'added a new story';
+                : 'shared a new post';
             const badgeColor =
               n.type === 'like'
                 ? COLORS.accent
                 : n.type === 'comment'
                 ? COLORS.primary
-                : n.type === 'new_story'
-                ? '#E0B400'
                 : n.type === 'new_post'
                 ? COLORS.primary
                 : COLORS.success;
@@ -91,12 +84,10 @@ export default function NotificationsScreen() {
               <Pressable
                 key={n.id}
                 onPress={() => {
-                  if (n.type === 'new_story' && actor) {
-                    router.push(`/community/story/${actor.id}` as never);
-                  } else if (n.postId) {
+                  if (n.postId) {
                     router.push(`/community/post/${n.postId}` as never);
-                  } else if (actor) {
-                    router.push(`/community/profile/${actor.id}` as never);
+                  } else if (n.actorId) {
+                    router.push(`/community/profile/${n.actorId}` as never);
                   }
                 }}
                 style={({ pressed }) => [
@@ -106,8 +97,11 @@ export default function NotificationsScreen() {
                 ]}
               >
                 <View style={styles.avatarWrap}>
-                  {actor?.avatarUri ? (
-                    <Image source={{ uri: actor.avatarUri }} style={styles.avatar} />
+                  {n.actorAvatarUrl ? (
+                    <Image
+                      source={{ uri: n.actorAvatarUrl }}
+                      style={styles.avatar}
+                    />
                   ) : (
                     <View style={[styles.avatar, styles.avatarFallback]}>
                       <Ionicons name="person" size={18} color={COLORS.primary} />
@@ -121,16 +115,11 @@ export default function NotificationsScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.text}>
-                    {!isOwnAction && (
-                      <>
-                        <Text style={styles.actor}>
-                          {actor?.displayName ?? 'Someone'}
-                        </Text>{' '}
-                      </>
-                    )}
-                    {text}
+                    <Text style={styles.actor}>{n.actorName}</Text> {text}
                   </Text>
-                  <Text style={styles.time}>{relativeTime(n.createdAt)}</Text>
+                  <Text style={styles.time}>
+                    {relativeTime(n.createdAtMs)}
+                  </Text>
                 </View>
               </Pressable>
             );

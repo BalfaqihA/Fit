@@ -3,3 +3,7 @@ firebase-admin>=6.5.0,<8.0.0
 # Pulled in transitively by firebase-admin, but declared explicitly because
 # main.py imports `Increment` from `google.cloud.firestore_v1` directly.
 google-cloud-firestore>=2.16.0,<3.0.0
+
+# Dev only — the insights.py compute helpers are pure Python and unit-tested
+# with pytest (functions/tests/). Not imported by deployed functions.
+pytest>=8.0.0,<9.0.0

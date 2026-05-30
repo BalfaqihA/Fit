@@ -64,15 +64,25 @@ async function callOnce(req: GeminiRequest): Promise<string> {
   return text;
 }
 
+// Backoff before the single transient-failure retry. A short delay lets a
+// momentary blip heal without blowing past the user's perceived response budget.
+const RETRY_BACKOFF_MS = 250;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
- * Call Gemini, retrying once on transient failure. Returns the raw JSON
- * string — `responseValidator.parseAndValidate()` is responsible for parsing.
+ * Call Gemini, retrying once on transient failure with a short backoff.
+ * Returns the raw JSON string — `responseValidator.parseAndValidate()` is
+ * responsible for parsing.
  */
 export async function callGemini(req: GeminiRequest): Promise<string> {
   try {
     return await callOnce(req);
   } catch (err) {
     if (isRetryable(err)) {
+      await sleep(RETRY_BACKOFF_MS);
       try {
         return await callOnce(req);
       } catch (err2) {

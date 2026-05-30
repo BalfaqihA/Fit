@@ -15,6 +15,7 @@ import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
 import { auth, db, functions } from '@/lib/firebase';
+import { buildUserSearchFields } from '@/lib/users';
 import type { UserProfile } from '@/types/community';
 
 export type SignUpInput = {
@@ -56,6 +57,9 @@ export async function signUpWithEmail({ fullName, email, password }: SignUpInput
   const seed = buildSeedProfile(user.uid, fullName, email);
   await setDoc(doc(db, 'users', user.uid), {
     ...seed,
+    ...buildUserSearchFields(seed.displayName, seed.handle),
+    followerCount: 0,
+    followingCount: 0,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });

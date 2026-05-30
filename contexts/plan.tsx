@@ -65,6 +65,14 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
         setError(null);
       },
       (err) => {
+        // `permission-denied` fires briefly during signOut before the listener
+        // tears down — expected, not an error. Don't surface or report it.
+        if ((err as { code?: string }).code === 'permission-denied') {
+          setPlan(null);
+          setLoading(false);
+          setError(null);
+          return;
+        }
         captureException(err, { tags: { area: 'plan', op: 'subscribe' } });
         setError(err);
         setLoading(false);

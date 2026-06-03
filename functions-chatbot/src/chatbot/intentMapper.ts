@@ -54,6 +54,12 @@ const TAG_TO_BROAD: Record<string, BroadIntent> = {
   app_navigation: 'app_help',
   log_question: 'app_help',
   quiz_request: 'app_help',
+
+  // off_topic — non-fitness / non-app messages (trained classifier intent).
+  // The orchestrator short-circuits this with a friendly redirect before any
+  // LLM call; the hardened system prompt is the backstop for anything that
+  // slips past the classifier.
+  off_topic: 'off_topic',
 };
 
 export function mapToBroadIntent(fineTag: string): BroadIntent {

@@ -31,7 +31,6 @@ import {
   unlikePost,
   type FeedPost,
 } from '@/lib/community';
-import { addReportedPost, useReportedPostIds } from '@/lib/reported-posts';
 
 export default function CommunityTab() {
   const { COLORS } = useTheme();
@@ -40,7 +39,7 @@ export default function CommunityTab() {
   const { groups: storyGroups, myGroup } = useStories();
   const { unreadCount } = useCommunityNotifications();
   const {
-    posts: allPosts,
+    posts,
     loading,
     error,
     likedIds,
@@ -50,13 +49,6 @@ export default function CommunityTab() {
     retry,
   } = usePosts();
 
-  const reportedIds = useReportedPostIds();
-  // Hide posts the user reported (their report is queued for moderation;
-  // they shouldn't keep seeing the content in the meantime).
-  const posts = useMemo(
-    () => allPosts.filter((p) => !reportedIds.has(p.id)),
-    [allPosts, reportedIds]
-  );
   const [reportTarget, setReportTarget] = useState<FeedPost | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
@@ -326,7 +318,6 @@ export default function CommunityTab() {
         visible={!!reportTarget}
         postId={reportTarget?.id ?? null}
         onClose={() => setReportTarget(null)}
-        onReported={(postId) => addReportedPost(postId)}
       />
     </SafeAreaView>
   );

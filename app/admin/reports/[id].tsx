@@ -1,4 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
+import { doc, getDoc } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text } from 'react-native';
 
@@ -13,6 +14,7 @@ import { type Palette } from '@/constants/design';
 import { useAdmin } from '@/hooks/use-admin';
 import { useTheme } from '@/hooks/use-theme';
 import { adminApi } from '@/lib/admin';
+import { db } from '@/lib/firebase';
 import type { ReportDetail } from '@/types/admin';
 
 export default function AdminReportDetail() {
@@ -26,6 +28,7 @@ export default function AdminReportDetail() {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [reporterName, setReporterName] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -42,6 +45,24 @@ export default function AdminReportDetail() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Resolve the reporter's uid to a display name (admins can read user docs).
+  useEffect(() => {
+    const rid = detail?.report.reportedBy;
+    if (!rid) {
+      setReporterName(null);
+      return;
+    }
+    let cancelled = false;
+    getDoc(doc(db, 'users', rid))
+      .then((snap) => {
+        if (!cancelled) setReporterName((snap.data()?.displayName as string) ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [detail?.report.reportedBy]);
 
   const act = async (fn: () => Promise<unknown>, ok: string) => {
     setBusy(true);
@@ -68,23 +89,30 @@ export default function AdminReportDetail() {
       ) : detail ? (
         <>
           <Card>
-            <Text style={styles.label}>REASON</Text>
+            <Text style={styles.label}>WHY · REASON</Text>
             <Text style={styles.body}>{detail.report.reason}</Text>
             <Text style={styles.meta}>Status: {detail.report.status}</Text>
-            <Text style={styles.meta}>
-              Reported by: {detail.report.reportedBy ?? '—'}
-            </Text>
           </Card>
 
           <Card>
-            <Text style={styles.label}>REPORTED POST</Text>
+            <Text style={styles.label}>WHO SENT IT · REPORTER</Text>
+            <Text style={styles.body}>
+              {reporterName ?? detail.report.reportedBy ?? '—'}
+            </Text>
+            {detail.report.reportedBy ? (
+              <Text style={styles.meta}>uid: {detail.report.reportedBy}</Text>
+            ) : null}
+          </Card>
+
+          <Card>
+            <Text style={styles.label}>ABOUT WHOM · REPORTED POST</Text>
             {post ? (
               <>
                 <Text style={styles.body}>
                   {post.caption || '(no caption)'}
                 </Text>
                 <Text style={styles.meta}>
-                  by {post.authorName ?? '—'} · {post.moderationStatus}
+                  Author: {post.authorName ?? '—'} · {post.moderationStatus}
                 </Text>
               </>
             ) : (

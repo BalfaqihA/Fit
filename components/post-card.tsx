@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PostVideo } from '@/components/post-video';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
+import { useAuthorProfile } from '@/hooks/use-author-profile';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTime } from '@/lib/format';
 
@@ -32,6 +33,7 @@ export type PostCardProps = {
 };
 
 export function PostCard({
+  authorId,
   authorName,
   authorHandle,
   authorAvatarUrl,
@@ -52,6 +54,12 @@ export function PostCard({
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
 
+  // Prefer the author's *current* name/avatar so profile edits show on old posts.
+  const live = useAuthorProfile(authorId);
+  const displayName = live.displayName || authorName;
+  const avatarUrl =
+    live.avatarUrl !== undefined ? live.avatarUrl : authorAvatarUrl;
+
   const subtitle = authorHandle
     ? `@${authorHandle} · ${relativeTime(createdAtMs)}`
     : relativeTime(createdAtMs);
@@ -69,15 +77,15 @@ export function PostCard({
     <View style={styles.card}>
       <View style={styles.header}>
         <Pressable onPress={onPressAuthor} style={styles.headerLeft} hitSlop={6}>
-          {authorAvatarUrl ? (
-            <Image source={{ uri: authorAvatarUrl }} style={styles.avatar} />
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.avatarFallback]}>
               <Ionicons name="person" size={18} color={COLORS.primary} />
             </View>
           )}
           <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{authorName}</Text>
+            <Text style={styles.name}>{displayName}</Text>
             <Text style={styles.time}>{subtitle}</Text>
           </View>
         </Pressable>

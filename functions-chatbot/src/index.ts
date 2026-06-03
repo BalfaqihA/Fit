@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 
-import { GEMINI_API_KEY } from './chatbot/geminiClient';
+import { DEEPSEEK_API_KEY } from './chatbot/deepseekClient';
 import { handle as orchestrate } from './chatbot/orchestrator';
 import { QUIZ_BY_ID } from './chatbot/templateFallback';
 import {
@@ -153,9 +153,9 @@ export const chat = onCall(
   {
     cors: ALLOWED_ORIGINS,
     region: 'us-central1',
-    // Declare the Gemini secret so it's mounted into the runtime env. The
-    // wrapper in `chatbot/geminiClient.ts` reads it via `defineSecret().value()`.
-    secrets: [GEMINI_API_KEY],
+    // Declare the DeepSeek secret so it's mounted into the runtime env. The
+    // wrapper in `chatbot/deepseekClient.ts` reads it via `defineSecret().value()`.
+    secrets: [DEEPSEEK_API_KEY],
   },
   async (req): Promise<OrchestratorResult & {
     xpAwarded?: number;

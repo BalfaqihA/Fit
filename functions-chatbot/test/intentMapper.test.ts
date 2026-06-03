@@ -23,4 +23,8 @@ describe('mapToBroadIntent — remapped fine tags', () => {
     expect(mapToBroadIntent('ask_workout_advice')).toBe('workout_plan');
     expect(mapToBroadIntent('unknown_tag')).toBe('general_chat');
   });
+
+  it('routes the off_topic tag to its own broad intent', () => {
+    expect(mapToBroadIntent('off_topic')).toBe('off_topic');
+  });
 });

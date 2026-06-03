@@ -17,6 +17,7 @@ export const BROAD_INTENTS = [
   'injury_warning',
   'app_help',
   'general_chat',
+  'off_topic',
 ] as const;
 export type BroadIntent = (typeof BROAD_INTENTS)[number];
 

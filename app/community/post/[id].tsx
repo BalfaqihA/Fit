@@ -39,7 +39,6 @@ import {
   type FeedPost,
 } from '@/lib/community';
 import { db } from '@/lib/firebase';
-import { addReportedPost } from '@/lib/reported-posts';
 
 export default function PostDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -272,6 +271,7 @@ export default function PostDetail() {
           {comments.map((comment) => (
             <CommentRow
               key={comment.id}
+              authorId={comment.authorId}
               authorName={comment.authorName}
               authorAvatarUrl={comment.authorAvatarUrl}
               text={comment.text}
@@ -318,11 +318,6 @@ export default function PostDetail() {
         visible={reportOpen}
         postId={post?.id ?? null}
         onClose={() => setReportOpen(false)}
-        onReported={(postId) => {
-          addReportedPost(postId);
-          setReportOpen(false);
-          router.back();
-        }}
       />
     </SafeAreaView>
   );

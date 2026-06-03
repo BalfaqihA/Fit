@@ -2,7 +2,7 @@ import { checkOverrides } from '../overrides';
 import { buildPersonalContext } from '../personalize';
 
 import { checkAndIncrement } from './dailyQuota';
-import { callGemini, GeminiFailureError } from './geminiClient';
+import { callDeepSeek, DeepSeekError } from './deepseekClient';
 import { appendMessage, getOrCreateActiveSession } from './chatHistoryService';
 import { loadMemory, updateMemory } from './chatMemoryService';
 import { mapToBroadIntent } from './intentMapper';
@@ -10,10 +10,11 @@ import { retrieveExerciseDocs } from './exerciseRetriever';
 import { retrieveKnowledge } from './knowledgeRetriever';
 import { buildGeminiPrompt } from './promptBuilder';
 import { parseAndValidate, renderAnswerMarkdown } from './responseValidator';
-import { blockReply, preGeminiSafetyCheck } from './safetyRules';
+import { blockReply, offTopicReply, preGeminiSafetyCheck } from './safetyRules';
 import {
   classifyMessage,
   runTemplatePipeline,
+  SOFT_THRESHOLD,
   type Classification,
 } from './templateFallback';
 
@@ -72,6 +73,16 @@ export async function handle(
     };
   }
   const broadIntent = mapToBroadIntent(classification.topTag);
+
+  // 2b. Domain gate. If the classifier confidently tags this as off-topic
+  //     (non-fitness / non-app), short-circuit with a friendly redirect — we
+  //     never spend an LLM call on it. Low-confidence guesses still flow
+  //     through; the hardened system prompt redirects anything that slips past.
+  if (broadIntent === 'off_topic' && classification.topConf >= SOFT_THRESHOLD) {
+    const result = offTopicReply();
+    await persistTurn(uid, message, result, classification, broadIntent, { level: 'none' }, []);
+    return result;
+  }
 
   // 3. Build personalization context (snapshot-backed).
   const ctx = await buildPersonalContext(uid);
@@ -199,16 +210,16 @@ export async function handle(
 
   let validated;
   try {
-    const raw = await callGemini(prompt);
+    const raw = await callDeepSeek(prompt);
     validated = parseAndValidate(raw);
     if (!validated) {
-      console.warn('[chatbot] Gemini response failed validation', { raw: raw.slice(0, 300) });
+      console.warn('[chatbot] DeepSeek response failed validation', { raw: raw.slice(0, 300) });
     }
   } catch (err) {
-    if (err instanceof GeminiFailureError) {
-      console.warn('[chatbot] Gemini call failed, falling back to template', err.message);
+    if (err instanceof DeepSeekError) {
+      console.warn('[chatbot] DeepSeek call failed, falling back to template', err.message);
     } else {
-      console.warn('[chatbot] Unexpected Gemini error', err);
+      console.warn('[chatbot] Unexpected DeepSeek error', err);
     }
     validated = null;
   }

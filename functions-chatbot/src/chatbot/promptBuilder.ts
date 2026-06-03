@@ -19,8 +19,9 @@ You will receive the user's profile, their long-term chat memory, retrieved know
 Hard rules:
 - Never recommend extreme dieting (under ~1200 cal/day for women, ~1500 for men), unprescribed supplements, or training through pain.
 - When safety level is "caution", explicitly acknowledge the concern in the safetyWarning field and adapt the plan.
-- If the question is outside fitness, nutrition, training, or recovery, give a brief polite redirect.
+- DOMAIN GATE: You ONLY answer questions about fitness, training, exercise technique, nutrition, recovery, body metrics, progress/stats, or using the Fit app. If the message is about anything else (coding, general knowledge, other apps, news, math, relationships, etc.), do NOT answer it — set "answer" to one friendly sentence redirecting the user to ask about their training, set "confidence" to 0, and leave every other field empty.
 - Reference the user's actual numbers (streak, weight, PR) when they're relevant — don't just say "your goals", say "your goal of {goal}".
+- DATA-DRIVEN ANALYSIS: When the user asks how they're doing / about progress, weight, stats, streak, PRs, or muscle balance, ANALYZE the PROGRESS ANALYSIS and RECENT ACTIVITY blocks instead of giving generic advice. Cite their real numbers, state the trend in plain words (e.g. "you're down ~0.8 kg/week — on track for fat loss"), compare this week to their best week, call out any muscle-group imbalance or plateau, and end with one concrete next step. If a metric is missing, tell them what to log (workout / weigh-in) to unlock it.
 - If a knowledge base entry is relevant, weave it into the answer; otherwise rely on your own knowledge.
 - Keep "answer" to 1-2 sentences. Put depth into "personalizedRecommendation" and "steps".
 - "steps" should be 3-5 concrete bullets. Skip steps entirely if the question doesn't need a plan.
@@ -141,6 +142,25 @@ function renderWeightUpdateBlock(ctx: PersonalContext): string {
   ].join('\n');
 }
 
+function renderAnalysisBlock(ctx: PersonalContext): string {
+  if (ctx.analysisAvailable !== '1') {
+    return [
+      'PROGRESS ANALYSIS',
+      '- (not enough logged data yet — encourage the user to log workouts and weigh in so trends can be analyzed.)',
+    ].join('\n');
+  }
+  return [
+    'PROGRESS ANALYSIS (analyze this — do not just repeat the numbers)',
+    `- Weight trend: ${tokenOrFallback(ctx.weightVelocityKgPerWeek, 'n/a')} (goal alignment: ${tokenOrFallback(ctx.weightGoalAlignment, 'n/a')})`,
+    `- This week: ${tokenOrFallback(ctx.currentWeekWorkouts, '0')} workouts, ${tokenOrFallback(ctx.currentWeekMinutes, '0')} min, adherence ${tokenOrFallback(ctx.currentWeekAdherence, 'n/a')}`,
+    `- Best week on record: ${tokenOrFallback(ctx.bestWeekSummary, 'n/a')}`,
+    `- Muscle balance: ${tokenOrFallback(ctx.muscleBalanceNote, 'n/a')}`,
+    `- Top exercise progress: ${tokenOrFallback(ctx.topExerciseProgress, 'n/a')}`,
+    `- Plateau check: ${tokenOrFallback(ctx.stallNote, 'n/a')}`,
+    `- App-suggested focus: ${tokenOrFallback(ctx.coachSuggestions, 'n/a')}`,
+  ].join('\n');
+}
+
 function renderMemoryBlock(m: ChatMemoryDoc): string {
   const lines = ['CHAT MEMORY'];
   lines.push(`- Summary: ${m.summary?.trim() || '(none yet)'}`);
@@ -193,6 +213,8 @@ export function buildGeminiPrompt(inputs: PromptInputs): {
     renderPlanBlock(inputs.personal),
     '',
     renderWeightUpdateBlock(inputs.personal),
+    '',
+    renderAnalysisBlock(inputs.personal),
     '',
     renderMemoryBlock(inputs.memory),
     '',

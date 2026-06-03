@@ -50,7 +50,8 @@ export function useWeeklyStats(): WeeklyStats {
       const acc = byDay.get(iso) ?? { minutes: 0, calories: 0, workouts: 0 };
       acc.minutes += s.durationMin;
       acc.calories += s.caloriesKcal;
-      acc.workouts += 1;
+      // Manual logs feed minutes/calories but don't count as a "workout".
+      acc.workouts += s.source === 'manual_log' ? 0 : 1;
       byDay.set(iso, acc);
     }
 

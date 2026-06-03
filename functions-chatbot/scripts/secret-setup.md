@@ -1,25 +1,25 @@
-# Chatbot Gemini secret setup
+# Chatbot DeepSeek secret setup
 
-Before deploying the chatbot, set the Gemini API key as a Firebase Functions secret. The key must NOT be checked into the repo or shipped in the client.
+Before deploying the chatbot, set the DeepSeek API key as a Firebase Functions secret. The key must NOT be checked into the repo or shipped in the client.
 
 ## 1. Generate an API key
 
-1. Go to https://aistudio.google.com/apikey
-2. Create a key in the project that owns your Firebase billing.
-3. Copy it to your clipboard.
+1. Go to https://platform.deepseek.com/ and sign in (or create an account).
+2. Add credit under **Top up** (a few dollars is plenty; new accounts also get a free token grant).
+3. Open **API keys → Create new API key** and copy it to your clipboard.
 
 ## 2. Set the secret
 
 From the repo root (paste the key when prompted, then press Enter):
 
 ```powershell
-firebase functions:secrets:set GEMINI_API_KEY
+firebase functions:secrets:set DEEPSEEK_API_KEY
 ```
 
 ## 3. Verify
 
 ```powershell
-firebase functions:secrets:access GEMINI_API_KEY
+firebase functions:secrets:access DEEPSEEK_API_KEY
 ```
 
 The output should match the key you pasted.
@@ -32,7 +32,7 @@ npm install
 firebase deploy --only "functions:chatbot,firestore:rules"
 ```
 
-The `chat` callable in `src/index.ts` declares `secrets: [GEMINI_API_KEY]`, so the secret is mounted into the runtime environment automatically.
+The `chat` callable in `src/index.ts` declares `secrets: [DEEPSEEK_API_KEY]`, so the secret is mounted into the runtime environment automatically.
 
 ## 5. Seed the knowledge base (one-time)
 
@@ -91,7 +91,7 @@ safe — it just resets the password and re-stamps the claim.
 If you need to rotate (e.g. accidental leak):
 
 ```powershell
-firebase functions:secrets:set GEMINI_API_KEY      # new value
-firebase functions:secrets:destroy GEMINI_API_KEY --force  # revokes old versions
+firebase functions:secrets:set DEEPSEEK_API_KEY      # new value
+firebase functions:secrets:destroy DEEPSEEK_API_KEY --force  # revokes old versions
 firebase deploy --only functions:chatbot           # picks up the new secret
 ```

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   Pressable,
@@ -34,52 +35,67 @@ const faqs: FaqItem[] = [
   {
     category: 'Getting Started',
     q: 'How do I set up my profile?',
-    a: "Go to Settings → Edit Profile to update your name, email, and bio. You can also add a photo by tapping the camera icon on your avatar.",
+    a: 'Go to Settings → Edit Profile to update your name, handle, bio, and photo. Your name and photo are what other members see in the community.',
   },
   {
     category: 'Getting Started',
-    q: 'How do I pick my first workout?',
-    a: "Open the Home tab — we'll recommend a session based on your fitness goal and training days. Tap the play button to start.",
+    q: 'How does Fit build my plan?',
+    a: 'During onboarding you set your goal, fitness level, available equipment, session length, and training days. Fit uses these to generate a personalized weekly plan you can follow on the Home tab.',
+  },
+  {
+    category: 'Getting Started',
+    q: 'Can the AI coach help me?',
+    a: 'Yes — open the Coach tab to ask the in-app assistant about exercises, form, and your plan. It uses your profile to give tailored answers.',
   },
   {
     category: 'Workouts',
-    q: 'How do I log a workout?',
-    a: "Open the Home tab, tap the play button on today's session, and follow the guided flow. Your session is saved automatically when you finish.",
+    q: 'How do I complete a planned workout?',
+    a: "On the Home tab, open today's session and follow the guided flow. When you finish, it's saved to your history and counts toward your workout total, streak, and XP.",
   },
   {
     category: 'Workouts',
-    q: 'Can I sync with Apple Health or Google Fit?',
-    a: 'Integrations are coming soon. For now, your workout history is stored inside FitLife.',
+    q: 'What is "Log Workout" and how is it different?',
+    a: 'Log Workout lets you quickly record a session you did on your own. It adds to your history and counts toward minutes, calories, and XP — but it does not increase your completed-workout count, which is reserved for guided sessions.',
+  },
+  {
+    category: 'Workouts',
+    q: 'How do I track my weight and measurements?',
+    a: 'Use the weigh-in option on the Dashboard to log your weight over time. Your progress is charted so you can see trends.',
   },
   {
     category: 'Gamification',
     q: 'How do streaks work?',
-    a: "Complete at least one workout on a training day and your streak grows by one. Miss a scheduled day and it resets — but rest days don't count against you.",
+    a: "Train on consecutive days and your streak grows. Your longest streak is saved and unlocks streak achievements like Week Warrior and Fortnight Fury.",
   },
   {
     category: 'Gamification',
-    q: 'How are badges and achievements earned?',
-    a: 'Achievements unlock when you hit milestones — first workout, weekly streaks, personal records, and more. Check your Profile to see what you\'ve earned.',
+    q: 'How are XP and achievements earned?',
+    a: 'You earn XP for every workout and logged session, with bonus XP when you unlock an achievement. Achievements unlock automatically at milestones — workouts completed, total minutes, streaks, XP, and weigh-ins. View them on your profile.',
   },
   {
     category: 'Account',
-    q: 'How do I change my training days?',
-    a: 'Go to Settings → Fitness Goals, adjust your selection, and tap Save.',
+    q: 'How do I report a post or user?',
+    a: "Tap the menu (•••) on any post and choose Report, then tell us what's wrong. The post stays on your feed; our team reviews every report privately.",
+  },
+  {
+    category: 'Account',
+    q: 'How do stories work?',
+    a: 'Stories are photos or short videos that disappear after 24 hours. Tap your story ring in the Community tab to add one, and tap a friend’s ring to watch theirs.',
   },
   {
     category: 'Account',
     q: 'How do I delete my account?',
-    a: "Contact support from this screen and we'll guide you through deletion and data removal.",
+    a: 'Go to Settings → Delete Account. This permanently removes your profile, workouts, and content. You can also message us from Contact Support if you need help.',
   },
   {
     category: 'Technical',
     q: "My notifications aren't arriving — what should I check?",
-    a: 'First, confirm notifications are enabled in Settings → Notifications. Then check your device settings to make sure FitLife is allowed to send alerts.',
+    a: 'First, confirm notifications are enabled in Settings → Notifications. Then check your device settings to make sure Fit is allowed to send alerts.',
   },
   {
     category: 'Technical',
     q: 'Is my data private?',
-    a: 'Yes. Your profile and workout history stay associated with your account and are never sold to third parties. See the Privacy Policy for details.',
+    a: 'Yes. Your profile and workout history stay tied to your account and are never sold to third parties. See the Privacy Policy for full details.',
   },
 ];
 
@@ -142,7 +158,10 @@ export default function HelpFaq() {
               Reach our support team — we usually reply within 24 hours.
             </Text>
           </View>
-          <Pressable style={styles.contactBtn}>
+          <Pressable
+            style={styles.contactBtn}
+            onPress={() => router.push('/settings/contact' as never)}
+          >
             <Text style={styles.contactBtnText}>Contact</Text>
           </Pressable>
         </View>

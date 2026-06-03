@@ -91,7 +91,7 @@ export default function About() {
           <Row
             icon="mail-outline"
             label="Contact"
-            onPress={() => Linking.openURL('mailto:hello@example.com')}
+            onPress={() => Linking.openURL('mailto:ahmed1.balfaqeih55@gmail.com')}
           />
         </View>
 

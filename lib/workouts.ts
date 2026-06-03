@@ -99,13 +99,19 @@ export async function recordCompletedWorkout(
       createdAt: serverTimestamp(),
     });
 
+    const stats: Record<string, unknown> = {
+      totalMinutes: increment(payload.durationMin),
+      totalCaloriesKcal: increment(payload.caloriesKcal),
+      totalXp: increment(payload.xp),
+    };
+    // Manual logs are saved to history and feed minutes/calories/XP, but they
+    // do NOT count toward the completed-workout total — that's reserved for
+    // guided plan sessions.
+    if (source !== 'manual_log') {
+      stats.totalWorkouts = increment(1);
+    }
     const userPatch: Record<string, unknown> = {
-      stats: {
-        totalWorkouts: increment(1),
-        totalMinutes: increment(payload.durationMin),
-        totalCaloriesKcal: increment(payload.caloriesKcal),
-        totalXp: increment(payload.xp),
-      },
+      stats,
       lastWorkoutAt: todayIso(),
     };
     if (setPlanStartDate) userPatch.planStartDate = todayIso();

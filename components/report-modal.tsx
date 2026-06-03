@@ -91,8 +91,8 @@ export function ReportModal({
               />
               <Text style={styles.doneTitle}>Report submitted</Text>
               <Text style={styles.doneSub}>
-                Thanks — our team will review this post. It's now hidden from
-                your feed.
+                Thanks — our team will review this post privately. The post
+                stays in your feed in the meantime.
               </Text>
               <Pressable style={styles.primaryBtn} onPress={close}>
                 <Text style={styles.primaryBtnText}>Done</Text>

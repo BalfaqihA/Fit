@@ -124,16 +124,6 @@ export default function SettingsHub() {
 
   const preferenceRows: SettingsRow[] = [
     {
-      label: 'Units',
-      icon: 'speedometer-outline',
-      onPress: () => router.push('/settings/units' as never),
-    },
-    {
-      label: 'Language',
-      icon: 'language-outline',
-      onPress: () => router.push('/settings/language' as never),
-    },
-    {
       label: 'Dark Mode',
       icon: 'moon-outline',
       onPress: () => router.push('/settings/dark-mode' as never),
@@ -145,6 +135,11 @@ export default function SettingsHub() {
       label: 'Help & FAQ',
       icon: 'help-circle-outline',
       onPress: () => router.push('/settings/help-faq' as never),
+    },
+    {
+      label: 'Contact Support',
+      icon: 'chatbubbles-outline',
+      onPress: () => router.push('/settings/contact' as never),
     },
     {
       label: 'About',

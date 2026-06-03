@@ -9,6 +9,9 @@
     "noImplicitReturns": true,
     "noUnusedLocals": true,
     "outDir": "lib",
+    // expo/tsconfig.base sets noEmit:true (app is bundled by Metro), but this
+    // Cloud Functions package must emit JS to lib/ for `firebase deploy`.
+    "noEmit": false,
     "sourceMap": true,
     "strict": true,
     "esModuleInterop": true,

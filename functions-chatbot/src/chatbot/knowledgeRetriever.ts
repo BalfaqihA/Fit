@@ -75,6 +75,7 @@ const INTENT_CATEGORIES: Record<BroadIntent, string[]> = {
   injury_warning: ['injury', 'recovery', 'mobility', 'pain'],
   app_help: ['app', 'how-to'],
   general_chat: [],
+  off_topic: [],
 };
 
 function scoreDoc(

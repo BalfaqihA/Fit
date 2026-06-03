@@ -15,7 +15,7 @@ import React, {
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
 import { captureException } from '@/lib/observability';
-import type { CompletedExerciseLog } from '@/lib/workouts';
+import type { CompletedExerciseLog, WorkoutSource } from '@/lib/workouts';
 
 export type WorkoutSessionDoc = {
   id: string;
@@ -28,6 +28,7 @@ export type WorkoutSessionDoc = {
   dayNum?: number;
   exercises?: CompletedExerciseLog[];
   notes?: string;
+  source?: WorkoutSource;
 };
 
 type WorkoutHistoryValue = {
@@ -82,6 +83,7 @@ export function WorkoutHistoryProvider({
             dayNum?: number;
             exercises?: CompletedExerciseLog[];
             notes?: string;
+            source?: WorkoutSource;
           };
           return {
             id: d.id,
@@ -94,6 +96,7 @@ export function WorkoutHistoryProvider({
             dayNum: raw.dayNum,
             exercises: raw.exercises,
             notes: raw.notes,
+            source: raw.source,
           };
         });
         setSessions(list);

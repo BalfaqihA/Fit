@@ -59,6 +59,12 @@ export default function AdminDashboard() {
       show: can('reports.view'),
     },
     {
+      label: 'Support',
+      icon: 'chatbubble-ellipses-outline',
+      route: '/admin/support',
+      show: can('reports.view'),
+    },
+    {
       label: 'Moderation',
       icon: 'shield-outline',
       route: '/admin/moderation',

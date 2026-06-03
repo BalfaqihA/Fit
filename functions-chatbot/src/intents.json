@@ -9,6 +9,34 @@
   },
   "intents": [
     {
+      "tag": "off_topic",
+      "patterns": [
+        "write me code", "write me a python script", "debug my code",
+        "how do i learn python", "explain quantum physics",
+        "what's the capital of france", "what's the capital of japan",
+        "who is elon musk", "who is the president", "what's 2 plus 2",
+        "solve this math problem", "do my homework", "write an essay for me",
+        "tell me a joke", "write me a poem", "translate this to spanish",
+        "what's the weather today", "is it going to rain",
+        "who won the game last night", "what's the latest news",
+        "tell me about politics", "what time is it", "book me a flight",
+        "book me a taxi", "recommend a movie", "play some music",
+        "how do i invest in stocks", "what is bitcoin", "tell me a story",
+        "are you chatgpt", "are you a real person", "what is the meaning of life",
+        "how do i fix my car", "give me relationship advice",
+        "how do i make money online", "summarize this article",
+        "what is the speed of light", "who painted the mona lisa"
+      ],
+      "responses": [
+        {
+          "style": "step",
+          "shortAnswer": "I'm your fitness coach inside Fit — I stick to training, nutrition, recovery, and your progress.",
+          "explanation": "Ask me about your workout, what to eat, how to recover, or how you're progressing and I've got you.",
+          "suggestion": "Try: \"what's my workout today?\" or \"how am I progressing?\""
+        }
+      ]
+    },
+    {
       "tag": "greeting",
       "patterns": [
         "hi", "hello", "hey", "hey coach", "hi coach", "yo", "yo coach",

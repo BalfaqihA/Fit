@@ -34,7 +34,7 @@ import { useWeeklyStats } from '@/hooks/use-weekly-stats';
 import { checkAndUnlockAchievements } from '@/lib/achievements';
 import { xpForExercise, xpForWorkout } from '@/lib/gamification';
 import { captureException } from '@/lib/observability';
-import { parseDurationMin, parseWeight } from '@/lib/validation';
+import { parseDurationMin } from '@/lib/validation';
 import { randomId } from '@/lib/uuid';
 import { recordCompletedWorkout } from '@/lib/workouts';
 
@@ -104,10 +104,11 @@ export default function WorkoutLog() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [sets, setSets] = useState(3);
   const [reps, setReps] = useState(10);
-  const [weight, setWeight] = useState('20');
+  const [weight, setWeight] = useState('');
   const [duration, setDuration] = useState('30');
   const [rpe, setRpe] = useState(7);
   const [notes, setNotes] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
   const { run: runSave, pending: saving } = useSubmit();
 
   // Draft autosave — survives the app being backgrounded mid-entry. Keyed per
@@ -190,18 +191,22 @@ export default function WorkoutLog() {
       const workoutXp = xpForWorkout({ exerciseXpSum, durationMin });
       const caloriesKcal = Math.round(durationMin * CALORIES_PER_MINUTE);
 
-      // Weight is optional in the manual log: only validate if the user
-      // typed something other than blank/zero.
+      // Weight is optional in the manual log (it's the load you lifted, which
+      // can be anything from light dumbbells to a heavy barbell — or blank for
+      // bodyweight). Only validate if the user typed something non-zero.
       const weightTrimmed = weight.trim();
       const hasWeight = weightTrimmed !== '' && weightTrimmed !== '0';
       let rawWeight = 0;
       if (hasWeight) {
-        const parsedWeight = parseWeight(weightTrimmed, weightUnit);
-        if (!parsedWeight.ok) {
-          Alert.alert('Invalid weight', parsedWeight.error);
+        const n = Number(weightTrimmed);
+        if (!Number.isFinite(n) || n < 0 || n > 1000) {
+          Alert.alert(
+            'Invalid weight',
+            `Enter a weight between 0 and 1000 ${weightUnit}, or leave it blank.`
+          );
           return;
         }
-        rawWeight = parsedWeight.value;
+        rawWeight = n;
       }
       // Store weight canonically in kg regardless of the user's display unit.
       const weightKg = weightUnit === 'lb' ? rawWeight * 0.45359237 : rawWeight;
@@ -253,8 +258,11 @@ export default function WorkoutLog() {
           totalCaloriesKcal: 0,
           totalXp: 0,
         };
+        // A manual log does NOT count toward the completed-workout total, so we
+        // evaluate achievements against the *unchanged* workout count (minutes,
+        // XP, and streak still progress and can unlock their achievements).
         const unlocked = await checkAndUnlockAchievements(user.uid, {
-          totalWorkouts: (prevStats.totalWorkouts ?? 0) + 1,
+          totalWorkouts: prevStats.totalWorkouts ?? 0,
           totalMinutes: (prevStats.totalMinutes ?? 0) + durationMin,
           totalXp: (prevStats.totalXp ?? 0) + workoutXp,
           longestStreak,
@@ -266,9 +274,10 @@ export default function WorkoutLog() {
             ? `\n\nUnlocked: ${unlocked.map((a) => a.title).join(', ')}`
             : '';
 
+        const weightStr = rawWeight > 0 ? ` @ ${weightTrimmed} ${weightUnit}` : '';
         Alert.alert(
-          'Entry saved',
-          `${exercise.name}\n${sets} × ${reps} @ ${weight} ${weightUnit} · RPE ${rpe} · ${durationMin} min\n+${workoutXp} XP${unlockedLine}`,
+          'Workout logged',
+          `${exercise.name}\n${sets} × ${reps}${weightStr} · ${durationMin} min\n+${workoutXp} XP · saved to your history${unlockedLine}`,
           [{ text: 'OK', onPress: () => router.back() }],
         );
       } catch (e) {
@@ -325,86 +334,108 @@ export default function WorkoutLog() {
           </Pressable>
         </View>
 
-        <View style={styles.rowFields}>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.fieldLabel}>Sets</Text>
-            <Stepper
-              value={sets}
-              onChange={setSets}
-              styles={styles}
-              primaryColor={COLORS.primary}
-            />
-          </View>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.fieldLabel}>Reps</Text>
-            <Stepper
-              value={reps}
-              onChange={setReps}
-              max={60}
-              styles={styles}
-              primaryColor={COLORS.primary}
-            />
-          </View>
-        </View>
-
-        <View style={styles.rowFields}>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.fieldLabel}>Weight ({weightUnit})</Text>
-            <TextInput
-              value={weight}
-              onChangeText={setWeight}
-              keyboardType="numeric"
-              style={styles.input}
-              placeholder="0"
-              placeholderTextColor={COLORS.muted}
-            />
-          </View>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.fieldLabel}>Duration (min)</Text>
-            <TextInput
-              value={duration}
-              onChangeText={setDuration}
-              keyboardType="numeric"
-              style={styles.input}
-              placeholder="0"
-              placeholderTextColor={COLORS.muted}
-            />
-          </View>
-        </View>
-
         <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Perceived effort (RPE)</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 6 }}
-          >
-            {RPE.map((r) => {
-              const active = r === rpe;
-              return (
-                <Pressable
-                  key={r}
-                  onPress={() => setRpe(r)}
-                  style={[styles.rpeChip, active && styles.rpeChipActive]}
-                >
-                  <Text style={[styles.rpeText, active && { color: '#FFFFFF' }]}>{r}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Notes</Text>
+          <Text style={styles.fieldLabel}>Duration (min)</Text>
           <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            placeholder="Felt strong today — bumped the top set."
+            value={duration}
+            onChangeText={setDuration}
+            keyboardType="numeric"
+            style={styles.input}
+            placeholder="30"
             placeholderTextColor={COLORS.muted}
-            style={[styles.input, { height: 96, textAlignVertical: 'top' }]}
           />
+          <Text style={styles.hint}>
+            Pick the exercise and how long you trained — that&apos;s all you
+            need. Logged workouts are saved to your history and earn XP, but
+            don&apos;t count toward your completed-workout total.
+          </Text>
         </View>
+
+        <Pressable
+          style={styles.detailsToggle}
+          onPress={() => setShowDetails((v) => !v)}
+        >
+          <Ionicons
+            name={showDetails ? 'chevron-down' : 'chevron-forward'}
+            size={16}
+            color={COLORS.primary}
+          />
+          <Text style={styles.detailsToggleText}>
+            Add details (sets, reps, weight, effort)
+          </Text>
+        </Pressable>
+
+        {showDetails && (
+          <>
+            <View style={styles.rowFields}>
+              <View style={[styles.field, { flex: 1 }]}>
+                <Text style={styles.fieldLabel}>Sets</Text>
+                <Stepper
+                  value={sets}
+                  onChange={setSets}
+                  styles={styles}
+                  primaryColor={COLORS.primary}
+                />
+              </View>
+              <View style={[styles.field, { flex: 1 }]}>
+                <Text style={styles.fieldLabel}>Reps</Text>
+                <Stepper
+                  value={reps}
+                  onChange={setReps}
+                  max={60}
+                  styles={styles}
+                  primaryColor={COLORS.primary}
+                />
+              </View>
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Weight ({weightUnit}) · optional</Text>
+              <TextInput
+                value={weight}
+                onChangeText={setWeight}
+                keyboardType="numeric"
+                style={styles.input}
+                placeholder="Leave blank for bodyweight"
+                placeholderTextColor={COLORS.muted}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Perceived effort (RPE)</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 6 }}
+              >
+                {RPE.map((r) => {
+                  const active = r === rpe;
+                  return (
+                    <Pressable
+                      key={r}
+                      onPress={() => setRpe(r)}
+                      style={[styles.rpeChip, active && styles.rpeChipActive]}
+                    >
+                      <Text style={[styles.rpeText, active && { color: '#FFFFFF' }]}>{r}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Notes</Text>
+              <TextInput
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                placeholder="Felt strong today — bumped the top set."
+                placeholderTextColor={COLORS.muted}
+                style={[styles.input, { height: 96, textAlignVertical: 'top' }]}
+              />
+            </View>
+          </>
+        )}
 
         <View style={{ height: 8 }} />
         <PrimaryButton
@@ -475,6 +506,25 @@ const makeStyles = (COLORS: Palette) =>
     scroll: { padding: 20, paddingBottom: 40 },
     field: { marginBottom: 14 },
     rowFields: { flexDirection: 'row', gap: 10 },
+    hint: {
+      fontSize: 12,
+      color: COLORS.muted,
+      marginTop: 8,
+      marginLeft: 4,
+      lineHeight: 17,
+    },
+    detailsToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      marginBottom: 6,
+    },
+    detailsToggleText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: COLORS.primary,
+    },
     fieldLabel: {
       fontSize: 12,
       fontWeight: '700',

@@ -1,12 +1,12 @@
 // The orchestrator is pure control-flow over a dozen collaborators. We stub
 // every collaborator and assert the branch taken (override / safety-block /
-// quota / Gemini-fail / happy path) plus that Gemini is NOT called on the
+// quota / DeepSeek-fail / happy path) plus that DeepSeek is NOT called on the
 // short-circuit paths.
 
 const mockCheckOverrides = jest.fn();
 const mockBuildPersonalContext = jest.fn();
 const mockCheckAndIncrement = jest.fn();
-const mockCallGemini = jest.fn();
+const mockCallDeepSeek = jest.fn();
 const mockGetOrCreateActiveSession = jest.fn();
 const mockAppendMessage = jest.fn();
 const mockLoadMemory = jest.fn();
@@ -18,11 +18,12 @@ const mockBuildGeminiPrompt = jest.fn();
 const mockParseAndValidate = jest.fn();
 const mockRenderAnswerMarkdown = jest.fn();
 const mockBlockReply = jest.fn();
+const mockOffTopicReply = jest.fn();
 const mockPreGeminiSafetyCheck = jest.fn();
 const mockClassifyMessage = jest.fn();
 const mockRunTemplatePipeline = jest.fn();
 
-class MockGeminiFailureError extends Error {}
+class MockDeepSeekError extends Error {}
 
 jest.mock('../src/overrides', () => ({ checkOverrides: mockCheckOverrides }));
 jest.mock('../src/personalize', () => ({
@@ -31,9 +32,9 @@ jest.mock('../src/personalize', () => ({
 jest.mock('../src/chatbot/dailyQuota', () => ({
   checkAndIncrement: mockCheckAndIncrement,
 }));
-jest.mock('../src/chatbot/geminiClient', () => ({
-  callGemini: mockCallGemini,
-  GeminiFailureError: MockGeminiFailureError,
+jest.mock('../src/chatbot/deepseekClient', () => ({
+  callDeepSeek: mockCallDeepSeek,
+  DeepSeekError: MockDeepSeekError,
 }));
 jest.mock('../src/chatbot/chatHistoryService', () => ({
   getOrCreateActiveSession: mockGetOrCreateActiveSession,
@@ -61,11 +62,13 @@ jest.mock('../src/chatbot/responseValidator', () => ({
 }));
 jest.mock('../src/chatbot/safetyRules', () => ({
   blockReply: mockBlockReply,
+  offTopicReply: mockOffTopicReply,
   preGeminiSafetyCheck: mockPreGeminiSafetyCheck,
 }));
 jest.mock('../src/chatbot/templateFallback', () => ({
   classifyMessage: mockClassifyMessage,
   runTemplatePipeline: mockRunTemplatePipeline,
+  SOFT_THRESHOLD: 0.4,
 }));
 
 import { handle, type OrchestratorInputs } from '../src/chatbot/orchestrator';
@@ -107,6 +110,12 @@ beforeEach(() => {
   });
   mockPreGeminiSafetyCheck.mockReturnValue({ level: 'none' });
   mockBlockReply.mockReturnValue('BLOCKED');
+  mockOffTopicReply.mockReturnValue({
+    reply: 'OFFTOPIC',
+    intent: 'off_topic',
+    confidence: 1.0,
+    segments: { shortAnswer: 'OFFTOPIC' },
+  });
   mockLoadMemory.mockResolvedValue({ userId: 'u1' });
   mockRetrieveKnowledge.mockResolvedValue([]);
   mockRetrieveExerciseDocs.mockResolvedValue([]);
@@ -119,7 +128,7 @@ beforeEach(() => {
     systemInstruction: 's',
     userPrompt: 'u',
   });
-  mockCallGemini.mockResolvedValue('{"answer":"ok"}');
+  mockCallDeepSeek.mockResolvedValue('{"answer":"ok"}');
   mockParseAndValidate.mockReturnValue(VALIDATED);
   mockRenderAnswerMarkdown.mockReturnValue('RENDERED');
   mockGetOrCreateActiveSession.mockResolvedValue('sess-1');
@@ -143,7 +152,7 @@ describe('handle — short-circuit paths', () => {
     expect(r.reply).toBe('Please contact a crisis line.');
     expect(r.confidence).toBe(1.0);
     expect(mockClassifyMessage).not.toHaveBeenCalled();
-    expect(mockCallGemini).not.toHaveBeenCalled();
+    expect(mockCallDeepSeek).not.toHaveBeenCalled();
   });
 
   it('blocks low-severity unsafe input with a canned reply (no Gemini)', async () => {
@@ -154,7 +163,23 @@ describe('handle — short-circuit paths', () => {
     const r = await handle(INPUTS);
     expect(r.reply).toBe('BLOCKED');
     expect(r.intent).toBe('safety_block');
-    expect(mockCallGemini).not.toHaveBeenCalled();
+    expect(mockCallDeepSeek).not.toHaveBeenCalled();
+  });
+
+  it('redirects off-topic questions without personalizing or calling Gemini', async () => {
+    mockClassifyMessage.mockResolvedValue({
+      topTag: 'off_topic',
+      topConf: 0.9,
+      secondTag: 'general_chat',
+      secondConf: 0.05,
+    });
+    mockMapToBroadIntent.mockReturnValue('off_topic');
+    const r = await handle(INPUTS);
+    expect(r.reply).toBe('OFFTOPIC');
+    expect(r.intent).toBe('off_topic');
+    expect(mockOffTopicReply).toHaveBeenCalled();
+    expect(mockBuildPersonalContext).not.toHaveBeenCalled();
+    expect(mockCallDeepSeek).not.toHaveBeenCalled();
   });
 
   it('falls back to templates with a notice when the daily quota is spent', async () => {
@@ -166,14 +191,14 @@ describe('handle — short-circuit paths', () => {
     const r = await handle(INPUTS);
     expect(r.reply).toContain('TEMPLATE');
     expect(r.reply).toMatch(/coaching limit/i);
-    expect(mockCallGemini).not.toHaveBeenCalled();
+    expect(mockCallDeepSeek).not.toHaveBeenCalled();
     expect(mockRunTemplatePipeline).toHaveBeenCalled();
   });
 });
 
 describe('handle — Gemini paths', () => {
   it('falls back to templates when Gemini fails', async () => {
-    mockCallGemini.mockRejectedValue(new MockGeminiFailureError('down'));
+    mockCallDeepSeek.mockRejectedValue(new MockDeepSeekError('down'));
     const r = await handle(INPUTS);
     expect(r.reply).toBe('TEMPLATE');
     expect(mockRunTemplatePipeline).toHaveBeenCalled();

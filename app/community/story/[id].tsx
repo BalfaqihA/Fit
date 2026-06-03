@@ -21,7 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStories, useStoryViews } from '@/hooks/use-stories';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import { relativeTime, timeRemaining } from '@/lib/format';
-import { recordStoryView } from '@/lib/stories';
+import { recordStoryView, type Story } from '@/lib/stories';
 
 const STORY_DURATION_MS = 5000;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -39,23 +39,12 @@ export default function StoryViewer() {
   const [index, setIndex] = useState(0);
   const [viewersOpen, setViewersOpen] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
-  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const currentStory = group?.stories[index];
   const isAuthor = !!group && group.authorId === profile.id;
-  const isVideo =
-    currentStory?.mediaType === 'video' && !!currentStory.videoUrl;
 
   // Author's "Seen by" list for the visible story (realtime).
   const viewers = useStoryViews(isAuthor ? currentStory?.id : undefined);
-
-  const videoPlayer = useVideoPlayer(
-    isVideo ? (currentStory?.videoUrl ?? '') : '',
-    (p) => {
-      p.loop = false;
-      p.muted = false;
-    }
-  );
 
   // Record that the signed-in viewer saw this story (skips the author).
   useEffect(() => {
@@ -66,55 +55,6 @@ export default function StoryViewer() {
       avatarUrl: profile.avatarUri ?? null,
     });
   }, [currentStory, group, profile.id, profile.displayName, profile.avatarUri]);
-
-  useEffect(() => {
-    if (!group || group.stories.length === 0) return;
-    progress.setValue(0);
-    animationRef.current?.stop();
-    if (isVideo) {
-      videoPlayer.play();
-      return;
-    }
-    const anim = Animated.timing(progress, {
-      toValue: 1,
-      duration: STORY_DURATION_MS,
-      easing: Easing.linear,
-      useNativeDriver: false,
-    });
-    animationRef.current = anim;
-    anim.start(({ finished }) => {
-      if (finished) goNext();
-    });
-    return () => anim.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, group?.stories.length, isVideo]);
-
-  useEffect(() => {
-    if (!isVideo) return;
-    const interval = setInterval(() => {
-      const duration = videoPlayer.duration;
-      if (!duration || duration <= 0) return;
-      const pct = Math.min(1, Math.max(0, videoPlayer.currentTime / duration));
-      progress.setValue(pct);
-      if (pct >= 0.999) {
-        clearInterval(interval);
-        goNext();
-      }
-    }, 100);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isVideo, index]);
-
-  useEffect(() => {
-    return () => {
-      try {
-        videoPlayer.pause();
-      } catch {
-        // player may already be released
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   if (!group || group.stories.length === 0) {
     return (
@@ -158,22 +98,13 @@ export default function StoryViewer() {
   return (
     <View style={styles.safe}>
       <StatusBar barStyle="light-content" />
-      {isVideo ? (
-        <VideoView
-          player={videoPlayer}
-          style={styles.image}
-          nativeControls={false}
-          contentFit="cover"
-        />
-      ) : (
-        story.imageUrl && (
-          <Image
-            source={{ uri: story.imageUrl }}
-            style={styles.image}
-            contentFit="cover"
-          />
-        )
-      )}
+      <StoryMedia
+        key={story.id}
+        story={story}
+        progress={progress}
+        paused={viewersOpen}
+        onComplete={goNext}
+      />
 
       <View style={styles.overlayTop}>
         <View style={styles.progressRow}>
@@ -298,9 +229,140 @@ export default function StoryViewer() {
   );
 }
 
+/**
+ * Renders one story's media. Mounted with `key={story.id}` by the parent so a
+ * fresh video player is created per story (the source is known at mount time,
+ * which fixes the previous bug where the player was created with an empty
+ * source while stories were still loading). Drives the shared progress bar and
+ * calls `onComplete` when the media finishes.
+ */
+function StoryMedia({
+  story,
+  progress,
+  paused,
+  onComplete,
+}: {
+  story: Story;
+  progress: Animated.Value;
+  paused: boolean;
+  onComplete: () => void;
+}) {
+  const isVideo = story.mediaType === 'video' && !!story.videoUrl;
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  const player = useVideoPlayer(isVideo ? story.videoUrl ?? '' : '', (p) => {
+    p.loop = false;
+    p.muted = false;
+  });
+
+  // Drive the progress bar and advance when the media finishes.
+  useEffect(() => {
+    progress.setValue(0);
+    if (isVideo) {
+      try {
+        player.play();
+      } catch {
+        // player may not be ready yet
+      }
+      const interval = setInterval(() => {
+        const duration = player.duration;
+        if (!duration || duration <= 0) return;
+        setStatus('ready');
+        const pct = Math.min(1, Math.max(0, player.currentTime / duration));
+        progress.setValue(pct);
+        if (pct >= 0.999) {
+          clearInterval(interval);
+          onComplete();
+        }
+      }, 100);
+      return () => {
+        clearInterval(interval);
+        try {
+          player.pause();
+        } catch {
+          // player may already be released
+        }
+      };
+    }
+    const anim = Animated.timing(progress, {
+      toValue: 1,
+      duration: STORY_DURATION_MS,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+    anim.start(({ finished }) => {
+      if (finished) onComplete();
+    });
+    return () => anim.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVideo]);
+
+  // Pause/resume the video when an overlay (e.g. the Seen-by sheet) opens.
+  useEffect(() => {
+    if (!isVideo) return;
+    try {
+      if (paused) player.pause();
+      else player.play();
+    } catch {
+      // ignore
+    }
+  }, [paused, isVideo, player]);
+
+  if (isVideo) {
+    return (
+      <>
+        <VideoView
+          player={player}
+          style={styles.image}
+          nativeControls={false}
+          contentFit="cover"
+        />
+        {status === 'loading' && (
+          <View style={styles.mediaState} pointerEvents="none">
+            <ActivityIndicator color="#FFFFFF" />
+          </View>
+        )}
+      </>
+    );
+  }
+
+  if (!story.imageUrl || status === 'error') {
+    return (
+      <View style={styles.mediaState}>
+        <Ionicons name="image-outline" size={32} color="rgba(255,255,255,0.7)" />
+        <Text style={styles.emptyText}>Couldn’t load media</Text>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <Image
+        source={{ uri: story.imageUrl }}
+        style={styles.image}
+        contentFit="cover"
+        onLoadStart={() => setStatus('loading')}
+        onLoad={() => setStatus('ready')}
+        onError={() => setStatus('error')}
+      />
+      {status === 'loading' && (
+        <View style={styles.mediaState} pointerEvents="none">
+          <ActivityIndicator color="#FFFFFF" />
+        </View>
+      )}
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#000' },
   image: { ...StyleSheet.absoluteFillObject },
+  mediaState: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
   overlayTop: {
     position: 'absolute',
     top: 0,

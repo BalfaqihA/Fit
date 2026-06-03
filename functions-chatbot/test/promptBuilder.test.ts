@@ -53,4 +53,44 @@ describe('buildGeminiPrompt — new blocks', () => {
     expect(p).toContain('LATEST WEIGHT UPDATE');
     expect(p).toContain('- Current weight: unknown kg');
   });
+
+  it('renders the PROGRESS ANALYSIS block when analysis is available', () => {
+    const p = build({
+      analysisAvailable: '1',
+      weightVelocityKgPerWeek: 'down ~0.8 kg/week',
+      weightGoalAlignment: 'on track for the goal',
+      currentWeekWorkouts: '4',
+      currentWeekMinutes: '180',
+      currentWeekAdherence: '100%',
+      bestWeekSummary: '5 workouts, 220 min',
+      muscleBalanceNote: 'chest leads at 38% of sets; legs least-trained',
+      topExerciseProgress: 'Bench Press, best 80kg, avg RPE 8.0',
+      stallNote: 'progressing normally — no plateau detected',
+      coachSuggestions: 'Add a leg day.',
+    });
+    expect(p).toContain('PROGRESS ANALYSIS');
+    expect(p).toContain('down ~0.8 kg/week');
+    expect(p).toContain('chest leads at 38% of sets');
+    expect(p).toContain('Bench Press, best 80kg');
+  });
+
+  it('shows the not-enough-data line when analysis is unavailable', () => {
+    const p = build({ analysisAvailable: '0' });
+    expect(p).toContain('PROGRESS ANALYSIS');
+    expect(p).toMatch(/not enough logged data/i);
+  });
+
+  it('includes the domain gate and data-analysis rules in the system instruction', () => {
+    const { systemInstruction } = buildGeminiPrompt({
+      message: 'x',
+      personal: {} as PersonalContext,
+      memory: { userId: 'u1' } as never,
+      knowledge: [],
+      intent: 'general_chat',
+      safety: { level: 'none' } as never,
+      history: [],
+    });
+    expect(systemInstruction).toContain('DOMAIN GATE');
+    expect(systemInstruction).toContain('DATA-DRIVEN ANALYSIS');
+  });
 });

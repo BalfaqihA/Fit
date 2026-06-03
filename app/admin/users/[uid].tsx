@@ -13,6 +13,10 @@ import { type Palette } from '@/constants/design';
 import { useAdmin } from '@/hooks/use-admin';
 import { useTheme } from '@/hooks/use-theme';
 import { adminApi } from '@/lib/admin';
+import {
+  fetchAdminUserProgress,
+  type AdminUserProgress,
+} from '@/lib/admin-user-data';
 import type { AdminUserDetail } from '@/types/admin';
 
 export default function AdminUserDetailScreen() {
@@ -22,6 +26,7 @@ export default function AdminUserDetailScreen() {
   const { can } = useAdmin();
 
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
+  const [progress, setProgress] = useState<AdminUserProgress | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState('');
@@ -31,7 +36,12 @@ export default function AdminUserDetailScreen() {
     if (!uid) return;
     setError(null);
     try {
-      setDetail(await adminApi.users.detail(uid));
+      const [d, p] = await Promise.all([
+        adminApi.users.detail(uid),
+        fetchAdminUserProgress(uid).catch(() => null),
+      ]);
+      setDetail(d);
+      setProgress(p);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load user.');
     } finally {
@@ -100,6 +110,84 @@ export default function AdminUserDetailScreen() {
               </Text>
             ) : null}
           </Card>
+
+          {progress ? (
+            <>
+              <Card>
+                <Text style={styles.section}>Stats</Text>
+                <Text style={styles.meta}>
+                  Completed workouts: {progress.stats.totalWorkouts}
+                </Text>
+                <Text style={styles.meta}>
+                  Total minutes: {progress.stats.totalMinutes}
+                </Text>
+                <Text style={styles.meta}>
+                  Total calories: {progress.stats.totalCaloriesKcal} kcal
+                </Text>
+                <Text style={styles.meta}>Total XP: {progress.stats.totalXp}</Text>
+                <Text style={styles.meta}>
+                  Longest streak: {progress.stats.longestStreak} days
+                </Text>
+              </Card>
+
+              <Card>
+                <Text style={styles.section}>
+                  Achievements ({progress.achievements.length}/
+                  {progress.totalAchievements})
+                </Text>
+                {progress.achievements.length === 0 ? (
+                  <Text style={styles.meta}>None unlocked yet.</Text>
+                ) : (
+                  progress.achievements.map((a) => (
+                    <Text key={a.id} style={styles.meta}>
+                      • {a.title}
+                      {a.unlockedAtMs
+                        ? ` · ${new Date(a.unlockedAtMs).toLocaleDateString()}`
+                        : ''}
+                    </Text>
+                  ))
+                )}
+              </Card>
+
+              <Card>
+                <Text style={styles.section}>Weight progress</Text>
+                {progress.measurements.length === 0 ? (
+                  <Text style={styles.meta}>No weigh-ins recorded.</Text>
+                ) : (
+                  <>
+                    <Text style={styles.meta}>
+                      Latest: {progress.measurements[0].weightKg} kg
+                      {progress.measurements[0].recordedAtMs
+                        ? ` · ${new Date(
+                            progress.measurements[0].recordedAtMs
+                          ).toLocaleDateString()}`
+                        : ''}
+                    </Text>
+                    <Text style={styles.meta}>
+                      Entries: {progress.measurements.length}
+                    </Text>
+                  </>
+                )}
+              </Card>
+
+              <Card>
+                <Text style={styles.section}>Recent workouts & logs</Text>
+                {progress.workouts.length === 0 ? (
+                  <Text style={styles.meta}>No workouts yet.</Text>
+                ) : (
+                  progress.workouts.slice(0, 15).map((w) => (
+                    <Text key={w.id} style={styles.meta}>
+                      {w.completedAtMs
+                        ? new Date(w.completedAtMs).toLocaleDateString()
+                        : '—'}{' '}
+                      · {w.durationMin} min · {w.xp} XP
+                      {w.source === 'manual_log' ? ' · logged' : ''}
+                    </Text>
+                  ))
+                )}
+              </Card>
+            </>
+          ) : null}
 
           {can('users.status') ? (
             <Card>

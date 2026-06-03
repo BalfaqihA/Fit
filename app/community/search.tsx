@@ -18,6 +18,11 @@ import { BackButton } from '@/components/back-button';
 import { UserListRow } from '@/components/user-list-row';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
+import {
+  addRecentSearch,
+  clearRecentSearches,
+  getRecentSearches,
+} from '@/lib/recent-searches';
 import { searchUsers, type SearchUser } from '@/lib/users';
 
 export default function SearchScreen() {
@@ -26,6 +31,11 @@ export default function SearchScreen() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchUser[]>([]);
   const [searching, setSearching] = useState(false);
+  const [recent, setRecent] = useState<SearchUser[]>([]);
+
+  useEffect(() => {
+    getRecentSearches().then(setRecent);
+  }, []);
 
   const trimmed = query.trim().toLowerCase();
 
@@ -98,17 +108,46 @@ export default function SearchScreen() {
                 <UserListRow
                   key={user.id}
                   user={user}
-                  onPress={() =>
-                    router.push(`/community/profile/${user.id}` as never)
-                  }
+                  onPress={() => {
+                    addRecentSearch(user).then(setRecent);
+                    router.push(`/community/profile/${user.id}` as never);
+                  }}
                 />
               ))
             )}
           </>
+        ) : recent.length > 0 ? (
+          <>
+            <View style={styles.recentHeader}>
+              <Text style={styles.sectionTitle}>RECENT</Text>
+              <Pressable
+                onPress={() => {
+                  clearRecentSearches();
+                  setRecent([]);
+                }}
+                hitSlop={8}
+              >
+                <Text style={styles.clearText}>Clear</Text>
+              </Pressable>
+            </View>
+            {recent.map((user) => (
+              <UserListRow
+                key={user.id}
+                user={user}
+                onPress={() => {
+                  addRecentSearch(user).then(setRecent);
+                  router.push(`/community/profile/${user.id}` as never);
+                }}
+              />
+            ))}
+          </>
         ) : (
           <View style={styles.emptyHint}>
-            <Ionicons name="people-outline" size={28} color={COLORS.muted} />
-            <Text style={styles.emptyText}>Start typing to find users.</Text>
+            <Ionicons name="time-outline" size={28} color={COLORS.muted} />
+            <Text style={styles.emptyText}>
+              Search members by name or handle. Your recent searches will show
+              up here.
+            </Text>
           </View>
         )}
       </ScrollView>
@@ -155,4 +194,16 @@ const makeStyles = (COLORS: Palette) =>
       paddingBottom: 6,
     },
     emptyText: { paddingHorizontal: 20, paddingTop: 12, fontSize: 14, color: COLORS.muted },
+    recentHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingRight: 20,
+    },
+    clearText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: COLORS.primary,
+      paddingTop: 14,
+    },
   });

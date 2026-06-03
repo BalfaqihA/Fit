@@ -100,6 +100,29 @@ type InsightsSnapshot = {
   };
 };
 
+// Subset of users/{uid}/insights/latestWeightUpdate (built by
+// functions/insights.py → build_weight_update_insight; full shape mirrored in
+// hooks/use-weight-update-insights.ts). We read only the fields we analyze.
+type LatestWeightUpdate = {
+  weight?: {
+    delta30dKg?: number;
+    direction?: 'up' | 'down' | 'flat';
+    goalAlignment?: 'good' | 'neutral' | 'needs_attention';
+  };
+  currentWeek?: { workouts?: number; minutes?: number; adherencePercent?: number };
+  mostActiveWeek?: { workouts?: number; minutes?: number; reason?: string } | null;
+  topExercises?: {
+    name?: string;
+    primaryMuscle?: string | null;
+    totalSets?: number;
+    totalReps?: number;
+    avgRpe?: number | null;
+    bestWeightKg?: number | null;
+  }[];
+  topMuscles?: { muscle?: string; totalSets?: number }[];
+  suggestions?: string[];
+};
+
 // Mirrors lib/gamification.ts: level = floor(totalXp / 1000) + 1.
 const LEVEL_XP = 1000;
 function levelFromXp(totalXp: number): number {
@@ -112,6 +135,12 @@ const GOAL_LABELS: Record<string, string> = {
   stay_fit: 'staying fit',
   increase_endurance: 'endurance',
   improve_flexibility: 'flexibility',
+};
+
+const GOAL_ALIGNMENT_LABELS: Record<string, string> = {
+  good: 'on track for the goal',
+  neutral: 'neutral',
+  needs_attention: 'off track — needs attention',
 };
 
 // Total achievements defined in `lib/achievements.ts`.
@@ -218,6 +247,18 @@ function defaultContext(): PersonalContext {
     wuMostActiveWeek: '—',
     wuMostActiveWeekCalories: '0',
     wuTopExercises: '—',
+    // Progress-analysis tokens (rendered into the PROGRESS ANALYSIS block).
+    analysisAvailable: '0',
+    weightVelocityKgPerWeek: '—',
+    weightGoalAlignment: '—',
+    currentWeekWorkouts: '—',
+    currentWeekMinutes: '—',
+    currentWeekAdherence: '—',
+    bestWeekSummary: '—',
+    muscleBalanceNote: '—',
+    topExerciseProgress: '—',
+    stallNote: '—',
+    coachSuggestions: '—',
   };
 }
 
@@ -295,6 +336,29 @@ function applySnapshotToContext(
     ctx.trainingAgeDays = String(flags.trainingAgeDays);
   }
 
+  // Progress-analysis fields, derived from the (fresh) snapshot. The richer
+  // latestWeightUpdate doc enriches/overrides these afterward when present.
+  if (typeof totals.workouts === 'number' && totals.workouts > 0) {
+    ctx.analysisAvailable = '1';
+  }
+  if (typeof flags.hasStalled === 'boolean') {
+    ctx.stallNote = flags.hasStalled
+      ? 'progress looks plateaued — consider changing volume or intensity'
+      : 'progressing normally — no plateau detected';
+  }
+  if (typeof trend.deltaKg === 'number') {
+    ctx.weightVelocityKgPerWeek = formatWeeklyVelocity(trend.deltaKg);
+  }
+  if (recent.last7d && typeof recent.last7d.workouts === 'number') {
+    ctx.currentWeekWorkouts = String(recent.last7d.workouts);
+  }
+  if (recent.last7d && typeof recent.last7d.minutes === 'number') {
+    ctx.currentWeekMinutes = String(recent.last7d.minutes);
+  }
+  if (typeof consistency.label === 'string') {
+    ctx.currentWeekAdherence = consistency.label;
+  }
+
   const wu = snap.latestWeightUpdateSummary;
   if (wu) {
     if (typeof wu.currentKg === 'number') {
@@ -322,6 +386,83 @@ function applySnapshotToContext(
     if (typeof wu.topExercise === 'string') {
       ctx.wuTopExercises = wu.topExercise;
     }
+  }
+}
+
+function formatWeeklyVelocity(delta30dKg: number): string {
+  const perWeek = delta30dKg / (30 / 7);
+  const mag = Math.abs(perWeek);
+  if (mag < 0.05) return 'roughly steady (~0 kg/week)';
+  return `${perWeek < 0 ? 'down' : 'up'} ~${mag.toFixed(1)} kg/week`;
+}
+
+function formatMuscleBalance(
+  muscles: { muscle: string; totalSets: number }[],
+): string {
+  const total = muscles.reduce((s, m) => s + m.totalSets, 0);
+  if (total <= 0) return 'n/a';
+  const sorted = [...muscles].sort((a, b) => b.totalSets - a.totalSets);
+  const top = sorted[0];
+  if (sorted.length === 1) return `all logged volume on ${top.muscle}`;
+  const bottom = sorted[sorted.length - 1];
+  const topPct = Math.round((top.totalSets / total) * 100);
+  return `${top.muscle} leads at ${topPct}% of sets; ${bottom.muscle} least-trained`;
+}
+
+/**
+ * Enrich the context with the richer `latestWeightUpdate` doc — per-muscle
+ * volume, weekly activity, top-exercise detail, and goal alignment. This is
+ * what powers genuine progress analysis in the PROGRESS ANALYSIS prompt block.
+ */
+export function applyWeightUpdateToContext(
+  ctx: PersonalContext,
+  wu: LatestWeightUpdate,
+): void {
+  ctx.analysisAvailable = '1';
+
+  const w = wu.weight ?? {};
+  if (typeof w.delta30dKg === 'number') {
+    ctx.weightVelocityKgPerWeek = formatWeeklyVelocity(w.delta30dKg);
+  }
+  if (typeof w.goalAlignment === 'string') {
+    ctx.weightGoalAlignment =
+      GOAL_ALIGNMENT_LABELS[w.goalAlignment] ?? w.goalAlignment;
+  }
+
+  const cw = wu.currentWeek ?? {};
+  if (typeof cw.workouts === 'number') ctx.currentWeekWorkouts = String(cw.workouts);
+  if (typeof cw.minutes === 'number') ctx.currentWeekMinutes = String(cw.minutes);
+  if (typeof cw.adherencePercent === 'number') {
+    ctx.currentWeekAdherence = `${Math.round(cw.adherencePercent)}%`;
+  }
+
+  const mw = wu.mostActiveWeek;
+  if (mw && (typeof mw.workouts === 'number' || typeof mw.minutes === 'number')) {
+    const reason = mw.reason ? ` (${mw.reason})` : '';
+    ctx.bestWeekSummary = `${mw.workouts ?? 0} workouts, ${mw.minutes ?? 0} min${reason}`;
+  }
+
+  const muscles = (wu.topMuscles ?? []).filter(
+    (m): m is { muscle: string; totalSets: number } =>
+      typeof m.muscle === 'string' &&
+      typeof m.totalSets === 'number' &&
+      m.totalSets > 0,
+  );
+  if (muscles.length > 0) ctx.muscleBalanceNote = formatMuscleBalance(muscles);
+
+  const ex = (wu.topExercises ?? []).find((e) => typeof e.name === 'string');
+  if (ex) {
+    const parts: string[] = [ex.name as string];
+    if (typeof ex.bestWeightKg === 'number') parts.push(`best ${ex.bestWeightKg}kg`);
+    if (typeof ex.totalSets === 'number' && typeof ex.totalReps === 'number') {
+      parts.push(`${ex.totalSets} sets / ${ex.totalReps} reps`);
+    }
+    if (typeof ex.avgRpe === 'number') parts.push(`avg RPE ${ex.avgRpe.toFixed(1)}`);
+    ctx.topExerciseProgress = parts.join(', ');
+  }
+
+  if (wu.suggestions && wu.suggestions.length > 0) {
+    ctx.coachSuggestions = wu.suggestions.slice(0, 2).join(' ');
   }
 }
 
@@ -375,6 +516,18 @@ export async function buildPersonalContext(
     }
   } catch (err) {
     console.warn('[chatbot] personalize: snapshot fetch failed', err);
+  }
+
+  // Enrich with the richer latestWeightUpdate doc (per-muscle volume, weekly
+  // activity, top exercises, goal alignment) for the PROGRESS ANALYSIS block.
+  // Sibling of the snapshot; refreshed on weigh-ins. Absence is fine.
+  try {
+    const wuSnap = await db.doc(`users/${uid}/insights/latestWeightUpdate`).get();
+    if (wuSnap.exists) {
+      applyWeightUpdateToContext(ctx, wuSnap.data() as LatestWeightUpdate);
+    }
+  } catch (err) {
+    console.warn('[chatbot] personalize: latestWeightUpdate fetch failed', err);
   }
 
   // Slow path: synthesize the missing fields ourselves.

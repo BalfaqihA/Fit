@@ -1,4 +1,4 @@
-import type { SafetyDecision } from './types';
+import type { OrchestratorResult, SafetyDecision } from './types';
 
 // Lower-severity safety classifier that runs AFTER `overrides.ts` (which
 // handles crisis-level messages and bypasses Gemini entirely). This module
@@ -89,4 +89,25 @@ export function preGeminiSafetyCheck(message: string): SafetyDecision {
 
 export function blockReply(): string {
   return BLOCK_REPLY;
+}
+
+// Friendly redirect for off-topic (non-fitness / non-app) messages. Returned
+// directly by the orchestrator's domain gate so we never spend an LLM call on
+// questions outside the app's domain.
+const OFF_TOPIC_REPLY =
+  "I'm your fitness coach inside Fit, so I can only help with training, nutrition, recovery, and tracking your progress. Ask me about your workout or how you're doing and I've got you!";
+
+export function offTopicReply(): OrchestratorResult {
+  return {
+    reply: OFF_TOPIC_REPLY,
+    intent: 'off_topic',
+    confidence: 1.0,
+    segments: { shortAnswer: OFF_TOPIC_REPLY },
+    suggestedActions: [
+      "Show today's workout",
+      'Analyze my progress',
+      'Nutrition advice',
+      'How do I use the app?',
+    ],
+  };
 }

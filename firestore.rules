@@ -42,22 +42,26 @@ service cloud.firestore {
       allow delete: if false;
 
       match /workouts/{workoutId} {
-        allow read, create: if isOwner(uid);
+        allow read: if isOwner(uid) || isAdmin();
+        allow create: if isOwner(uid);
         allow update, delete: if false;
       }
 
       match /measurements/{measurementId} {
-        allow read, create: if isOwner(uid);
+        allow read: if isOwner(uid) || isAdmin();
+        allow create: if isOwner(uid);
         allow update, delete: if false;
       }
 
       match /xp_events/{eventId} {
-        allow read, create: if isOwner(uid);
+        allow read: if isOwner(uid) || isAdmin();
+        allow create: if isOwner(uid);
         allow update, delete: if false;
       }
 
       match /achievements/{achievementId} {
-        allow read, create: if isOwner(uid);
+        allow read: if isOwner(uid) || isAdmin();
+        allow create: if isOwner(uid);
         allow update, delete: if false;
       }
 
@@ -132,15 +136,40 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.userId);
     }
 
-    // Reports are write-only for users; moderation reads via the Firebase Console.
+    // Reports are write-only for users; admins read them in-app.
     match /reports/{reportId} {
-      allow read: if false;
+      allow read: if isAdmin();
       allow create: if isSignedIn()
         && request.resource.data.reportedBy == request.auth.uid
         && request.resource.data.reason is string
         && request.resource.data.reason.size() >= 1
         && request.resource.data.reason.size() <= 300;
       allow update, delete: if false;
+    }
+
+    // Support chat: a per-user thread (doc id == uid) that the member and any
+    // admin can both read and append messages to. The thread doc holds the
+    // last-message preview + unread counters for the inbox list.
+    match /supportThreads/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if isOwner(uid) || isAdmin();
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create: if (
+            (isOwner(uid)
+              && request.resource.data.senderRole == 'user'
+              && request.resource.data.senderId == request.auth.uid)
+            || (isAdmin()
+              && request.resource.data.senderRole == 'admin'
+              && request.resource.data.senderId == request.auth.uid)
+          )
+          && request.resource.data.text is string
+          && request.resource.data.text.size() >= 1
+          && request.resource.data.text.size() <= 1000;
+        allow update, delete: if false;
+      }
     }
 
     // Follow graph. Composite id `{followerId}_{followingId}` makes

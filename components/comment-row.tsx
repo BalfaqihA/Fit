@@ -4,10 +4,12 @@ import React, { useCallback, useMemo } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { type Palette } from '@/constants/design';
+import { useAuthorProfile } from '@/hooks/use-author-profile';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTime } from '@/lib/format';
 
 type CommentRowProps = {
+  authorId: string;
   authorName: string;
   authorAvatarUrl: string | null;
   text: string;
@@ -18,6 +20,7 @@ type CommentRowProps = {
 };
 
 export function CommentRow({
+  authorId,
   authorName,
   authorAvatarUrl,
   text,
@@ -28,6 +31,11 @@ export function CommentRow({
 }: CommentRowProps) {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  // Prefer the author's current name/avatar over the stored snapshot.
+  const live = useAuthorProfile(authorId);
+  const displayName = live.displayName || authorName;
+  const avatarUrl =
+    live.avatarUrl !== undefined ? live.avatarUrl : authorAvatarUrl;
 
   const confirmDelete = useCallback(() => {
     if (!onDelete) return;
@@ -40,8 +48,8 @@ export function CommentRow({
   return (
     <View style={styles.row}>
       <Pressable onPress={onPressAuthor} hitSlop={4}>
-        {authorAvatarUrl ? (
-          <Image source={{ uri: authorAvatarUrl }} style={styles.avatar} />
+        {avatarUrl ? (
+          <Image source={{ uri: avatarUrl }} style={styles.avatar} />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback]}>
             <Ionicons name="person" size={14} color={COLORS.primary} />
@@ -50,7 +58,7 @@ export function CommentRow({
       </Pressable>
       <View style={{ flex: 1 }}>
         <View style={styles.bubble}>
-          <Text style={styles.name}>{authorName}</Text>
+          <Text style={styles.name}>{displayName}</Text>
           <Text style={styles.text}>{text}</Text>
         </View>
         <View style={styles.meta}>

@@ -9,10 +9,39 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyADGRqqeOzUDcq8HJpi8fy_U8ycYV_dpB8",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "fitness-874c3.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "fitness-874c3",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "fitness-874c3.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "1023687451349",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:1023687451349:web:16fa40799cf93750e2385c",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-9Q710QQVMH",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "1023687451349-dabv5fb4uehpf35jiiamotgqmu5d9bgj.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "1023687451349-a8v6fp0g43qfilgbn74kn3isd0ubj415.apps.googleusercontent.com",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "SENTRY_DISABLE_NATIVE_DEBUG_UPLOAD": "true"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyADGRqqeOzUDcq8HJpi8fy_U8ycYV_dpB8",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "fitness-874c3.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "fitness-874c3",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "fitness-874c3.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "1023687451349",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:1023687451349:web:16fa40799cf93750e2385c",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-9Q710QQVMH",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "1023687451349-dabv5fb4uehpf35jiiamotgqmu5d9bgj.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "1023687451349-a8v6fp0g43qfilgbn74kn3isd0ubj415.apps.googleusercontent.com",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "SENTRY_DISABLE_NATIVE_DEBUG_UPLOAD": "true"
+      }
     }
   },
   "submit": {

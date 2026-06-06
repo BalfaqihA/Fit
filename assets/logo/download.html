@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fit — download logo</title>
+<style>
+  :root{--purple:#6C56D9;--coral:#FF6B7A;--bg:#F5F5F7;--ink:#231F20;--muted:#8C868A;--border:#E9E7EC;}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Segoe UI',system-ui,Arial,sans-serif;background:var(--bg);color:var(--ink);}
+  header{padding:36px 28px 4px;}
+  header h1{margin:0;font-size:22px;}
+  header p{margin:6px 0 0;color:var(--muted);}
+  .wrap{padding:20px 28px 64px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;}
+  .card{background:#fff;border:1px solid var(--border);border-radius:18px;padding:22px;display:flex;flex-direction:column;align-items:center;gap:14px;}
+  .preview{width:140px;height:140px;display:flex;align-items:center;justify-content:center;border-radius:14px;}
+  .preview.checker{background:
+      conic-gradient(#eee 25%,#fff 0 50%,#eee 0 75%,#fff 0) 0/24px 24px;}
+  .preview img{max-width:120px;max-height:120px;}
+  .title{font-weight:700;font-size:15px;}
+  .sub{font-size:12px;color:var(--muted);margin-top:-8px;}
+  .btns{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;}
+  button{cursor:pointer;border:none;border-radius:999px;padding:9px 16px;font-weight:700;font-size:13px;
+         background:var(--purple);color:#fff;transition:transform .06s ease,opacity .2s;}
+  button.ghost{background:#fff;color:var(--purple);border:1.5px solid var(--purple);}
+  button:active{transform:scale(.96);}
+  a.svglink{font-size:12px;color:var(--muted);text-decoration:none;border-bottom:1px dotted var(--muted);}
+  .note{grid-column:1/-1;color:var(--muted);font-size:13px;background:#fff;border:1px dashed var(--border);border-radius:14px;padding:14px 18px;}
+  canvas{display:none;}
+</style>
+</head>
+<body>
+  <header>
+    <h1>Fit — download logo</h1>
+    <p>Click a size to save a PNG straight to your device. Works offline, no internet needed.</p>
+  </header>
+
+  <div class="wrap" id="wrap"></div>
+  <canvas id="cv"></canvas>
+
+<script>
+// ---- SVG sources (kept identical to the .svg files in this folder) ----
+const MARK_WHITE = `
+  <g fill="#FFFFFF"><rect x="358" y="300" width="116" height="424" rx="44"/><rect x="358" y="300" width="300" height="116" rx="44"/></g>
+  <g fill="#FF6B7A"><rect x="474" y="483" width="150" height="44" rx="22"/><rect x="456" y="465" width="40" height="80" rx="18"/><rect x="584" y="465" width="40" height="80" rx="18"/><rect x="616" y="479" width="24" height="52" rx="12"/></g>`;
+const MARK_COLOR = `
+  <g fill="#6C56D9"><rect x="358" y="300" width="116" height="424" rx="44"/><rect x="358" y="300" width="300" height="116" rx="44"/></g>
+  <g fill="#FF6B7A"><rect x="474" y="483" width="150" height="44" rx="22"/><rect x="456" y="465" width="40" height="80" rx="18"/><rect x="584" y="465" width="40" height="80" rx="18"/><rect x="616" y="479" width="24" height="52" rx="12"/></g>`;
+
+const ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="150" y1="70" x2="880" y2="980" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#8E78F0"/><stop offset="1" stop-color="#6C56D9"/></linearGradient>
+    <linearGradient id="sheen" x1="512" y1="20" x2="512" y2="640" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/><rect width="1024" height="1024" rx="232" fill="url(#sheen)"/>
+  ${MARK_WHITE}</svg>`;
+
+const MARK = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="318 260 380 504">${MARK_COLOR}</svg>`;
+
+const LOCKUP = `<svg xmlns="http://www.w3.org/2000/svg" width="860" height="280" viewBox="0 0 860 280">
+  <defs><linearGradient id="lb" x1="150" y1="70" x2="880" y2="980" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#8E78F0"/><stop offset="1" stop-color="#6C56D9"/></linearGradient></defs>
+  <svg x="24" y="30" width="220" height="220" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="232" fill="url(#lb)"/>${MARK_WHITE}</svg>
+  <text x="288" y="168" font-family="'Poppins','Segoe UI',Arial,sans-serif" font-weight="800" font-size="132" letter-spacing="-3" fill="#231F20">Fit</text>
+  <text x="292" y="216" font-family="'Poppins','Segoe UI',Arial,sans-serif" font-weight="600" font-size="28" letter-spacing="3" fill="#8C868A">TRAIN · TRACK · TRANSFORM</text></svg>`;
+
+// ---- rasteriser ----
+function download(svg, w, h, name){
+  const cv = document.getElementById('cv'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d'); ctx.clearRect(0,0,w,h);
+  const url = URL.createObjectURL(new Blob([svg], {type:'image/svg+xml;charset=utf-8'}));
+  const img = new Image();
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+    cv.toBlob(b => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b); a.download = name; a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+    }, 'image/png');
+  };
+  img.src = url;
+}
+
+// ---- cards ----
+const items = [
+  { title:'App icon', sub:'square · gradient', svg:ICON, ratio:1, checker:false,
+    sizes:[1024,512,192,180,48] },
+  { title:'Mark', sub:'transparent · light bg', svg:MARK, ratio:1, checker:true,
+    sizes:[1024,512,256] },
+  { title:'Horizontal logo', sub:'mark + wordmark', svg:LOCKUP, ratio:860/280, checker:true,
+    sizes:[1720,860] }
+];
+
+const wrap = document.getElementById('wrap');
+for(const it of items){
+  const card = document.createElement('div'); card.className='card';
+  const pv = document.createElement('div'); pv.className='preview'+(it.checker?' checker':'');
+  pv.innerHTML = it.svg; pv.querySelector('svg').removeAttribute('width'); pv.querySelector('svg').removeAttribute('height');
+  pv.querySelector('svg').style.width = it.ratio>=1 ? '120px':'auto';
+  pv.querySelector('svg').style.height = it.ratio>=1 ? 'auto':'120px';
+  if(it.ratio>1){ pv.querySelector('svg').style.width='120px'; pv.querySelector('svg').style.height='auto'; }
+  const t = document.createElement('div'); t.className='title'; t.textContent=it.title;
+  const s = document.createElement('div'); s.className='sub'; s.textContent=it.sub;
+  const btns = document.createElement('div'); btns.className='btns';
+  for(const px of it.sizes){
+    const b = document.createElement('button');
+    const w = px, h = Math.round(px/it.ratio);
+    b.textContent = it.ratio===1 ? px+'px' : w+'×'+h;
+    b.onclick = ()=> download(it.svg, w, h, `fit-${it.title.toLowerCase().replace(/ /g,'-')}-${w}.png`);
+    btns.appendChild(b);
+  }
+  card.append(pv,t,s,btns);
+  wrap.appendChild(card);
+}
+
+const note = document.createElement('div'); note.className='note';
+note.innerHTML = 'Need the editable vectors? The matching <b>.svg</b> files sit in this same folder '
+  + '(<code>assets/logo/</code>), and a one-file <b>Fit-logo-pack.zip</b> bundle is in the project root.';
+wrap.appendChild(note);
+</script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fit — Logo preview</title>
+<style>
+  :root { --purple:#6C56D9; --coral:#FF6B7A; --bg:#F5F5F7; --ink:#231F20; --muted:#8C868A; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:'Segoe UI',system-ui,Arial,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:40px 32px 8px; }
+  header h1 { margin:0; font-size:22px; letter-spacing:.5px; }
+  header p { margin:6px 0 0; color:var(--muted); }
+  .wrap { padding:24px 32px 64px; display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:24px; }
+  .card { background:#fff; border:1px solid #E9E7EC; border-radius:18px; padding:24px; display:flex; flex-direction:column; align-items:center; gap:16px; }
+  .card.dark { background:#0F0E13; border-color:#2D2B38; color:#F4F3F7; }
+  .card.grad { background:linear-gradient(135deg,#8E78F0,#6C56D9); border:none; color:#fff; }
+  .label { font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); }
+  .card.dark .label, .card.grad .label { color:rgba(255,255,255,.7); }
+  img.icon { width:160px; height:160px; }
+  .row { display:flex; align-items:center; gap:18px; }
+  .sizes { display:flex; align-items:flex-end; gap:16px; }
+  .sizes img { display:block; }
+  .full { grid-column:1/-1; }
+  .home { display:flex; gap:28px; align-items:center; justify-content:center; padding:28px;
+          background:linear-gradient(160deg,#cdbdf6,#8E78F0); border-radius:18px; }
+  .home figure { margin:0; text-align:center; color:#fff; }
+  .home img { width:96px; height:96px; border-radius:22px; box-shadow:0 10px 24px rgba(0,0,0,.25); }
+  .home figcaption { margin-top:8px; font-size:13px; font-weight:600; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Fit — brand logo</h1>
+    <p>Purple gradient squircle · white “F” with a coral dumbbell middle stroke</p>
+  </header>
+
+  <div class="wrap">
+    <div class="card full">
+      <span class="label">Primary lockup</span>
+      <img src="fit-logo-horizontal.svg" alt="Fit horizontal logo" style="width:min(560px,90%);height:auto">
+    </div>
+
+    <div class="card">
+      <span class="label">App icon</span>
+      <img class="icon" src="fit-icon.svg" alt="Fit app icon">
+    </div>
+
+    <div class="card">
+      <span class="label">Mark · light bg</span>
+      <img class="icon" src="fit-mark.svg" alt="Fit mark" style="padding:18px">
+    </div>
+
+    <div class="card dark">
+      <span class="label">Mark · dark bg</span>
+      <img class="icon" src="fit-mark.svg" alt="Fit mark on dark" style="padding:18px">
+    </div>
+
+    <div class="card grad">
+      <span class="label">Mono · on brand</span>
+      <img class="icon" src="fit-mark-mono.svg" alt="Fit monochrome" style="padding:18px;color:#fff">
+    </div>
+
+    <div class="card full">
+      <span class="label">Legibility at small sizes</span>
+      <div class="sizes">
+        <img src="fit-icon.svg" width="120" height="120" alt="120">
+        <img src="fit-icon.svg" width="80" height="80" alt="80">
+        <img src="fit-icon.svg" width="48" height="48" alt="48">
+        <img src="fit-icon.svg" width="32" height="32" alt="32">
+        <img src="fit-icon.svg" width="20" height="20" alt="20">
+      </div>
+    </div>
+
+    <div class="card full">
+      <span class="label">On a home screen</span>
+      <div class="home">
+        <figure><img src="fit-icon.svg" alt="Fit"><figcaption>Fit</figcaption></figure>
+        <figure><img src="fit-icon.svg" alt="Fit"><figcaption>Fit</figcaption></figure>
+        <figure><img src="fit-icon.svg" alt="Fit"><figcaption>Fit</figcaption></figure>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

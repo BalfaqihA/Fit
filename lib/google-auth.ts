@@ -10,35 +10,37 @@ import { auth, db } from '@/lib/firebase';
 import { buildUserSearchFields } from '@/lib/users';
 import type { UserProfile } from '@/types/community';
 
-// `expo-auth-session/providers/google` pulls in `expo-crypto`, which resolves
-// a native module at module load. If the dev client binary doesn't include
-// that native module (e.g. packages added after the last prebuild), the
-// `require` throws and any file that imports this module — login, signup —
-// fails to load. We swallow that failure so the rest of the app still boots
+// `@react-native-google-signin/google-signin` resolves a native module. In
+// environments where that module isn't present (Expo Go, web, or a dev client
+// built before this package was added), requiring/configuring it can throw.
+// We swallow that failure so the rest of the app — login, signup — still boots
 // and Google sign-in degrades to a clear error instead of a route crash.
-type GoogleProvider = typeof import('expo-auth-session/providers/google');
-type WebBrowserModule = typeof import('expo-web-browser');
+type GoogleSignInModule = typeof import('@react-native-google-signin/google-signin');
+
+const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
 let nativeAvailable = false;
-let Google: GoogleProvider | null = null;
+let GoogleSignin: GoogleSignInModule['GoogleSignin'] | null = null;
+let statusCodes: GoogleSignInModule['statusCodes'] | null = null;
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  Google = require('expo-auth-session/providers/google') as GoogleProvider;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const WebBrowser = require('expo-web-browser') as WebBrowserModule;
-  WebBrowser.maybeCompleteAuthSession();
+  const mod = require('@react-native-google-signin/google-signin') as GoogleSignInModule;
+  GoogleSignin = mod.GoogleSignin;
+  statusCodes = mod.statusCodes;
+  // `webClientId` is the Firebase "Web" OAuth client. It sets the audience of
+  // the returned ID token so Firebase accepts the credential. The matching
+  // Android OAuth client is resolved natively from google-services.json plus
+  // the signing-key SHA-1 registered in Firebase Console — no client ID needed
+  // here for Android.
+  GoogleSignin.configure({ webClientId: WEB_CLIENT_ID });
   nativeAvailable = true;
 } catch (err) {
   console.warn(
-    '[google-auth] Native modules unavailable — Google sign-in disabled. Rebuild the dev client to enable it.',
+    '[google-auth] Native Google Sign-In module unavailable — Google sign-in disabled. Rebuild the dev client to enable it.',
     err,
   );
 }
-
-const IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
-const ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
-const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
 export type GoogleSignInResult =
   | { status: 'signed-in'; user: User; isNewUser: boolean }
@@ -86,45 +88,60 @@ type GoogleSignInHook = {
   isConfigured: boolean;
 };
 
+const isConfigured = !!WEB_CLIENT_ID;
+
+// Turn native Google Sign-In failures into clear, user-facing messages. The
+// raw native errors carry a `code` (a `statusCodes` value) but a cryptic
+// `message`; the login/signup screens surface `err.message` via `mapAuthError`.
+function translateGoogleError(err: unknown): Error {
+  const code = (err as { code?: string })?.code;
+  if (statusCodes) {
+    if (code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+      return new Error('Google Play Services is unavailable or needs updating.');
+    }
+    if (code === statusCodes.IN_PROGRESS) {
+      return new Error('A Google sign-in is already in progress.');
+    }
+  }
+  // `DEVELOPER_ERROR` (Android status code 10) means the signing-key SHA-1 or
+  // OAuth client config doesn't match what's registered in Firebase.
+  if (code === 'DEVELOPER_ERROR' || code === '10') {
+    return new Error(
+      "Google sign-in is misconfigured: the app's signing-key SHA-1 must be added to the Android app in Firebase Console.",
+    );
+  }
+  // Preserve the original error (and its `code`, e.g. Firebase `auth/...`) so
+  // `mapAuthError` can map it.
+  return err instanceof Error ? err : new Error('Google sign-in failed.');
+}
+
 function useGoogleSignInReal(): GoogleSignInHook {
-  // Non-null asserted: this implementation is only selected at module load
-  // when `Google` resolved successfully.
-  const [request, , promptAsync] = Google!.useAuthRequest({
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-  });
-
-  const isConfigured = !!(IOS_CLIENT_ID || ANDROID_CLIENT_ID || WEB_CLIENT_ID);
-
   const signIn = useCallback(async (): Promise<GoogleSignInResult> => {
     if (!isConfigured) {
       throw new Error(
-        'Google sign-in is not configured. Set EXPO_PUBLIC_GOOGLE_*_CLIENT_ID in your env.'
+        'Google sign-in is not configured. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in your env.',
       );
     }
-    const result = await promptAsync();
-    if (result.type === 'cancel' || result.type === 'dismiss') {
-      return { status: 'cancelled' };
+    try {
+      await GoogleSignin!.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const response = await GoogleSignin!.signIn();
+      if (response.type === 'cancelled') {
+        return { status: 'cancelled' };
+      }
+      const idToken = response.data.idToken;
+      if (!idToken) {
+        throw new Error('Google sign-in did not return an ID token.');
+      }
+      const credential = GoogleAuthProvider.credential(idToken);
+      const cred = await signInWithCredential(auth, credential);
+      const isNewUser = await ensureProfile(cred.user);
+      return { status: 'signed-in', user: cred.user, isNewUser };
+    } catch (err) {
+      throw translateGoogleError(err);
     }
-    if (result.type !== 'success') {
-      throw new Error('Google sign-in did not complete.');
-    }
-    const idToken = result.params.id_token;
-    if (!idToken) {
-      throw new Error('Google sign-in did not return an ID token.');
-    }
-    const credential = GoogleAuthProvider.credential(idToken);
-    const cred = await signInWithCredential(auth, credential);
-    const isNewUser = await ensureProfile(cred.user);
-    return { status: 'signed-in', user: cred.user, isNewUser };
-  }, [isConfigured, promptAsync]);
+  }, []);
 
-  return {
-    signIn,
-    ready: !!request,
-    isConfigured,
-  };
+  return { signIn, ready: isConfigured, isConfigured };
 }
 
 function useGoogleSignInStub(): GoogleSignInHook {

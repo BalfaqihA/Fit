@@ -102,6 +102,16 @@ export default function RestScreen() {
     }
   }, [timeLeft, hasSession]);
 
+  const addFifteen = useCallback(() => {
+    // Coalesce rapid taps so a double-tap doesn't queue +30s.
+    const now = Date.now();
+    if (now - lastAddRef.current < 250) return;
+    lastAddRef.current = now;
+    setTotalRest((t) => t + 15);
+    setTimeLeft((t) => t + 15);
+    firedReadyRef.current = false;
+  }, []);
+
   if (!hasSession || !nextExercise) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -131,16 +141,6 @@ export default function RestScreen() {
   const group = MUSCLE_GROUP[primaryRaw] ?? 'Full Body';
   const color = GROUP_COLOR[group] ?? COLORS.primary;
   const xp = exerciseXp(nextExercise);
-
-  const addFifteen = useCallback(() => {
-    // Coalesce rapid taps so a double-tap doesn't queue +30s.
-    const now = Date.now();
-    if (now - lastAddRef.current < 250) return;
-    lastAddRef.current = now;
-    setTotalRest((t) => t + 15);
-    setTimeLeft((t) => t + 15);
-    firedReadyRef.current = false;
-  }, []);
 
   const onNext = () => {
     router.replace(`/workout/run/${nextIndex}` as never);

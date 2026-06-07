@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 
 import { CALORIES_PER_MINUTE } from '@/constants/workout-data';

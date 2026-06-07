@@ -120,6 +120,7 @@ export default function WorkoutSummary() {
     completedExercises,
     longestStreak,
     measurements.length,
+    idempotencyKey,
   ]);
 
   const baseExp = COMPLETION_BONUS_XP;

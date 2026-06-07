@@ -15,28 +15,47 @@ import { Platform } from 'react-native';
 
 // Firebase config is sourced from `process.env.EXPO_PUBLIC_FIREBASE_*` so dev
 // and prod can point at different Firebase projects. Expo loads
-// `.env.development` / `.env.production` automatically based on build profile.
-// Missing values fail loudly here so a missing/typo'd `.env` cannot silently
-// boot the app against the wrong project.
-function requireEnv(key: string): string {
-  const v = process.env[key];
-  if (typeof v !== 'string' || v.length === 0) {
-    throw new Error(
-      `Missing ${key}. Copy .env.example to .env.development and fill in values from Firebase Console.`,
-    );
-  }
-  return v;
-}
-
+// `.env.development` / `.env.production` automatically based on build profile;
+// EAS build profiles inject these via the `env` block in `eas.json`.
+//
+// CRITICAL: each var MUST be referenced as a *static* `process.env.EXPO_PUBLIC_X`
+// member expression. Expo inlines these at build time by literal text
+// replacement — a dynamic `process.env[key]` lookup is NOT inlined and resolves
+// to `undefined` in a release build, which previously threw here at startup and
+// crashed the app on launch (worked in dev only because Metro serves env vars
+// live). Do not refactor these back into a loop/helper that takes the key as a
+// variable.
 const firebaseConfig = {
-  apiKey: requireEnv('EXPO_PUBLIC_FIREBASE_API_KEY'),
-  authDomain: requireEnv('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN'),
-  projectId: requireEnv('EXPO_PUBLIC_FIREBASE_PROJECT_ID'),
-  storageBucket: requireEnv('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET'),
-  messagingSenderId: requireEnv('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID'),
-  appId: requireEnv('EXPO_PUBLIC_FIREBASE_APP_ID'),
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
   measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID ?? '',
 };
+
+// Fail loudly if a required value is missing (e.g. a typo'd `.env` or a build
+// profile missing the `env` block) so we never silently boot against a broken
+// config. Iterating `firebaseConfig` (not `process.env`) is safe — the values
+// above are already inlined literals by this point.
+const REQUIRED_KEYS: (keyof typeof firebaseConfig)[] = [
+  'apiKey',
+  'authDomain',
+  'projectId',
+  'storageBucket',
+  'messagingSenderId',
+  'appId',
+];
+for (const key of REQUIRED_KEYS) {
+  if (!firebaseConfig[key]) {
+    throw new Error(
+      `Missing Firebase config "${key}". Copy .env.example to .env.development ` +
+        `(and set the EAS build profile env in eas.json) with values from the ` +
+        `Firebase Console.`,
+    );
+  }
+}
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 let _auth: Auth;

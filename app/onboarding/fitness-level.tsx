@@ -1,13 +1,13 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
@@ -47,6 +47,10 @@ export default function FitnessLevelPage() {
   const [selectedLevel, setSelectedLevel] = useState<Level>(
     answers.level ?? 'beginner'
   );
+
+  useEffect(() => {
+    setAnswer('level', selectedLevel);
+  }, [selectedLevel, setAnswer]);
 
   const progressItems = useMemo(
     () => new Array(TOTAL_STEPS).fill(null).map((_, i) => i),

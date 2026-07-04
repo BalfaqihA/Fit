@@ -2,12 +2,12 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import {
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
@@ -161,7 +161,7 @@ export default function WorkoutCalendar() {
       >
         <View style={styles.stripRow}>
           <View style={styles.stripCard}>
-            <Ionicons name="flame" size={20} color="#FF8A3D" />
+            <Ionicons name="bonfire" size={20} color="#FF8A3D" />
             <Text style={styles.stripValue}>{streak}</Text>
             <Text style={styles.stripLabel}>Day Streak</Text>
           </View>

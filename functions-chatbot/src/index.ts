@@ -1,122 +1,148 @@
 import { initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as tf from '@tensorflow/tfjs';
 
-import intentsData from './intents.json';
-import { checkOverrides } from './overrides';
-import { fillTemplate } from './personalize';
-import { vectorize } from './preprocess';
+import { DEEPSEEK_API_KEY } from './chatbot/deepseekClient';
+import { handle as orchestrate } from './chatbot/orchestrator';
+import { QUIZ_BY_ID } from './chatbot/templateFallback';
+import {
+  consumeRateLimit,
+  QUIZ_ANSWER_LIMIT,
+  SEND_CHAT_LIMIT,
+} from './rate-limit';
+
+import type { ChatHistoryEntry, OrchestratorResult } from './chatbot/types';
 
 initializeApp();
 
-type IntentEntry = {
-  tag: string;
-  patterns: string[];
-  responses: string[];
+// ---------- Quiz grading (unchanged — kept in index.ts because it's tied to
+// the callable signature and doesn't benefit from the orchestrator pipeline)
+
+type ResponseQuiz = {
+  id: string;
+  question: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+  xpReward: number;
+  topic?: string;
 };
 
-type ModelMeta = {
-  vocab: string[];
-  intents: string[];
-  threshold: number;
-  softThreshold?: number;
-  hardThreshold?: number;
-};
+const DAILY_QUIZ_XP_CAP = 100;
 
-const MODEL_DIR = path.join(__dirname, '..', 'model');
-
-const meta: ModelMeta = JSON.parse(
-  fs.readFileSync(path.join(MODEL_DIR, 'vocab.json'), 'utf-8'),
-);
-
-// Tiered confidence thresholds. Read from intents.json (preferred), fall back
-// to the legacy single threshold, then to sane defaults.
-const HARD_THRESHOLD =
-  (intentsData as { hardThreshold?: number }).hardThreshold ?? 0.7;
-const SOFT_THRESHOLD =
-  (intentsData as { softThreshold?: number }).softThreshold ?? 0.4;
-
-const RESPONSES: Record<string, string[]> = Object.fromEntries(
-  (intentsData.intents as IntentEntry[]).map((i) => [i.tag, i.responses]),
-);
-
-// Human-friendly labels for soft-clarify replies ("did you mean X or Y?").
-const HUMAN_LABEL: Record<string, string> = {
-  greeting: 'a quick hello',
-  ask_plan_today: "today's plan",
-  ask_workout_advice: 'training advice',
-  nutrition_question: 'nutrition advice',
-  motivation: 'motivation',
-  rest_day_advice: 'rest day advice',
-  injury_concern: 'an injury question',
-  equipment_swap: 'an equipment swap',
-  log_question: 'how to log a workout',
-  progress_question: 'a progress check',
-  goodbye: 'goodbye',
-  thanks: 'thanks',
-  confusion: 'a clarification',
-  affirmation: 'a yes',
-  negation: 'a no',
-  app_help: 'help with the app',
-  share_progress: 'sharing progress',
-};
-
-function humanLabel(tag: string): string {
-  return HUMAN_LABEL[tag] ?? tag.replace(/_/g, ' ');
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function pickResponse(tag: string): string {
-  const pool =
-    RESPONSES[tag] ??
-    RESPONSES.unknown_fallback ?? ["I'm not sure I caught that."];
-  return pool[Math.floor(Math.random() * pool.length)];
-}
-
-async function loadModelFromDir(dir: string): Promise<tf.LayersModel> {
-  const modelJson = JSON.parse(
-    fs.readFileSync(path.join(dir, 'model.json'), 'utf-8'),
-  );
-  const weightsBuffer = fs.readFileSync(path.join(dir, 'weights.bin'));
-  const weightData = weightsBuffer.buffer.slice(
-    weightsBuffer.byteOffset,
-    weightsBuffer.byteOffset + weightsBuffer.byteLength,
-  );
-  const handler = tf.io.fromMemory({
-    modelTopology: modelJson.modelTopology,
-    weightSpecs: modelJson.weightsManifest[0].weights,
-    weightData,
-  });
-  return tf.loadLayersModel(handler);
-}
-
-let modelPromise: Promise<tf.LayersModel> | null = null;
-function getModel(): Promise<tf.LayersModel> {
-  if (!modelPromise) modelPromise = loadModelFromDir(MODEL_DIR);
-  return modelPromise;
-}
-
-async function logUnknown(
+async function gradeQuiz(
   uid: string,
-  message: string,
-  predictedIntent: string,
-  confidence: number,
-): Promise<void> {
-  try {
-    await getFirestore()
-      .collection(`users/${uid}/chat_unknowns`)
-      .add({
-        message,
-        predictedIntent,
-        confidence,
-        createdAt: FieldValue.serverTimestamp(),
-      });
-  } catch (err) {
-    console.warn('[chatbot] logUnknown failed:', err);
+  quiz: ResponseQuiz,
+  selectedIndex: number,
+  attemptId: string,
+): Promise<{
+  reply: string;
+  xpAwarded: number;
+  capReached: boolean;
+  correct: boolean;
+}> {
+  const correct = selectedIndex === quiz.correctIndex;
+  const correctLabel = quiz.options[quiz.correctIndex] ?? '';
+
+  if (!correct) {
+    return {
+      reply: `**Not quite.** The answer was **${correctLabel}**.\n\n${quiz.explanation}`,
+      xpAwarded: 0,
+      capReached: false,
+      correct: false,
+    };
   }
+
+  const db = getFirestore();
+  const userRef = db.doc(`users/${uid}`);
+  const attemptRef = db.doc(`users/${uid}/quizAttempts/${attemptId}`);
+  const xpEventRef = db.doc(`users/${uid}/xp_events/${attemptId}`);
+  const today = todayKey();
+
+  let award = 0;
+  let capReached = false;
+  await db.runTransaction(async (tx) => {
+    const prior = await tx.get(attemptRef);
+    if (prior.exists) {
+      const priorData = prior.data() ?? {};
+      award = Number(priorData.xpAwarded ?? 0);
+      capReached = Boolean(priorData.capReached);
+      return;
+    }
+
+    const snap = await tx.get(userRef);
+    const data = snap.data() ?? {};
+    const stats = (data.stats ?? {}) as {
+      chatQuizXpToday?: number;
+      chatQuizXpDate?: string;
+    };
+    const sameDay = stats.chatQuizXpDate === today;
+    const todaySoFar = sameDay ? Number(stats.chatQuizXpToday ?? 0) : 0;
+    const remaining = Math.max(0, DAILY_QUIZ_XP_CAP - todaySoFar);
+    const grant = Math.min(quiz.xpReward, remaining);
+
+    tx.set(attemptRef, {
+      quizId: quiz.id,
+      selectedIndex,
+      xpAwarded: grant,
+      capReached: grant < quiz.xpReward,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    if (grant <= 0) {
+      capReached = true;
+      return;
+    }
+
+    tx.set(
+      userRef,
+      {
+        stats: {
+          totalXp: FieldValue.increment(grant),
+          chatQuizXpToday: todaySoFar + grant,
+          chatQuizXpDate: today,
+        },
+      },
+      { merge: true },
+    );
+    tx.set(xpEventRef, {
+      source: 'chat_quiz',
+      quizId: quiz.id,
+      topic: quiz.topic ?? null,
+      xp: grant,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    award = grant;
+    capReached = grant < quiz.xpReward;
+  });
+
+  let reply = `✅ **Correct!**`;
+  if (award > 0) {
+    reply += ` +${award} XP`;
+  }
+  reply += `\n\n${quiz.explanation}`;
+  if (capReached) {
+    reply += `\n\n_(daily quiz XP cap reached — try again tomorrow!)_`;
+  }
+  return { reply, xpAwarded: award, capReached, correct: true };
 }
+
+// ---------- Request shape ----------
+
+type QuizAnswerPayload = {
+  id: string;
+  selectedIndex: number;
+  attemptId: string;
+};
+
+const QUIZ_ID_MAX_LEN = 64;
+const ATTEMPT_ID_MAX_LEN = 128;
+const ATTEMPT_ID_RE = /^[A-Za-z0-9_-]+$/;
 
 const ALLOWED_ORIGINS = [
   'https://fitness-874c3.web.app',
@@ -124,13 +150,80 @@ const ALLOWED_ORIGINS = [
 ];
 
 export const chat = onCall(
-  { cors: ALLOWED_ORIGINS, region: 'us-central1' },
-  async (req) => {
+  {
+    cors: ALLOWED_ORIGINS,
+    region: 'us-central1',
+    // Declare the DeepSeek secret so it's mounted into the runtime env. The
+    // wrapper in `chatbot/deepseekClient.ts` reads it via `defineSecret().value()`.
+    secrets: [DEEPSEEK_API_KEY],
+  },
+  async (req): Promise<OrchestratorResult & {
+    xpAwarded?: number;
+    capReached?: boolean;
+  }> => {
     if (!req.auth) {
       throw new HttpsError('unauthenticated', 'Sign in required.');
     }
 
-    const message = String(req.data?.message ?? '').trim();
+    const uid = req.auth.uid;
+    const data = (req.data ?? {}) as {
+      message?: string;
+      previousIntent?: string;
+      history?: ChatHistoryEntry[];
+      styleHint?: string;
+      quizAnswer?: QuizAnswerPayload;
+    };
+
+    // ---- 0. Quiz answer short-circuit ----
+    if (data.quizAnswer && typeof data.quizAnswer === 'object') {
+      await consumeRateLimit(uid, QUIZ_ANSWER_LIMIT);
+      const { id, selectedIndex, attemptId } = data.quizAnswer;
+      if (typeof id !== 'string' || id.length === 0 || id.length > QUIZ_ID_MAX_LEN) {
+        throw new HttpsError('invalid-argument', 'Invalid quiz id.');
+      }
+      if (
+        typeof attemptId !== 'string' ||
+        attemptId.length === 0 ||
+        attemptId.length > ATTEMPT_ID_MAX_LEN ||
+        !ATTEMPT_ID_RE.test(attemptId)
+      ) {
+        throw new HttpsError('invalid-argument', 'Invalid attempt id.');
+      }
+      const quiz = QUIZ_BY_ID[id];
+      if (!quiz) {
+        throw new HttpsError('not-found', `Unknown quiz id: ${id}`);
+      }
+      if (
+        typeof selectedIndex !== 'number' ||
+        !Number.isInteger(selectedIndex) ||
+        selectedIndex < 0 ||
+        selectedIndex >= quiz.options.length
+      ) {
+        throw new HttpsError('invalid-argument', 'Invalid quiz selection.');
+      }
+      try {
+        const result = await gradeQuiz(uid, quiz, selectedIndex, attemptId);
+        return {
+          reply: result.reply,
+          intent: result.correct ? 'quiz_correct' : 'quiz_incorrect',
+          confidence: 1.0,
+          segments: { shortAnswer: result.reply },
+          xpAwarded: result.xpAwarded,
+          capReached: result.capReached,
+        };
+      } catch (err) {
+        console.error('[chatbot] gradeQuiz failed:', err);
+        throw new HttpsError(
+          'internal',
+          "Couldn't grade that quiz. Please try again.",
+        );
+      }
+    }
+
+    // ---- Per-minute rate limit (anti-abuse) ----
+    await consumeRateLimit(uid, SEND_CHAT_LIMIT);
+
+    const message = String(data.message ?? '').trim();
     if (!message) {
       throw new HttpsError('invalid-argument', 'Empty message.');
     }
@@ -139,67 +232,17 @@ export const chat = onCall(
     }
 
     const previousIntent =
-      typeof req.data?.previousIntent === 'string'
-        ? req.data.previousIntent
-        : null;
-    const uid = req.auth.uid;
+      typeof data.previousIntent === 'string' ? data.previousIntent : null;
+    const history: ChatHistoryEntry[] = Array.isArray(data.history)
+      ? data.history.slice(-5)
+      : [];
+    const styleHint =
+      typeof data.styleHint === 'string' ? data.styleHint : undefined;
 
-    // ---- 1. Rule-based safety overrides (bypass ML) ----
-    const override = checkOverrides(message);
-    if (override) {
-      return {
-        reply: override.reply,
-        intent: override.intent,
-        confidence: 1.0,
-      };
-    }
-
-    // ---- 2. Run model -> top-2 predictions ----
-    const model = await getModel();
-    const x = tf.tensor2d([vectorize(message, meta.vocab)]);
-    const out = model.predict(x) as tf.Tensor;
-    const probs = await out.data();
-    x.dispose();
-    out.dispose();
-
-    const ranked = Array.from(probs)
-      .map((p, idx) => ({ idx, p }))
-      .sort((a, b) => b.p - a.p);
-    const top = ranked[0];
-    const second = ranked[1];
-    const topTag = meta.intents[top.idx];
-    const topConf = top.p;
-
-    // ---- 3. Context disambiguation for affirmation / negation ----
-    let resolvedTag = topTag;
-    if (
-      (topTag === 'affirmation' || topTag === 'negation') &&
-      previousIntent
-    ) {
-      const contextual = `${topTag}_after_${previousIntent}`;
-      if (RESPONSES[contextual]) resolvedTag = contextual;
-    }
-
-    // ---- 4. Confidence tiers ----
-    let intent = resolvedTag;
-    let reply: string;
-
-    if (topConf >= HARD_THRESHOLD) {
-      reply = pickResponse(resolvedTag);
-    } else if (topConf >= SOFT_THRESHOLD) {
-      intent = 'soft_clarify';
-      const a = humanLabel(meta.intents[top.idx]);
-      const b = humanLabel(meta.intents[second.idx]);
-      reply = `I'm not 100% sure — did you mean ${a} or ${b}?`;
-    } else {
-      intent = 'unknown_fallback';
-      reply = pickResponse('unknown_fallback');
-      // Fire-and-forget log so we can grow the dataset later.
-      void logUnknown(uid, message, topTag, topConf);
-    }
-
-    const filledReply = await fillTemplate(reply, uid);
-
-    return { reply: filledReply, intent, confidence: topConf };
+    return orchestrate({ uid, message, history, previousIntent, styleHint });
   },
 );
+
+// ---------- Admin section ----------
+export * from './adminBootstrap';
+export * from './admin';

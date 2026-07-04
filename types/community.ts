@@ -67,46 +67,10 @@ export type SeedUser = {
   goals: GoalKey[];
 };
 
-export type Post = {
-  id: string;
-  authorId: string;
-  caption: string;
-  imageUri?: string;
-  createdAt: number;
-  likeIds: string[];
-};
-
-export type Comment = {
-  id: string;
-  postId: string;
-  authorId: string;
-  text: string;
-  createdAt: number;
-};
-
-export type Story = {
-  id: string;
-  authorId: string;
-  imageUri: string;
-  caption?: string;
-  createdAt: number;
-  expiresAt: number;
-};
-
-export type NotificationType =
-  | 'like'
-  | 'comment'
-  | 'follow'
-  | 'new_post'
-  | 'new_story';
-
-export type AppNotification = {
-  id: string;
-  type: NotificationType;
-  actorId: string;
-  postId?: string;
-  storyId?: string;
-  commentText?: string;
-  createdAt: number;
-  read: boolean;
-};
+// Posts, comments, stories and notifications are now Firestore-backed.
+// Their shapes live next to their data access:
+//   - posts/comments  -> lib/community.ts (FeedPost, FeedComment)
+//   - stories          -> lib/stories.ts (Story, StoryGroup, StoryViewer)
+//   - notifications    -> lib/community-notifications.ts (AppNotification)
+// `SeedUser` is kept purely as the lightweight user-card shape reused by
+// search results (lib/users.ts SearchUser).

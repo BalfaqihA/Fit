@@ -1,0 +1,343 @@
+import { checkOverrides } from '../overrides';
+import { buildPersonalContext } from '../personalize';
+
+import { checkAndIncrement } from './dailyQuota';
+import { callDeepSeek, DeepSeekError } from './deepseekClient';
+import { isFitnessDomain, looksLikeExerciseQuery } from './domain';
+import { correctText } from '../typoCorrect';
+import { appendMessage, getOrCreateActiveSession } from './chatHistoryService';
+import { loadMemory, updateMemory } from './chatMemoryService';
+import { mapToBroadIntent } from './intentMapper';
+import { retrieveExerciseDocs } from './exerciseRetriever';
+import { retrieveKnowledge } from './knowledgeRetriever';
+import { buildGeminiPrompt } from './promptBuilder';
+import { parseAndValidate, renderAnswerMarkdown } from './responseValidator';
+import { blockReply, offTopicReply, preGeminiSafetyCheck } from './safetyRules';
+import {
+  classifyMessage,
+  runTemplatePipeline,
+  SOFT_THRESHOLD,
+  type Classification,
+} from './templateFallback';
+
+import type {
+  ChatHistoryEntry,
+  ChatMessageDoc,
+  KnowledgeDoc,
+  OrchestratorResult,
+  SafetyDecision,
+} from './types';
+
+// Orchestrator — the full chat pipeline. Called from `chat()` in index.ts
+// once per user turn. Read top to bottom; the bullet numbers match the
+// architecture diagram in the plan.
+
+export type OrchestratorInputs = {
+  uid: string;
+  message: string;
+  history: ChatHistoryEntry[];
+  previousIntent: string | null;
+  styleHint?: string;
+};
+
+const QUOTA_FALLBACK_SUGGESTION =
+  "You've hit today's coaching limit — back tomorrow with personalized advice. Templated answers below for now.";
+
+// Fuzzy typo correction is flag-gated (eval-gated): enable by setting
+// CORRECTOR_ENABLED=1 in the function env. It only ever rewrites the text we
+// CLASSIFY / domain-check — the raw user message still goes to the LLM and is
+// what we persist.
+const CORRECTOR_ENABLED = process.env.CORRECTOR_ENABLED === '1';
+
+export async function handle(
+  inputs: OrchestratorInputs,
+): Promise<OrchestratorResult> {
+  const { uid, message, history, previousIntent, styleHint } = inputs;
+
+  // 1. Crisis bypass. checkOverrides handles self-harm, acute medical, etc.
+  //    We MUST NOT call Gemini for these — vetted canned replies only.
+  const override = checkOverrides(message);
+  if (override) {
+    return {
+      reply: override.reply,
+      intent: override.intent,
+      confidence: 1.0,
+      segments: { shortAnswer: override.reply },
+    };
+  }
+
+  // 2. Classify with the existing tfjs model. We need this both for the
+  //    Gemini prompt's broad intent and as input to the template fallback.
+  //    `routingText` is the (optionally typo-corrected) text used ONLY for
+  //    classification + the domain guards below; the raw `message` is still
+  //    what reaches the LLM and what we persist.
+  const routingText = CORRECTOR_ENABLED ? correctText(message) : message;
+  let classification: Classification;
+  try {
+    classification = await classifyMessage(routingText);
+  } catch (err) {
+    console.warn('[chatbot] classifyMessage failed', err);
+    classification = {
+      topTag: 'general_chat',
+      topConf: 0,
+      secondTag: 'general_chat',
+      secondConf: 0,
+    };
+  }
+  const broadIntent = mapToBroadIntent(classification.topTag);
+
+  // 2b. Domain gate. If the classifier confidently tags this as off-topic
+  //     (non-fitness / non-app), short-circuit with a friendly redirect — we
+  //     never spend an LLM call on it. Low-confidence guesses still flow
+  //     through; the hardened system prompt redirects anything that slips past.
+  //     Safety net: a deterministic in-domain keyword check vetoes the redirect
+  //     so loosely-phrased fitness questions the classifier mis-tags (e.g.
+  //     "give me two morning exercises") always reach the LLM.
+  if (
+    broadIntent === 'off_topic' &&
+    classification.topConf >= SOFT_THRESHOLD &&
+    !isFitnessDomain(routingText)
+  ) {
+    const result = offTopicReply();
+    await persistTurn(uid, message, result, classification, broadIntent, { level: 'none' }, []);
+    return result;
+  }
+
+  // 3. Build personalization context (snapshot-backed).
+  const ctx = await buildPersonalContext(uid);
+
+  // 6 (early). Lower-severity safety check. If `block`, skip Gemini entirely
+  // and return a safe templated message. Note `caution` still proceeds —
+  // Gemini sees the warning in the prompt and adapts its answer.
+  const safety: SafetyDecision = preGeminiSafetyCheck(message);
+  if (safety.level === 'block') {
+    const result: OrchestratorResult = {
+      reply: blockReply(),
+      intent: 'safety_block',
+      confidence: 1.0,
+      segments: { shortAnswer: blockReply() },
+      safetyWarning: safety.reason,
+    };
+    await persistTurn(uid, message, result, classification, broadIntent, safety, []);
+    return result;
+  }
+
+  // Fallback path: returns immediately if anything below blocks Gemini.
+  // Memoized so we only build it when needed.
+  let fallbackPromise: Promise<OrchestratorResult> | null = null;
+  const runFallback = (
+    note?: string,
+  ): Promise<OrchestratorResult> => {
+    if (!fallbackPromise) {
+      fallbackPromise = runTemplatePipeline({
+        uid,
+        message,
+        history,
+        previousIntent,
+        ctx,
+        styleHint,
+        classification,
+      });
+    }
+    return note
+      ? fallbackPromise.then((r) => ({
+          ...r,
+          reply: `${note}\n\n${r.reply}`,
+          segments: {
+            ...r.segments!,
+            suggestion: note,
+          },
+        }))
+      : fallbackPromise;
+  };
+
+  // 2c. App navigation / how-to is answered DETERMINISTICALLY from the vetted
+  // route table in intents.json (the template pipeline) — never the LLM, which
+  // can't know the app's real screens and would invent menu paths. Costs no LLM
+  // quota. Knowledge questions don't map to app_help, so they still hit the LLM.
+  if (broadIntent === 'app_help') {
+    const result = await runFallback();
+    await persistTurn(uid, message, result, classification, broadIntent, safety, []);
+    return result;
+  }
+
+  // 7 (early). Daily quota gate. Checked BEFORE the memory/knowledge retrieval
+  // below so a quota-exceeded turn — which serves a template reply that needs
+  // neither — doesn't pay for those Firestore reads + scoring. On allowed turns
+  // the cost is identical (a single atomic transaction either way).
+  // checkAndIncrement is atomic — a failed Gemini call after this point still
+  // costs a slot, but that's better than racing.
+  const quota = await checkAndIncrement(uid).catch((err) => {
+    console.warn('[chatbot] checkAndIncrement failed', err);
+    return { allowed: true, countAfter: 0, date: '' };
+  });
+  if (!quota.allowed) {
+    const result = await runFallback(QUOTA_FALLBACK_SUGGESTION);
+    await persistTurn(uid, message, result, classification, broadIntent, safety, []);
+    return result;
+  }
+
+  // 4 + 5. Load memory and retrieve knowledge in parallel — both are
+  // independent reads of the same Firestore region. For plan/exercise intents
+  // we also pull dataset-backed exercise docs (skipped otherwise to save a
+  // read) and fold them into the same KNOWLEDGE BASE prompt block.
+  const EXERCISE_INTENTS = new Set([
+    'todays_workout',
+    'exercise_substitution',
+    'exercise_form',
+    'exercise_stats',
+    'workout_plan',
+  ]);
+  // Structured list comes straight from personalize.ts — no fragile string
+  // parsing. The formatted `ctx.todayPlanExercises` is only for the prompt.
+  const exerciseNamesFromPlan = ctx.__todayPlanExercisesList ?? [];
+  // Pull exercise docs for the mapped exercise intents OR whenever the raw
+  // message looks like an exercise ask — so loosely-phrased queries the
+  // classifier misses ("give me two morning exercises") still get grounded in
+  // `exercise_library`. The retriever is TTL-cached, so this is at most one
+  // extra read on a cold cache.
+  const wantExerciseDocs =
+    EXERCISE_INTENTS.has(broadIntent) || looksLikeExerciseQuery(routingText);
+
+  let memory;
+  let knowledge: KnowledgeDoc[];
+  try {
+    const [mem, kb, exDocs] = await Promise.all([
+      loadMemory(uid),
+      retrieveKnowledge({
+        message,
+        intent: broadIntent,
+        goal: ctx.goal,
+        fitnessLevel: ctx.__fitnessLevel,
+      }),
+      wantExerciseDocs
+        ? retrieveExerciseDocs({
+            message,
+            exerciseNamesFromPlan,
+            equipment: ctx.equipment,
+            goal: ctx.goal,
+            fitnessLevel: ctx.__fitnessLevel,
+          })
+        : Promise.resolve([]),
+    ]);
+    memory = mem;
+    knowledge = [
+      ...kb,
+      ...exDocs.map((ex) => ({
+        id: ex.id,
+        title: ex.name,
+        category: ex.category,
+        content: (ex.instructions ?? []).join(' '),
+        tags: ex.primaryMuscles,
+      })),
+    ];
+  } catch (err) {
+    console.warn('[chatbot] memory+knowledge fetch failed', err);
+    memory = { userId: uid };
+    knowledge = [];
+  }
+
+  // 8 + 9. Build prompt, call Gemini, validate.
+  const prompt = buildGeminiPrompt({
+    message,
+    personal: ctx,
+    memory,
+    knowledge,
+    intent: broadIntent,
+    safety,
+    history,
+  });
+
+  let validated;
+  try {
+    const raw = await callDeepSeek(prompt);
+    validated = parseAndValidate(raw);
+    if (!validated) {
+      console.warn('[chatbot] DeepSeek response failed validation', { raw: raw.slice(0, 300) });
+    }
+  } catch (err) {
+    if (err instanceof DeepSeekError) {
+      console.warn('[chatbot] DeepSeek call failed, falling back to template', err.message);
+    } else {
+      console.warn('[chatbot] Unexpected DeepSeek error', err);
+    }
+    validated = null;
+  }
+
+  if (!validated) {
+    const result = await runFallback();
+    await persistTurn(uid, message, result, classification, broadIntent, safety, []);
+    return result;
+  }
+
+  const result: OrchestratorResult = {
+    reply: renderAnswerMarkdown(validated),
+    intent: broadIntent,
+    confidence: validated.confidence,
+    personalizedRecommendation: validated.personalizedRecommendation || undefined,
+    reason: validated.reason || undefined,
+    steps: validated.steps.length > 0 ? validated.steps : undefined,
+    safetyWarning: validated.safetyWarning || undefined,
+    suggestedActions: validated.suggestedActions.length > 0 ? validated.suggestedActions : undefined,
+    followUpQuestion: validated.followUpQuestion || undefined,
+    segments: {
+      shortAnswer: validated.answer,
+      explanation: validated.personalizedRecommendation || undefined,
+      actionSteps: validated.steps.length > 0 ? validated.steps : undefined,
+      suggestion: validated.reason || undefined,
+    },
+  };
+
+  // 10 + 11 + 12. Persist + update memory + (quota was already incremented).
+  const sourcesUsed = knowledge.map((k) => k.id);
+  await persistTurn(uid, message, result, classification, broadIntent, safety, sourcesUsed);
+  await updateMemory(uid, {
+    lastGoal: ctx.goal,
+    lastRecommendedWorkout:
+      broadIntent === 'workout_plan' ? validated.answer.slice(0, 200) : undefined,
+    commonQuestions: [message.slice(0, 120)],
+  });
+
+  return result;
+}
+
+/**
+ * Append the user + assistant turn to chat_sessions and stamp the assistant
+ * message id onto the result so the client can attach feedback. Best-effort:
+ * if the session resolves but the message write fails, we still return the
+ * result without ids.
+ */
+async function persistTurn(
+  uid: string,
+  userMessage: string,
+  result: OrchestratorResult,
+  classification: Classification,
+  broadIntent: string,
+  safety: SafetyDecision,
+  sourcesUsed: string[],
+): Promise<void> {
+  let sessionId: string;
+  try {
+    sessionId = await getOrCreateActiveSession(uid);
+  } catch (err) {
+    console.warn('[chatbot] session resolve failed', err);
+    return;
+  }
+  result.sessionId = sessionId;
+
+  const userDoc: ChatMessageDoc = {
+    role: 'user',
+    text: userMessage,
+    intent: classification.topTag,
+  };
+  const assistantDoc: ChatMessageDoc = {
+    role: 'assistant',
+    text: result.reply,
+    intent: broadIntent,
+    safetyLevel: safety.level,
+    sourcesUsed,
+  };
+  await appendMessage(sessionId, userDoc);
+  const assistantId = await appendMessage(sessionId, assistantDoc);
+  if (assistantId) result.messageId = assistantId;
+}

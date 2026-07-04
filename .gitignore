@@ -47,3 +47,18 @@ app-example
 
 fitness_data_project/
 *.csv
+
+.secret.local
+functions-chatbot/.secret.local
+
+# Firebase / Google service files & secrets
+google-services.json
+GoogleService-Info.plist
+*firebase-adminsdk*.json
+
+# test coverage output
+coverage/
+**/coverage/
+
+# Claude Code local tooling (skills, worktrees, local settings)
+.claude/

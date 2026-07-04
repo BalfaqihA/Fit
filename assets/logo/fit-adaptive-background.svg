@@ -1,0 +1,9 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fit adaptive icon background">
+  <defs>
+    <linearGradient id="adpBg" x1="150" y1="70" x2="880" y2="980" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8E78F0"/>
+      <stop offset="1" stop-color="#6C56D9"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#adpBg)"/>
+</svg>

@@ -2,42 +2,54 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import { VideoView, useVideoPlayer } from 'expo-video';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { useCommunity } from '@/hooks/use-community';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserProfile } from '@/hooks/use-user-profile';
+import { createStory } from '@/lib/stories';
 
 export default function StoryCompose() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
-  const { createStory } = useCommunity();
+  const { profile } = useUserProfile();
 
   const [imageUri, setImageUri] = useState<string | undefined>();
+  const [videoUri, setVideoUri] = useState<string | undefined>();
   const [caption, setCaption] = useState('');
+  const [permissionDenied, setPermissionDenied] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const videoPlayer = useVideoPlayer(videoUri ?? '', (p) => {
+    p.loop = true;
+    p.muted = false;
+  });
 
   const pickImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
+      setPermissionDenied(true);
       Alert.alert(
         'Permission needed',
-        'We need access to your photos to create a story.'
+        'We need access to your photos to create a story. You can enable it in your device settings.'
       );
       return;
     }
+    setPermissionDenied(false);
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.8,
@@ -46,20 +58,55 @@ export default function StoryCompose() {
     });
     if (!result.canceled && result.assets[0]) {
       setImageUri(result.assets[0].uri);
+      setVideoUri(undefined);
     }
   };
 
-  useEffect(() => {
-    pickImage();
-  }, []);
-
-  const handleShare = () => {
-    if (!imageUri) {
-      Alert.alert('Pick a photo', 'Choose a photo for your story first.');
+  const pickVideo = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      setPermissionDenied(true);
+      Alert.alert(
+        'Permission needed',
+        'We need access to your photos to create a story. You can enable it in your device settings.'
+      );
       return;
     }
-    createStory({ imageUri, caption: caption.trim() || undefined });
-    router.back();
+    setPermissionDenied(false);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'],
+      quality: 0.8,
+      videoMaxDuration: 30,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setVideoUri(result.assets[0].uri);
+      setImageUri(undefined);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!imageUri && !videoUri) {
+      Alert.alert('Pick media', 'Choose a photo or video for your story first.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await createStory({
+        imageUri,
+        videoUri,
+        mediaType: videoUri ? 'video' : 'image',
+        caption: caption.trim() || undefined,
+        authorName: profile.displayName || 'You',
+        authorAvatarUrl: profile.avatarUri ?? null,
+      });
+      router.back();
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : 'Could not share your story.';
+      Alert.alert('Upload failed', msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -71,11 +118,24 @@ export default function StoryCompose() {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <View style={styles.body}>
-          {imageUri ? (
+          {videoUri ? (
+            <View style={styles.previewWrap}>
+              <VideoView
+                player={videoPlayer}
+                style={styles.preview}
+                nativeControls
+                contentFit="cover"
+              />
+              <Pressable style={styles.changeBtn} onPress={pickVideo}>
+                <Ionicons name="videocam-outline" size={16} color="#FFFFFF" />
+                <Text style={styles.changeBtnText}>Change</Text>
+              </Pressable>
+            </View>
+          ) : imageUri ? (
             <View style={styles.previewWrap}>
               <Image source={{ uri: imageUri }} style={styles.preview} contentFit="cover" />
               <Pressable style={styles.changeBtn} onPress={pickImage}>
@@ -83,11 +143,33 @@ export default function StoryCompose() {
                 <Text style={styles.changeBtnText}>Change</Text>
               </Pressable>
             </View>
+          ) : permissionDenied ? (
+            <View style={styles.placeholder}>
+              <Ionicons name="lock-closed-outline" size={32} color={COLORS.muted} />
+              <Text style={styles.placeholderText}>Photos access denied</Text>
+              <Text style={styles.helperText}>
+                Enable photo access in Settings, then tap Try again.
+              </Text>
+              <Pressable style={styles.changeBtn} onPress={pickImage}>
+                <Ionicons name="refresh" size={16} color="#FFFFFF" />
+                <Text style={styles.changeBtnText}>Try again</Text>
+              </Pressable>
+            </View>
           ) : (
-            <Pressable style={styles.placeholder} onPress={pickImage}>
+            <View style={styles.placeholder}>
               <Ionicons name="image-outline" size={32} color={COLORS.muted} />
-              <Text style={styles.placeholderText}>Tap to pick a photo</Text>
-            </Pressable>
+              <Text style={styles.placeholderText}>Pick a photo or video</Text>
+              <View style={styles.pickRow}>
+                <Pressable style={styles.pickBtn} onPress={pickImage}>
+                  <Ionicons name="image-outline" size={16} color="#FFFFFF" />
+                  <Text style={styles.changeBtnText}>Photo</Text>
+                </Pressable>
+                <Pressable style={styles.pickBtn} onPress={pickVideo}>
+                  <Ionicons name="videocam-outline" size={16} color="#FFFFFF" />
+                  <Text style={styles.changeBtnText}>Video</Text>
+                </Pressable>
+              </View>
+            </View>
           )}
 
           <View style={styles.captionRow}>
@@ -107,7 +189,11 @@ export default function StoryCompose() {
           </Text>
 
           <View style={{ height: 16 }} />
-          <PrimaryButton label="Share Story" onPress={handleShare} disabled={!imageUri} />
+          <PrimaryButton
+            label={submitting ? 'Sharing…' : 'Share Story'}
+            onPress={handleShare}
+            disabled={(!imageUri && !videoUri) || submitting}
+          />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -149,6 +235,16 @@ const makeStyles = (COLORS: Palette) =>
       backgroundColor: 'rgba(0,0,0,0.55)',
     },
     changeBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+    pickRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
+    pickBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      borderRadius: 999,
+      backgroundColor: COLORS.primary,
+    },
     placeholder: {
       width: '100%',
       aspectRatio: 9 / 16,

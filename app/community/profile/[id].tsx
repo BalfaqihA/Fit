@@ -1,15 +1,16 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { FollowButton } from '@/components/follow-button';
@@ -17,10 +18,13 @@ import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { GOAL_META } from '@/constants/goals';
 import { useAchievements } from '@/hooks/use-achievements';
 import { useAuth } from '@/hooks/use-auth';
-import { useCommunity } from '@/hooks/use-community';
+import { useFollowCounts } from '@/hooks/use-follows';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserById } from '@/hooks/use-user-by-id';
+import { useUserPosts } from '@/hooks/use-user-posts';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import { getAchievement } from '@/lib/achievements';
+import { relativeTime } from '@/lib/format';
 import { levelFromXp } from '@/lib/gamification';
 
 const COVER_FALLBACK =
@@ -32,11 +36,14 @@ export default function ProfileView() {
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { profile } = useUserProfile();
   const { user: authUser } = useAuth();
-  const { getUserById, getPostsByUser, getFollowerCount, getFollowingCount } =
-    useCommunity();
-
-  const user = id ? getUserById(id) : undefined;
+  const { user, loading: userLoading, notFound } = useUserById(id);
+  const {
+    posts: userPosts,
+    comments: userComments,
+  } = useUserPosts(user?.id);
+  const { followerCount, followingCount } = useFollowCounts(user?.id);
   const isCurrentUser = !!user && user.id === profile.id;
+  const [tab, setTab] = useState<'posts' | 'comments'>('posts');
   const { unlocked } = useAchievements(
     isCurrentUser && authUser ? authUser.uid : undefined,
   );
@@ -53,19 +60,21 @@ export default function ProfileView() {
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>User not found</Text>
+          {userLoading ? (
+            <ActivityIndicator color={COLORS.primary} />
+          ) : (
+            <Text style={styles.emptyTitle}>
+              {notFound ? 'User not found' : 'Loading…'}
+            </Text>
+          )}
         </View>
       </SafeAreaView>
     );
   }
 
-  const userPosts = getPostsByUser(user.id);
-  const followerCount = getFollowerCount(user.id);
-  const followingCount = getFollowingCount(user.id);
-
-  // Goals visibility: own profile uses the toggle; seeded users always show.
+  // Goals visibility: own profile uses the toggle; other profiles show theirs.
   const showGoals = isCurrentUser ? profile.goalsVisible : true;
-  const goals = isCurrentUser ? profile.goals : ('goals' in user ? user.goals : []);
+  const goals = isCurrentUser ? profile.goals : user.goals ?? [];
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -230,28 +239,92 @@ export default function ProfileView() {
           )}
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              Posts {userPosts.length > 0 && `(${userPosts.length})`}
-            </Text>
-            {userPosts.length === 0 ? (
-              <Text style={styles.emptyText}>No posts yet.</Text>
+            <View style={styles.tabsRow}>
+              <Pressable
+                onPress={() => setTab('posts')}
+                style={[styles.tabBtn, tab === 'posts' && styles.tabBtnActive]}
+              >
+                <Ionicons
+                  name="grid-outline"
+                  size={14}
+                  color={tab === 'posts' ? COLORS.primary : COLORS.muted}
+                />
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    { color: tab === 'posts' ? COLORS.primary : COLORS.muted },
+                  ]}
+                >
+                  Posts ({userPosts.length})
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setTab('comments')}
+                style={[styles.tabBtn, tab === 'comments' && styles.tabBtnActive]}
+              >
+                <Ionicons
+                  name="chatbubble-outline"
+                  size={14}
+                  color={tab === 'comments' ? COLORS.primary : COLORS.muted}
+                />
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    { color: tab === 'comments' ? COLORS.primary : COLORS.muted },
+                  ]}
+                >
+                  Comments ({userComments.length})
+                </Text>
+              </Pressable>
+            </View>
+
+            {tab === 'posts' ? (
+              userPosts.length === 0 ? (
+                <Text style={styles.emptyText}>No posts yet.</Text>
+              ) : (
+                <View style={styles.postGrid}>
+                  {userPosts.map((post) => (
+                    <Pressable
+                      key={post.id}
+                      onPress={() => router.push(`/community/post/${post.id}` as never)}
+                      style={styles.postTile}
+                    >
+                      {post.imageUrl ? (
+                        <Image source={{ uri: post.imageUrl }} style={styles.postTileImage} />
+                      ) : (
+                        <View style={[styles.postTileImage, styles.postTileText]}>
+                          <Text style={styles.postTileTextContent} numberOfLines={4}>
+                            {post.caption}
+                          </Text>
+                        </View>
+                      )}
+                      {post.mediaType === 'video' && (
+                        <View style={styles.postTileVideoBadge}>
+                          <Ionicons name="videocam" size={12} color="#FFFFFF" />
+                        </View>
+                      )}
+                    </Pressable>
+                  ))}
+                </View>
+              )
+            ) : userComments.length === 0 ? (
+              <Text style={styles.emptyText}>No comments yet.</Text>
             ) : (
-              <View style={styles.postGrid}>
-                {userPosts.map((post) => (
+              <View style={{ gap: 8 }}>
+                {userComments.map((comment) => (
                   <Pressable
-                    key={post.id}
-                    onPress={() => router.push(`/community/post/${post.id}` as never)}
-                    style={styles.postTile}
+                    key={comment.id}
+                    onPress={() =>
+                      router.push(`/community/post/${comment.postId}` as never)
+                    }
+                    style={styles.commentRow}
                   >
-                    {post.imageUri ? (
-                      <Image source={{ uri: post.imageUri }} style={styles.postTileImage} />
-                    ) : (
-                      <View style={[styles.postTileImage, styles.postTileText]}>
-                        <Text style={styles.postTileTextContent} numberOfLines={4}>
-                          {post.caption}
-                        </Text>
-                      </View>
-                    )}
+                    <Text style={styles.commentText} numberOfLines={3}>
+                      {comment.text}
+                    </Text>
+                    <Text style={styles.commentMeta}>
+                      {`on a post · ${relativeTime(comment.createdAtMs)}`}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
@@ -443,6 +516,45 @@ const makeStyles = (COLORS: Palette) =>
       ...SHADOWS.card,
     },
     postTileTextContent: { fontSize: 11, color: COLORS.text, lineHeight: 15 },
+    postTileVideoBadge: {
+      position: 'absolute',
+      top: 6,
+      right: 6,
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    tabsRow: {
+      flexDirection: 'row',
+      backgroundColor: COLORS.card,
+      borderRadius: RADIUS.pill,
+      padding: 4,
+      marginBottom: 14,
+      ...SHADOWS.card,
+    },
+    tabBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 9,
+      borderRadius: RADIUS.pill,
+    },
+    tabBtnActive: { backgroundColor: COLORS.primarySoft },
+    tabBtnText: { fontSize: 13, fontWeight: '800' },
+    commentRow: {
+      backgroundColor: COLORS.card,
+      borderRadius: RADIUS.md,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      ...SHADOWS.card,
+    },
+    commentText: { fontSize: 14, color: COLORS.text, lineHeight: 20 },
+    commentMeta: { fontSize: 11, color: COLORS.muted, marginTop: 6 },
     empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     emptyTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text },
   });

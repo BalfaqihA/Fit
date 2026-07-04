@@ -7,19 +7,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
 import { mapAuthError, signUpWithEmail } from '@/lib/auth';
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { useGoogleSignIn } from '@/lib/google-auth';
+import { parseEmail, parsePassword } from '@/lib/validation';
 
 const GRADIENT_DARK = ['#1A1A2E', '#16213E', '#2D1B5E'] as const;
 const GRADIENT_BRAND = ['#8E54E9', '#6C56D9'] as const;
@@ -99,7 +99,24 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { signIn: signInWithGoogle, ready: googleReady } = useGoogleSignIn();
+
+  const handleGoogle = async () => {
+    setError(null);
+    try {
+      setGoogleLoading(true);
+      const result = await signInWithGoogle();
+      if (result.status === 'signed-in' && result.isNewUser) {
+        router.replace('/onboarding' as never);
+      }
+    } catch (e) {
+      setError(mapAuthError(e));
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleSignup = async () => {
     setError(null);
@@ -108,12 +125,14 @@ export default function SignupPage() {
       setError('Please enter your full name.');
       return;
     }
-    if (!EMAIL_REGEX.test(email.trim())) {
-      setError('Please enter a valid email address.');
+    const parsedEmail = parseEmail(email);
+    if (!parsedEmail.ok) {
+      setError(parsedEmail.error);
       return;
     }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
+    const parsedPassword = parsePassword(password);
+    if (!parsedPassword.ok) {
+      setError(parsedPassword.error);
       return;
     }
     if (password !== confirmPassword) {
@@ -123,7 +142,11 @@ export default function SignupPage() {
 
     try {
       setLoading(true);
-      await signUpWithEmail({ fullName, email, password });
+      await signUpWithEmail({
+        fullName: fullName.trim(),
+        email: parsedEmail.value,
+        password,
+      });
       router.replace('/onboarding' as never);
     } catch (e) {
       setError(mapAuthError(e));
@@ -136,7 +159,7 @@ export default function SignupPage() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -239,6 +262,30 @@ export default function SignupPage() {
               </LinearGradient>
             </Pressable>
 
+            <View style={styles.orRow}>
+              <View style={styles.orLine} />
+              <Text style={styles.orText}>or</Text>
+              <View style={styles.orLine} />
+            </View>
+
+            <Pressable
+              style={[
+                styles.googleButton,
+                (!googleReady || googleLoading) && { opacity: 0.7 },
+              ]}
+              onPress={handleGoogle}
+              disabled={!googleReady || googleLoading}
+            >
+              {googleLoading ? (
+                <ActivityIndicator color={COLORS.text} />
+              ) : (
+                <>
+                  <Ionicons name="logo-google" size={18} color={COLORS.text} />
+                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                </>
+              )}
+            </Pressable>
+
             <View style={styles.divider} />
 
             <View style={styles.loginRow}>
@@ -250,8 +297,23 @@ export default function SignupPage() {
 
             <Text style={styles.termsText}>
               By signing up, you agree to our{' '}
-              <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
-              <Text style={styles.termsLink}>Privacy Policy</Text>
+              <Text
+                style={styles.termsLink}
+                onPress={() =>
+                  router.push('/(tabs)/settings/terms-of-service' as never)
+                }
+              >
+                Terms of Service
+              </Text>{' '}
+              and{' '}
+              <Text
+                style={styles.termsLink}
+                onPress={() =>
+                  router.push('/(tabs)/settings/privacy-policy' as never)
+                }
+              >
+                Privacy Policy
+              </Text>
             </Text>
           </View>
         </ScrollView>
@@ -382,6 +444,40 @@ const makeStyles = (COLORS: Palette) =>
       color: '#FFFFFF',
       fontSize: 16,
       fontWeight: '800',
+    },
+    orRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 18,
+      marginBottom: 14,
+      gap: 10,
+    },
+    orLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: COLORS.divider,
+    },
+    orText: {
+      fontSize: 12,
+      color: COLORS.muted,
+      fontWeight: '600',
+    },
+    googleButton: {
+      width: '100%',
+      height: 54,
+      borderRadius: RADIUS.md,
+      borderWidth: 1.5,
+      borderColor: COLORS.border,
+      backgroundColor: COLORS.card,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+    },
+    googleButtonText: {
+      color: COLORS.text,
+      fontSize: 15,
+      fontWeight: '700',
     },
     divider: {
       height: 1,

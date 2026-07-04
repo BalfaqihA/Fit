@@ -12,6 +12,8 @@ type StoryRingProps = {
   hasStory?: boolean;
   seen?: boolean;
   onPress?: () => void;
+  /** Tapping the small "+" badge on your own ring (add another story). */
+  onPressAdd?: () => void;
 };
 
 export function StoryRing({
@@ -21,11 +23,14 @@ export function StoryRing({
   hasStory,
   seen,
   onPress,
+  onPressAdd,
 }: StoryRingProps) {
   const { COLORS } = useTheme();
 
   const ringColor = own
-    ? COLORS.border
+    ? hasStory
+      ? COLORS.primary
+      : COLORS.border
     : hasStory
     ? seen
       ? COLORS.border
@@ -49,16 +54,22 @@ export function StoryRing({
             <Ionicons name="person" size={22} color={COLORS.primary} />
           </View>
         )}
+        {/* Your own ring always carries a small "+" so you can add more
+            stories whether or not you already have one (Instagram-style). */}
         {own && (
-          <View style={[styles.add, { backgroundColor: COLORS.primary, borderColor: COLORS.bg }]}>
+          <Pressable
+            onPress={onPressAdd ?? onPress}
+            hitSlop={8}
+            style={[
+              styles.add,
+              { backgroundColor: COLORS.primary, borderColor: COLORS.bg },
+            ]}
+          >
             <Ionicons name="add" size={14} color="#FFFFFF" />
-          </View>
+          </Pressable>
         )}
       </View>
-      <Text
-        style={[styles.name, { color: COLORS.text }]}
-        numberOfLines={1}
-      >
+      <Text style={[styles.name, { color: COLORS.text }]} numberOfLines={1}>
         {own ? 'Your Story' : name}
       </Text>
     </Pressable>

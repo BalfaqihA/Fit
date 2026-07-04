@@ -1,0 +1,27 @@
+<svg width="860" height="280" viewBox="0 0 860 280" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fit logo">
+  <defs>
+    <linearGradient id="lockBg" x1="150" y1="70" x2="880" y2="980" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8E78F0"/>
+      <stop offset="1" stop-color="#6C56D9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- mini app icon -->
+  <svg x="24" y="30" width="220" height="220" viewBox="0 0 1024 1024">
+    <rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#lockBg)"/>
+    <g fill="#FFFFFF">
+      <rect x="358" y="300" width="116" height="424" rx="44"/>
+      <rect x="358" y="300" width="300" height="116" rx="44"/>
+    </g>
+    <g fill="#FF6B7A">
+      <rect x="474" y="483" width="150" height="44" rx="22"/>
+      <rect x="456" y="465" width="40"  height="80" rx="18"/>
+      <rect x="584" y="465" width="40"  height="80" rx="18"/>
+      <rect x="616" y="479" width="24"  height="52" rx="12"/>
+    </g>
+  </svg>
+
+  <!-- wordmark -->
+  <text x="288" y="168" font-family="'Poppins','Segoe UI',Arial,sans-serif" font-weight="800" font-size="132" letter-spacing="-3" fill="#231F20">Fit</text>
+  <text x="292" y="216" font-family="'Poppins','Segoe UI',Arial,sans-serif" font-weight="600" font-size="28" letter-spacing="3" fill="#8C868A">TRAIN · TRACK · TRANSFORM</text>
+</svg>

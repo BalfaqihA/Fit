@@ -1,0 +1,4 @@
+{
+  "_comment": "Held-out, uncontaminated eval set. Paste real phrasings exported from Firestore `users/{uid}/chat_unknowns` here (the `message` field), each with the broad intent it SHOULD have routed to. Leave `items` empty if you have none yet — the harness just skips this group. This set is the honest accuracy signal because it was NOT written by the same author as the intent patterns.",
+  "items": []
+}

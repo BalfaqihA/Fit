@@ -1,12 +1,12 @@
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
@@ -24,6 +24,10 @@ export default function DaysPerWeekPage() {
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { answers, setAnswer } = useOnboarding();
   const [selectedDays, setSelectedDays] = useState(answers.daysPerWeek ?? 3);
+
+  useEffect(() => {
+    setAnswer('daysPerWeek', selectedDays);
+  }, [selectedDays, setAnswer]);
 
   const progressItems = useMemo(
     () => new Array(TOTAL_STEPS).fill(null).map((_, i) => i),

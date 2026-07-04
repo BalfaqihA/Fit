@@ -1,31 +1,51 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { PostVideo } from '@/components/post-video';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
+import { useAuthorProfile } from '@/hooks/use-author-profile';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTime } from '@/lib/format';
-import type { Post, SeedUser, UserProfile } from '@/types/community';
 
-type PostCardProps = {
-  post: Post;
-  author: SeedUser | UserProfile;
+export type PostCardProps = {
+  postId: string;
+  authorId: string;
+  authorName: string;
+  authorHandle?: string;
+  authorAvatarUrl: string | null;
+  caption: string;
+  imageUrl: string | null;
+  videoUrl?: string | null;
+  mediaType?: 'image' | 'video';
+  createdAtMs: number;
   liked: boolean;
   likeCount: number;
   commentCount: number;
+  isOwn: boolean;
+  isVisible?: boolean;
   onLike: () => void;
   onComment: () => void;
   onPressAuthor: () => void;
+  onOpen?: () => void;
   onPressMenu?: () => void;
 };
 
 export function PostCard({
-  post,
-  author,
+  authorId,
+  authorName,
+  authorHandle,
+  authorAvatarUrl,
+  caption,
+  imageUrl,
+  videoUrl,
+  mediaType,
+  createdAtMs,
   liked,
   likeCount,
   commentCount,
+  isVisible,
   onLike,
   onComment,
   onPressAuthor,
@@ -34,22 +54,39 @@ export function PostCard({
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
 
+  // Prefer the author's *current* name/avatar so profile edits show on old posts.
+  const live = useAuthorProfile(authorId);
+  const displayName = live.displayName || authorName;
+  const avatarUrl =
+    live.avatarUrl !== undefined ? live.avatarUrl : authorAvatarUrl;
+
+  const subtitle = authorHandle
+    ? `@${authorHandle} · ${relativeTime(createdAtMs)}`
+    : relativeTime(createdAtMs);
+
+  // Coalesce rapid taps so a flurry hits the network once, not once per tap.
+  const lastLikeAt = useRef(0);
+  const handleLike = useCallback(() => {
+    const now = Date.now();
+    if (now - lastLikeAt.current < 300) return;
+    lastLikeAt.current = now;
+    onLike();
+  }, [onLike]);
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <Pressable onPress={onPressAuthor} style={styles.headerLeft} hitSlop={6}>
-          {author.avatarUri ? (
-            <Image source={{ uri: author.avatarUri }} style={styles.avatar} />
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.avatarFallback]}>
               <Ionicons name="person" size={18} color={COLORS.primary} />
             </View>
           )}
           <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{author.displayName}</Text>
-            <Text style={styles.time}>
-              @{author.handle} · {relativeTime(post.createdAt)}
-            </Text>
+            <Text style={styles.name}>{displayName}</Text>
+            <Text style={styles.time}>{subtitle}</Text>
           </View>
         </Pressable>
         {onPressMenu && (
@@ -59,14 +96,22 @@ export function PostCard({
         )}
       </View>
 
-      {!!post.caption && <Text style={styles.caption}>{post.caption}</Text>}
+      {!!caption && <Text style={styles.caption}>{caption}</Text>}
 
-      {post.imageUri && (
-        <Image source={{ uri: post.imageUri }} style={styles.image} contentFit="cover" />
+      {mediaType === 'video' && videoUrl ? (
+        <PostVideo
+          uri={videoUrl}
+          shouldPlay={!!isVisible}
+          style={styles.image}
+        />
+      ) : (
+        imageUrl && (
+          <Image source={{ uri: imageUrl }} style={styles.image} contentFit="cover" />
+        )
       )}
 
       <View style={styles.actions}>
-        <Pressable style={styles.action} onPress={onLike} hitSlop={6}>
+        <Pressable style={styles.action} onPress={handleLike} hitSlop={6}>
           <Ionicons
             name={liked ? 'heart' : 'heart-outline'}
             size={22}
@@ -77,13 +122,6 @@ export function PostCard({
         <Pressable style={styles.action} onPress={onComment} hitSlop={6}>
           <Ionicons name="chatbubble-outline" size={20} color={COLORS.text} />
           <Text style={styles.actionText}>{commentCount}</Text>
-        </Pressable>
-        <Pressable style={styles.action} hitSlop={6}>
-          <Ionicons name="paper-plane-outline" size={20} color={COLORS.text} />
-        </Pressable>
-        <View style={{ flex: 1 }} />
-        <Pressable hitSlop={6}>
-          <Ionicons name="bookmark-outline" size={20} color={COLORS.text} />
         </Pressable>
       </View>
     </View>

@@ -5,7 +5,7 @@ import * as path from 'path';
 import intentsData from './intents.json';
 import { buildVocab, vectorize } from './preprocess';
 
-type Intent = { tag: string; patterns: string[]; responses: string[] };
+type Intent = { tag: string; patterns: string[]; responses: unknown[] };
 
 async function saveModelToDir(model: tf.LayersModel, outDir: string) {
   fs.mkdirSync(outDir, { recursive: true });

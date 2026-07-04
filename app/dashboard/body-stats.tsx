@@ -3,15 +3,16 @@ import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { WeighInModal } from '@/components/weigh-in-modal';
+import { WeightUpdateInsightSheet } from '@/components/weight-update-insight-sheet';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useBodyStats } from '@/hooks/use-body-stats';
 import { useTheme } from '@/hooks/use-theme';
@@ -21,6 +22,7 @@ export default function BodyStatsList() {
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { stats, hasMeasurements } = useBodyStats();
   const [logOpen, setLogOpen] = useState(false);
+  const [insightOpen, setInsightOpen] = useState(false);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -95,7 +97,15 @@ export default function BodyStatsList() {
           );
         })}
       </ScrollView>
-      <WeighInModal visible={logOpen} onClose={() => setLogOpen(false)} />
+      <WeighInModal
+        visible={logOpen}
+        onClose={() => setLogOpen(false)}
+        onSaved={() => setInsightOpen(true)}
+      />
+      <WeightUpdateInsightSheet
+        visible={insightOpen}
+        onClose={() => setInsightOpen(false)}
+      />
     </SafeAreaView>
   );
 }

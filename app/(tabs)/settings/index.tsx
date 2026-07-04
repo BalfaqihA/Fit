@@ -5,14 +5,15 @@ import React, { useMemo } from 'react';
 import {
   Alert,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
+import { useAdmin } from '@/hooks/use-admin';
 import { useAuth } from '@/hooks/use-auth';
 import { useOnboarding } from '@/hooks/use-onboarding';
 import { useTheme } from '@/hooks/use-theme';
@@ -79,7 +80,16 @@ export default function SettingsHub() {
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { profile } = useUserProfile();
   const { user } = useAuth();
+  const { isAdmin } = useAdmin();
   const { setMode, reset: resetOnboarding } = useOnboarding();
+
+  const adminRows: SettingsRow[] = [
+    {
+      label: 'Admin Dashboard',
+      icon: 'shield-checkmark-outline',
+      onPress: () => router.push('/admin' as never),
+    },
+  ];
 
   const profileHref = user ? (`/community/profile/${user.uid}` as const) : null;
 
@@ -114,16 +124,6 @@ export default function SettingsHub() {
 
   const preferenceRows: SettingsRow[] = [
     {
-      label: 'Units',
-      icon: 'speedometer-outline',
-      onPress: () => router.push('/settings/units' as never),
-    },
-    {
-      label: 'Language',
-      icon: 'language-outline',
-      onPress: () => router.push('/settings/language' as never),
-    },
-    {
       label: 'Dark Mode',
       icon: 'moon-outline',
       onPress: () => router.push('/settings/dark-mode' as never),
@@ -135,6 +135,11 @@ export default function SettingsHub() {
       label: 'Help & FAQ',
       icon: 'help-circle-outline',
       onPress: () => router.push('/settings/help-faq' as never),
+    },
+    {
+      label: 'Contact Support',
+      icon: 'chatbubbles-outline',
+      onPress: () => router.push('/settings/contact' as never),
     },
     {
       label: 'About',
@@ -181,6 +186,9 @@ export default function SettingsHub() {
           <Ionicons name="chevron-forward" size={20} color={COLORS.muted} />
         </Pressable>
 
+        {isAdmin && (
+          <Section title="ADMIN" rows={adminRows} styles={styles} COLORS={COLORS} />
+        )}
         <Section title="ACCOUNT" rows={accountRows} styles={styles} COLORS={COLORS} />
         <Section title="PREFERENCES" rows={preferenceRows} styles={styles} COLORS={COLORS} />
         <Section title="SUPPORT" rows={supportRows} styles={styles} COLORS={COLORS} />
@@ -196,7 +204,9 @@ export default function SettingsHub() {
                 onPress: async () => {
                   try {
                     await signOut();
-                    // AuthGate redirects to /auth/login.
+                    // Navigate explicitly: AuthGate handles this on native, but
+                    // on web the effect-based redirect occasionally misses.
+                    router.replace('/auth/login' as never);
                   } catch (e) {
                     Alert.alert('Error', mapAuthError(e));
                   }

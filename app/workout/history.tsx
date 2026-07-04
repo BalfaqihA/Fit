@@ -4,12 +4,12 @@ import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
@@ -208,7 +208,7 @@ export default function WorkoutHistory() {
                           />
                           <Detail
                             COLORS={COLORS}
-                            icon="flame-outline"
+                            icon="bonfire-outline"
                             label="Calories"
                             value={`${s.caloriesKcal}`}
                           />

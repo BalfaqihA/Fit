@@ -6,19 +6,18 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
 import { mapAuthError, sendPasswordReset } from '@/lib/auth';
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { parseEmail } from '@/lib/validation';
 
 export default function ForgotPasswordPage() {
   const { COLORS } = useTheme();
@@ -30,13 +29,14 @@ export default function ForgotPasswordPage() {
 
   const handleSend = async () => {
     setError(null);
-    if (!EMAIL_REGEX.test(email.trim())) {
-      setError('Please enter a valid email address.');
+    const parsed = parseEmail(email);
+    if (!parsed.ok) {
+      setError(parsed.error);
       return;
     }
     try {
       setLoading(true);
-      await sendPasswordReset(email);
+      await sendPasswordReset(parsed.value);
       setSent(true);
     } catch (e) {
       setError(mapAuthError(e));
@@ -57,7 +57,7 @@ export default function ForgotPasswordPage() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
           contentContainerStyle={styles.scroll}

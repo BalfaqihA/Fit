@@ -1,11 +1,10 @@
 import React, { useMemo } from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
+import {  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
@@ -13,20 +12,24 @@ import { useTheme } from '@/hooks/use-theme';
 
 const sections = [
   {
-    title: 'Data Collection',
-    body: 'We collect the information you provide during signup and onboarding (name, email, age, height, weight, goals), along with the workout and activity data you log while using the app. We also collect basic device and usage analytics to improve reliability.',
+    title: 'Information We Collect',
+    body: 'We collect the details you provide during sign-up and onboarding — name, email, age, gender, height, weight, fitness level, equipment, and goals — along with the activity you create: completed and logged workouts, weigh-ins and measurements, achievements, XP, posts, comments, stories, and the messages you send to support.',
   },
   {
-    title: 'Usage',
-    body: 'Your data is used to personalize your training plan, calculate progress, deliver notifications you opt into, and improve the product. We do not sell your personal data.',
+    title: 'How We Use It',
+    body: 'Your information is used to generate your personalized plan, track progress, power the in-app AI coach, show your profile and activity in the community, and improve the app. We do not sell your personal data.',
   },
   {
-    title: 'Third Parties',
-    body: 'We share limited, de-identified data with trusted service providers who help us run FitLife — for example, analytics and crash reporting tools that help us improve reliability. These providers are bound by contracts that restrict how they can use your data, and we never share your information for advertising outside the app.',
+    title: 'Storage & Security',
+    body: 'Fit is built on Google Firebase. Your account, profile, and content are stored in Firebase Authentication, Cloud Firestore, and Cloud Storage, protected by access rules and industry-standard encryption in transit and at rest.',
   },
   {
-    title: 'Your Rights',
-    body: 'You can request access to, correction of, or deletion of your personal data at any time. You may also export your workout history. These controls are available from the Settings screen, or by contacting privacy@fitlife.app — we aim to respond within 7 business days.',
+    title: 'What Other Members See',
+    body: 'Your display name, photo, bio, posts, comments, stories, achievements, and follower information are visible to other signed-in members. Your private data — email, body measurements, and support messages — is never shown to other members. When you report content, only our moderation team sees your report.',
+  },
+  {
+    title: 'Your Rights & Data Deletion',
+    body: 'You can edit your profile at any time, and permanently delete your account and associated data from Settings → Delete Account. For any privacy request, message us from Settings → Contact Support or email ahmed1.balfaqeih55@gmail.com.',
   },
 ];
 
@@ -43,7 +46,7 @@ export default function PrivacyPolicy() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.updated}>Last updated: April 22, 2026</Text>
+        <Text style={styles.updated}>Last updated: May 30, 2026</Text>
 
         <View style={styles.card}>
           {sections.map((s, idx) => (

@@ -1,18 +1,19 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo } from 'react';
 import {
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { UserListRow } from '@/components/user-list-row';
 import { type Palette } from '@/constants/design';
-import { useCommunity } from '@/hooks/use-community';
+import { useFollowers } from '@/hooks/use-follows';
 import { useTheme } from '@/hooks/use-theme';
+import { useUserById } from '@/hooks/use-user-by-id';
 import { useUserProfile } from '@/hooks/use-user-profile';
 
 export default function FollowersList() {
@@ -20,10 +21,8 @@ export default function FollowersList() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { profile } = useUserProfile();
-  const { getUserById, getFollowers } = useCommunity();
-
-  const user = id ? getUserById(id) : undefined;
-  const followers = id ? getFollowers(id) : [];
+  const { user } = useUserById(id);
+  const { users: followers } = useFollowers(id);
 
   return (
     <SafeAreaView style={styles.safeArea}>

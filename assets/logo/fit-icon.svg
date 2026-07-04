@@ -1,0 +1,34 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fit app icon">
+  <defs>
+    <linearGradient id="fitBg" x1="150" y1="70" x2="880" y2="980" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8E78F0"/>
+      <stop offset="1" stop-color="#6C56D9"/>
+    </linearGradient>
+    <linearGradient id="fitSheen" x1="512" y1="20" x2="512" y2="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="fitMarkShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#241653" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <!-- squircle background -->
+  <rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#fitBg)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#fitSheen)"/>
+
+  <!-- Fit mark: white "F" whose middle stroke is a coral dumbbell -->
+  <g filter="url(#fitMarkShadow)">
+    <!-- F stem -->
+    <rect x="358" y="300" width="116" height="424" rx="44" fill="#FFFFFF"/>
+    <!-- F top arm -->
+    <rect x="358" y="300" width="300" height="116" rx="44" fill="#FFFFFF"/>
+    <!-- middle stroke = coral dumbbell -->
+    <g fill="#FF6B7A">
+      <rect x="474" y="483" width="150" height="44" rx="22"/>   <!-- rod -->
+      <rect x="456" y="465" width="40"  height="80" rx="18"/>   <!-- left plate (joins stem) -->
+      <rect x="584" y="465" width="40"  height="80" rx="18"/>   <!-- right plate -->
+      <rect x="616" y="479" width="24"  height="52" rx="12"/>   <!-- right collar -->
+    </g>
+  </g>
+</svg>

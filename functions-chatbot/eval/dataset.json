@@ -1,0 +1,57 @@
+{
+  "_comment": "Author-written eval set. `expected` is the broad intent (see intentMapper.BroadIntent) the message SHOULD route to. `misspelled:true` marks deliberately typo'd phrasings so the harness can report clean vs misspelled accuracy. Drop real exported chat_unknowns into eval/unknowns.json for an uncontaminated held-out set.",
+  "items": [
+    { "text": "what's my workout today", "expected": "todays_workout", "misspelled": false },
+    { "text": "show me today's plan", "expected": "todays_workout", "misspelled": false },
+    { "text": "whats my wrkout todai", "expected": "todays_workout", "misspelled": true },
+    { "text": "show me todays plna", "expected": "todays_workout", "misspelled": true },
+
+    { "text": "how should I structure my training", "expected": "workout_plan", "misspelled": false },
+    { "text": "best workout routine for me", "expected": "workout_plan", "misspelled": false },
+    { "text": "give me two morning exercises", "expected": "workout_plan", "misspelled": false },
+    { "text": "best wrokout rutine for me", "expected": "workout_plan", "misspelled": true },
+    { "text": "give me 2 mroing exerices", "expected": "workout_plan", "misspelled": true },
+
+    { "text": "how do I do a squat", "expected": "exercise_form", "misspelled": false },
+    { "text": "deadlift form tips", "expected": "exercise_form", "misspelled": false },
+    { "text": "how do i do a squt", "expected": "exercise_form", "misspelled": true },
+    { "text": "deadlift from tips", "expected": "exercise_form", "misspelled": true },
+
+    { "text": "replace pushups with something easier", "expected": "exercise_substitution", "misspelled": false },
+    { "text": "swap the bench press", "expected": "exercise_substitution", "misspelled": false },
+    { "text": "replac pushups with somethng easier", "expected": "exercise_substitution", "misspelled": true },
+
+    { "text": "how much protein should I eat", "expected": "nutrition_advice", "misspelled": false },
+    { "text": "what should I eat after a workout", "expected": "nutrition_advice", "misspelled": false },
+    { "text": "how much protien shoud i eat", "expected": "nutrition_advice", "misspelled": true },
+    { "text": "what shud i eat aftr a workout", "expected": "nutrition_advice", "misspelled": true },
+
+    { "text": "how do I lose fat", "expected": "weight_loss", "misspelled": false },
+    { "text": "tips to lose weight", "expected": "weight_loss", "misspelled": false },
+    { "text": "how do i loose fat", "expected": "weight_loss", "misspelled": true },
+
+    { "text": "how do I build muscle", "expected": "muscle_gain", "misspelled": false },
+    { "text": "how to gain mass", "expected": "muscle_gain", "misspelled": false },
+    { "text": "how do i biuld muscle", "expected": "muscle_gain", "misspelled": true },
+
+    { "text": "how am I progressing", "expected": "weight_progress", "misspelled": false },
+    { "text": "what's my streak", "expected": "weight_progress", "misspelled": false },
+    { "text": "how am i progresing", "expected": "weight_progress", "misspelled": true },
+
+    { "text": "I need some motivation", "expected": "motivation", "misspelled": false },
+    { "text": "I don't feel like training today", "expected": "motivation", "misspelled": false },
+    { "text": "i need some motivaton", "expected": "motivation", "misspelled": true },
+
+    { "text": "my knee hurts when I squat", "expected": "injury_warning", "misspelled": false },
+    { "text": "should I take a rest day", "expected": "injury_warning", "misspelled": false },
+    { "text": "my knee hrts when i squat", "expected": "injury_warning", "misspelled": true },
+
+    { "text": "how do I log a workout", "expected": "app_help", "misspelled": false },
+    { "text": "where do I change my password", "expected": "app_help", "misspelled": false },
+    { "text": "how do i lgo a workout", "expected": "app_help", "misspelled": true },
+
+    { "text": "what's the weather today", "expected": "off_topic", "misspelled": false },
+    { "text": "write me a python function", "expected": "off_topic", "misspelled": false },
+    { "text": "who won the football match", "expected": "off_topic", "misspelled": false }
+  ]
+}

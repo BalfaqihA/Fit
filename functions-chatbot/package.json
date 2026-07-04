@@ -5,22 +5,30 @@
     "node": "20"
   },
   "scripts": {
-    "build": "tsc",
+    "copy-intents": "node -e \"require('fs').copyFileSync('src/intents.json','lib/intents.json')\"",
+    "build": "tsc && npm run copy-intents",
     "build:watch": "tsc --watch",
-    "train": "tsc && node lib/train.js",
+    "train": "tsc && npm run copy-intents && node lib/train.js",
     "serve": "npm run build && firebase emulators:start --only functions",
+    "test": "jest",
+    "test:coverage": "jest --coverage --collectCoverageFrom=src/**/*.ts --collectCoverageFrom=!src/**/*.d.ts",
+    "eval": "npx ts-node --transpile-only eval/run-eval.ts",
+    "seed:exercises": "npx ts-node scripts/seed-exercise-library.ts",
     "deploy": "firebase deploy --only functions:chatbot"
   },
   "dependencies": {
+    "@tensorflow/tfjs": "^4.22.0",
     "firebase-admin": "^12.7.0",
     "firebase-functions": "^6.0.1",
-    "@tensorflow/tfjs": "^4.22.0",
     "natural": "^7.1.0"
   },
   "devDependencies": {
-    "typescript": "~5.4.0",
+    "@types/jest": "^29.5.14",
+    "@types/natural": "^5.1.5",
     "@types/node": "^20.0.0",
-    "@types/natural": "^5.1.5"
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.9",
+    "typescript": "~5.4.0"
   },
   "private": true
 }

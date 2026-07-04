@@ -28,4 +28,5 @@ export const STORAGE_KEYS = {
   stories: '@fitlife:community:stories',
   follows: '@fitlife:community:follows',
   notifications: '@fitlife:community:notifications',
+  workoutSession: '@fitlife:workoutSession',
 } as const;

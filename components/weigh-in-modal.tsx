@@ -21,37 +21,49 @@ import {
   requestNotificationPermissionOnce,
   scheduleWeeklyWeighIn,
 } from '@/lib/notifications';
+import { parseWeight } from '@/lib/validation';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
+  onSaved?: (measurementId: string) => void;
 };
 
-export function WeighInModal({ visible, onClose }: Props) {
+export function WeighInModal({ visible, onClose, onSaved }: Props) {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { user } = useAuth();
   const { profile } = useUserProfile();
 
-  const initial = profile.weightKg ? String(profile.weightKg) : '';
+  const unit = profile.weightUnit ?? 'kg';
+  const initial = profile.weightKg
+    ? unit === 'lb'
+      ? String(Math.round((profile.weightKg / 0.45359237) * 10) / 10)
+      : String(profile.weightKg)
+    : '';
   const [value, setValue] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const onSave = async () => {
     if (!user) return;
-    const parsed = Number(value.replace(',', '.'));
-    if (!parsed || parsed < 25 || parsed > 400) {
-      setError('Enter a weight between 25 and 400 kg.');
+    const parsed = parseWeight(value, unit);
+    if (!parsed.ok) {
+      setError(parsed.error);
       return;
     }
+    const weightKg = unit === 'lb' ? parsed.value * 0.45359237 : parsed.value;
     setSaving(true);
     setError(null);
     try {
-      await recordWeight(user.uid, parsed);
+      const measurementId = await recordWeight(
+        user.uid,
+        Math.round(weightKg * 100) / 100
+      );
       // Re-arm the weekly reminder so it fires 7 days from now.
       const granted = await requestNotificationPermissionOnce();
       if (granted) await scheduleWeeklyWeighIn();
+      onSaved?.(measurementId);
       onClose();
     } catch {
       setError('Could not save. Please try again.');
@@ -86,7 +98,7 @@ export function WeighInModal({ visible, onClose }: Props) {
             Log your current weight to keep your stats and goals up to date.
           </Text>
 
-          <Text style={styles.fieldLabel}>Weight (kg)</Text>
+          <Text style={styles.fieldLabel}>Weight ({unit})</Text>
           <TextInput
             style={styles.input}
             value={value}

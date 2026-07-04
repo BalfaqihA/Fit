@@ -6,7 +6,7 @@ const stemmer = natural.PorterStemmer;
 // Synonym map applied before tokenization. Collapses common variants to a
 // canonical token so the model treats them identically. Keys must be
 // already-lowercased single words (no spaces).
-const SYNONYMS: Record<string, string> = {
+export const SYNONYMS: Record<string, string> = {
   // training verbs / nouns -> "workout"
   gym: 'workout',
   train: 'workout',

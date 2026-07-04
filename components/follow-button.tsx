@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { type Palette, RADIUS } from '@/constants/design';
-import { useCommunity } from '@/hooks/use-community';
+import { useFollowState } from '@/hooks/use-follows';
 import { useTheme } from '@/hooks/use-theme';
 
 type FollowButtonProps = {
@@ -12,21 +12,29 @@ type FollowButtonProps = {
 
 export function FollowButton({ userId, size = 'md' }: FollowButtonProps) {
   const { COLORS } = useTheme();
-  const { isFollowing, toggleFollow } = useCommunity();
-  const following = isFollowing(userId);
+  const { isFollowing, toggle, busy, self } = useFollowState(userId);
   const styles = useMemo(() => makeStyles(COLORS, size), [COLORS, size]);
+
+  // Never render a follow button against your own profile.
+  if (self) return null;
 
   return (
     <Pressable
-      onPress={() => toggleFollow(userId)}
+      onPress={toggle}
+      disabled={busy}
       style={({ pressed }) => [
         styles.btn,
-        following ? styles.btnFollowing : styles.btnFollow,
-        pressed && { opacity: 0.85 },
+        isFollowing ? styles.btnFollowing : styles.btnFollow,
+        (pressed || busy) && { opacity: 0.85 },
       ]}
     >
-      <Text style={[styles.label, following ? styles.labelFollowing : styles.labelFollow]}>
-        {following ? 'Following' : 'Follow'}
+      <Text
+        style={[
+          styles.label,
+          isFollowing ? styles.labelFollowing : styles.labelFollow,
+        ]}
+      >
+        {isFollowing ? 'Following' : 'Follow'}
       </Text>
     </Pressable>
   );

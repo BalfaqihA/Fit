@@ -3,21 +3,22 @@ import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
 import { useTheme } from '@/hooks/use-theme';
 import { mapAuthError, signInWithEmail } from '@/lib/auth';
+import { useGoogleSignIn } from '@/lib/google-auth';
+import { parseEmail } from '@/lib/validation';
 
 type Styles = ReturnType<typeof makeStyles>;
 
@@ -89,18 +90,28 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { signIn: signInWithGoogle, ready: googleReady } = useGoogleSignIn();
 
   const handleLogin = async () => {
     setError(null);
-    if (!email.trim() || !password) {
-      setError('Please enter your email and password.');
+    const parsedEmail = parseEmail(email);
+    if (!parsedEmail.ok) {
+      setError(parsedEmail.error);
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
       return;
     }
     try {
       setLoading(true);
-      await signInWithEmail({ email, password });
-      // The AuthGate in app/_layout.tsx will redirect to /(tabs) once user is set.
+      await signInWithEmail({ email: parsedEmail.value, password });
+      // Navigate explicitly: on web, expo-router occasionally drops the
+      // AuthGate effect-based redirect after a Firebase auth state change,
+      // leaving the user stuck on /auth/login.
+      router.replace('/(tabs)' as never);
     } catch (e) {
       setError(mapAuthError(e));
     } finally {
@@ -108,18 +119,28 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogle = () => {
-    Alert.alert(
-      'Coming soon',
-      'Google sign-in will be available in a future update.'
-    );
+  const handleGoogle = async () => {
+    setError(null);
+    try {
+      setGoogleLoading(true);
+      const result = await signInWithGoogle();
+      if (result.status === 'signed-in') {
+        router.replace(
+          (result.isNewUser ? '/onboarding' : '/(tabs)') as never,
+        );
+      }
+    } catch (e) {
+      setError(mapAuthError(e));
+    } finally {
+      setGoogleLoading(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -198,9 +219,22 @@ export default function LoginPage() {
                 <View style={styles.orLine} />
               </View>
 
-              <Pressable style={styles.googleButton} onPress={handleGoogle}>
-                <Ionicons name="logo-google" size={18} color={COLORS.text} />
-                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              <Pressable
+                style={[
+                  styles.googleButton,
+                  (!googleReady || googleLoading) && { opacity: 0.7 },
+                ]}
+                onPress={handleGoogle}
+                disabled={!googleReady || googleLoading}
+              >
+                {googleLoading ? (
+                  <ActivityIndicator color={COLORS.text} />
+                ) : (
+                  <>
+                    <Ionicons name="logo-google" size={18} color={COLORS.text} />
+                    <Text style={styles.googleButtonText}>Continue with Google</Text>
+                  </>
+                )}
               </Pressable>
             </View>
 

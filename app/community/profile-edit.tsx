@@ -3,9 +3,11 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -13,12 +15,20 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
+import { useSubmit } from '@/hooks/use-submit';
 import { useTheme } from '@/hooks/use-theme';
 import { useUserProfile } from '@/hooks/use-user-profile';
+import {
+  MAX_PROFILE_IMAGE_BYTES,
+  buildProfileImagePath,
+  deleteImage,
+  uploadImage,
+} from '@/lib/upload';
 
 export default function CommunityProfileEdit() {
   const { COLORS } = useTheme();
@@ -31,6 +41,7 @@ export default function CommunityProfileEdit() {
   const [avatarUri, setAvatarUri] = useState<string | undefined>(profile.avatarUri);
   const [coverUri, setCoverUri] = useState<string | undefined>(profile.coverUri);
   const [goalsVisible, setGoalsVisible] = useState(profile.goalsVisible);
+  const { run: runSave, pending: saving } = useSubmit();
 
   const pick = async (
     setter: (uri: string) => void,
@@ -52,17 +63,64 @@ export default function CommunityProfileEdit() {
     }
   };
 
-  const handleSave = () => {
-    updateProfile({
-      displayName: displayName.trim() || profile.displayName,
-      handle: handle.trim().replace(/^@+/, '') || profile.handle,
-      bio: bio.trim(),
-      avatarUri,
-      coverUri,
-      goalsVisible,
+  const isLocalUri = (uri?: string) =>
+    !!uri && !/^https?:\/\//.test(uri);
+
+  const handleSave = () =>
+    runSave(async () => {
+      let nextAvatarUri = avatarUri;
+      let nextCoverUri = coverUri;
+      // Track which images we uploaded in this attempt so we can clean them
+      // up if the Firestore profile write fails — otherwise stale uploads
+      // accumulate in Storage and remain readable to other authed users.
+      const uploadedPaths: string[] = [];
+
+      try {
+        if (isLocalUri(avatarUri)) {
+          const path = buildProfileImagePath(profile.id, 'avatar');
+          const { url, path: storagePath } = await uploadImage(
+            avatarUri as string,
+            path,
+            { maxBytes: MAX_PROFILE_IMAGE_BYTES },
+          );
+          nextAvatarUri = url;
+          uploadedPaths.push(storagePath);
+        }
+        if (isLocalUri(coverUri)) {
+          const path = buildProfileImagePath(profile.id, 'cover');
+          const { url, path: storagePath } = await uploadImage(
+            coverUri as string,
+            path,
+            { maxBytes: MAX_PROFILE_IMAGE_BYTES },
+          );
+          nextCoverUri = url;
+          uploadedPaths.push(storagePath);
+        }
+
+        await updateProfile({
+          displayName: displayName.trim() || profile.displayName,
+          handle: handle.trim().replace(/^@+/, '') || profile.handle,
+          bio: bio.trim(),
+          avatarUri: nextAvatarUri,
+          coverUri: nextCoverUri,
+          goalsVisible,
+        });
+        setAvatarUri(nextAvatarUri);
+        setCoverUri(nextCoverUri);
+        Alert.alert('Saved', 'Your community profile has been updated.');
+      } catch (e) {
+        // Best-effort cleanup of orphaned uploads.
+        for (const p of uploadedPaths) {
+          try {
+            await deleteImage(p);
+          } catch {
+            // ignore — surface the original error
+          }
+        }
+        const msg = e instanceof Error ? e.message : 'Could not save profile.';
+        Alert.alert('Error', msg);
+      }
     });
-    Alert.alert('Saved', 'Your community profile has been updated.');
-  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -72,6 +130,10 @@ export default function CommunityProfileEdit() {
         <View style={{ width: 40 }} />
       </View>
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -143,8 +205,14 @@ export default function CommunityProfileEdit() {
         </View>
 
         <View style={{ height: 16 }} />
-        <PrimaryButton label="Save Changes" onPress={handleSave} />
+        <PrimaryButton
+          label={saving ? 'Saving...' : 'Save Changes'}
+          onPress={handleSave}
+          disabled={saving}
+          icon={saving ? <ActivityIndicator size="small" color="#FFFFFF" /> : undefined}
+        />
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

@@ -1,0 +1,14 @@
+<svg width="380" height="504" viewBox="318 260 380 504" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fit mark">
+  <!-- Fit mark for light backgrounds: purple "F", coral dumbbell middle stroke -->
+  <!-- F stem -->
+  <rect x="358" y="300" width="116" height="424" rx="44" fill="#6C56D9"/>
+  <!-- F top arm -->
+  <rect x="358" y="300" width="300" height="116" rx="44" fill="#6C56D9"/>
+  <!-- middle stroke = coral dumbbell -->
+  <g fill="#FF6B7A">
+    <rect x="474" y="483" width="150" height="44" rx="22"/>
+    <rect x="456" y="465" width="40"  height="80" rx="18"/>
+    <rect x="584" y="465" width="40"  height="80" rx="18"/>
+    <rect x="616" y="479" width="24"  height="52" rx="12"/>
+  </g>
+</svg>

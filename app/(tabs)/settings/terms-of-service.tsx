@@ -1,11 +1,10 @@
 import React, { useMemo } from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
+import {  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
@@ -14,15 +13,19 @@ import { useTheme } from '@/hooks/use-theme';
 const sections = [
   {
     title: 'User Agreement',
-    body: 'By creating an account or using FitLife, you agree to these terms. You must be at least 13 years old to use the app, you agree to provide accurate information during signup, and you are responsible for keeping your login credentials secure. We may update these terms from time to time — material changes will be communicated in-app, and continued use after an update constitutes acceptance of the new terms.',
+    body: 'By creating an account or using Fit, you agree to these terms. You must be at least 13 years old, you agree to provide accurate information during sign-up, and you are responsible for keeping your login credentials secure. We may update these terms from time to time — continued use after an update constitutes acceptance of the new terms.',
   },
   {
-    title: 'Liability',
-    body: 'FitLife provides fitness and wellness information for general guidance. It is not medical advice — consult a qualified professional before starting any new exercise program, especially if you have a health condition. To the fullest extent permitted by law, FitLife is not liable for indirect, incidental, or consequential damages arising from your use of the service.',
+    title: 'Health Disclaimer & Liability',
+    body: 'Fit provides fitness and wellness guidance, an AI coach, and calorie/effort estimates for general information only. It is not medical advice — consult a qualified professional before starting any new exercise program, especially if you have a health condition. You exercise at your own risk, and to the fullest extent permitted by law Fit is not liable for indirect, incidental, or consequential damages arising from your use of the service.',
   },
   {
-    title: 'Code of Conduct',
-    body: 'Use FitLife respectfully. Do not scrape or reverse engineer the service, attempt to gain unauthorized access, harass other members, or post unlawful, hateful, or misleading content in Community spaces. Accounts that violate these rules may be suspended or removed.',
+    title: 'Community & Content',
+    body: 'Be respectful. Do not harass other members or post unlawful, hateful, explicit, or misleading content, and do not scrape or reverse engineer the service. You keep ownership of the posts, stories, and comments you create but grant Fit a license to store and display them so community features work. You can report any post for review, and accounts that violate these rules may be suspended or removed.',
+  },
+  {
+    title: 'Account & Contact',
+    body: 'You may delete your account at any time from Settings → Delete Account. Questions about these terms? Message us from Settings → Contact Support or email ahmed1.balfaqeih55@gmail.com.',
   },
 ];
 
@@ -39,7 +42,7 @@ export default function TermsOfService() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.updated}>Last updated: April 22, 2026</Text>
+        <Text style={styles.updated}>Last updated: May 30, 2026</Text>
 
         <View style={styles.card}>
           {sections.map((s, idx) => (

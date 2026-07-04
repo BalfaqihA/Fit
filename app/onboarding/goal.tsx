@@ -1,14 +1,14 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
@@ -71,6 +71,10 @@ export default function GoalPage() {
   const [selectedGoal, setSelectedGoal] = useState<GoalKey>(
     answers.goal ?? 'lose_weight'
   );
+
+  useEffect(() => {
+    setAnswer('goal', selectedGoal);
+  }, [selectedGoal, setAnswer]);
 
   const progressItems = useMemo(
     () => new Array(TOTAL_STEPS).fill(null).map((_, i) => i),

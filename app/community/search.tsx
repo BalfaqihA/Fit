@@ -1,43 +1,63 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { UserListRow } from '@/components/user-list-row';
-import { SEED_USERS } from '@/constants/community-data';
 import { type Palette, RADIUS, SHADOWS } from '@/constants/design';
-import { useCommunity } from '@/hooks/use-community';
 import { useTheme } from '@/hooks/use-theme';
+import {
+  addRecentSearch,
+  clearRecentSearches,
+  getRecentSearches,
+} from '@/lib/recent-searches';
+import { searchUsers, type SearchUser } from '@/lib/users';
 
 export default function SearchScreen() {
   const { COLORS } = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
-  const { isFollowing } = useCommunity();
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState<SearchUser[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [recent, setRecent] = useState<SearchUser[]>([]);
+
+  useEffect(() => {
+    getRecentSearches().then(setRecent);
+  }, []);
 
   const trimmed = query.trim().toLowerCase();
-  const matches = useMemo(() => {
-    if (!trimmed) return [];
-    return SEED_USERS.filter(
-      (u) =>
-        u.displayName.toLowerCase().includes(trimmed) ||
-        u.handle.toLowerCase().includes(trimmed)
-    );
-  }, [trimmed]);
 
-  const suggested = useMemo(
-    () => SEED_USERS.filter((u) => !isFollowing(u.id)).slice(0, 5),
-    [isFollowing]
-  );
+  useEffect(() => {
+    if (!trimmed) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const found = await searchUsers(trimmed);
+      if (cancelled) return;
+      setResults(found);
+      setSearching(false);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [trimmed]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -47,6 +67,10 @@ export default function SearchScreen() {
         <View style={{ width: 40 }} />
       </View>
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <View style={styles.searchWrap}>
         <View style={styles.searchBox}>
           <Ionicons name="search" size={18} color={COLORS.muted} />
@@ -71,37 +95,63 @@ export default function SearchScreen() {
         {trimmed ? (
           <>
             <Text style={styles.sectionTitle}>
-              {matches.length} {matches.length === 1 ? 'result' : 'results'}
+              {searching
+                ? 'Searching…'
+                : `${results.length} ${results.length === 1 ? 'result' : 'results'}`}
             </Text>
-            {matches.length === 0 ? (
+            {searching ? (
+              <ActivityIndicator color={COLORS.primary} style={{ marginTop: 14 }} />
+            ) : results.length === 0 ? (
               <Text style={styles.emptyText}>No users match &quot;{query}&quot;.</Text>
             ) : (
-              matches.map((user) => (
+              results.map((user) => (
                 <UserListRow
                   key={user.id}
                   user={user}
-                  onPress={() =>
-                    router.push(`/community/profile/${user.id}` as never)
-                  }
+                  onPress={() => {
+                    addRecentSearch(user).then(setRecent);
+                    router.push(`/community/profile/${user.id}` as never);
+                  }}
                 />
               ))
             )}
           </>
-        ) : (
+        ) : recent.length > 0 ? (
           <>
-            <Text style={styles.sectionTitle}>Suggested for you</Text>
-            {suggested.map((user) => (
+            <View style={styles.recentHeader}>
+              <Text style={styles.sectionTitle}>RECENT</Text>
+              <Pressable
+                onPress={() => {
+                  clearRecentSearches();
+                  setRecent([]);
+                }}
+                hitSlop={8}
+              >
+                <Text style={styles.clearText}>Clear</Text>
+              </Pressable>
+            </View>
+            {recent.map((user) => (
               <UserListRow
                 key={user.id}
                 user={user}
-                onPress={() =>
-                  router.push(`/community/profile/${user.id}` as never)
-                }
+                onPress={() => {
+                  addRecentSearch(user).then(setRecent);
+                  router.push(`/community/profile/${user.id}` as never);
+                }}
               />
             ))}
           </>
+        ) : (
+          <View style={styles.emptyHint}>
+            <Ionicons name="time-outline" size={28} color={COLORS.muted} />
+            <Text style={styles.emptyText}>
+              Search members by name or handle. Your recent searches will show
+              up here.
+            </Text>
+          </View>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -129,6 +179,11 @@ const makeStyles = (COLORS: Palette) =>
       ...SHADOWS.card,
     },
     searchInput: { flex: 1, fontSize: 15, color: COLORS.text, padding: 0 },
+    emptyHint: {
+      alignItems: 'center',
+      marginTop: 40,
+      gap: 10,
+    },
     sectionTitle: {
       fontSize: 12,
       fontWeight: '800',
@@ -139,4 +194,16 @@ const makeStyles = (COLORS: Palette) =>
       paddingBottom: 6,
     },
     emptyText: { paddingHorizontal: 20, paddingTop: 12, fontSize: 14, color: COLORS.muted },
+    recentHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingRight: 20,
+    },
+    clearText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: COLORS.primary,
+      paddingTop: 14,
+    },
   });

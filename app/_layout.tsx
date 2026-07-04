@@ -3,13 +3,15 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
 import 'react-native-reanimated';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ErrorBoundary } from '@/components/error-boundary';
 import { AuthProvider } from '@/contexts/auth';
-import { CommunityProvider } from '@/contexts/community';
 import { OnboardingProvider } from '@/contexts/onboarding';
 import { PlanProvider } from '@/contexts/plan';
 import { ThemeProvider } from '@/contexts/theme';
 import { UserProfileProvider } from '@/contexts/user-profile';
+import { WorkoutHistoryProvider } from '@/contexts/workout-history';
 import { WorkoutSessionProvider } from '@/contexts/workout-session';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
@@ -30,6 +32,12 @@ function WeighInScheduler() {
   const { user } = useAuth();
   const { profile, hydrated } = useUserProfile();
   const armed = useRef(false);
+
+  // Re-arm whenever the user identity changes (sign out / sign in as a
+  // different account) so the prompt can fire again for the new user.
+  useEffect(() => {
+    armed.current = false;
+  }, [user?.uid]);
 
   useEffect(() => {
     if (!user || !hydrated || armed.current) return;
@@ -124,12 +132,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   return (
+    <SafeAreaProvider>
+    <ErrorBoundary>
     <ThemeProvider>
       <AuthProvider>
         <UserProfileProvider>
-          <PlanProvider>
-            <OnboardingProvider>
-              <CommunityProvider>
+          <WorkoutHistoryProvider>
+            <PlanProvider>
+              <OnboardingProvider>
                 <WorkoutSessionProvider>
                   <AuthGate>
                     <WeighInScheduler />
@@ -141,16 +151,20 @@ export default function RootLayout() {
                       <Stack.Screen name="community" />
                       <Stack.Screen name="dashboard" />
                       <Stack.Screen name="(tabs)" />
+                      <Stack.Screen name="admin" />
+                      <Stack.Screen name="admin-bootstrap" />
                       <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
                     </Stack>
                   </AuthGate>
                   <ThemedStatusBar />
                 </WorkoutSessionProvider>
-              </CommunityProvider>
-            </OnboardingProvider>
-          </PlanProvider>
+              </OnboardingProvider>
+            </PlanProvider>
+          </WorkoutHistoryProvider>
         </UserProfileProvider>
       </AuthProvider>
     </ThemeProvider>
+    </ErrorBoundary>
+    </SafeAreaProvider>
   );
 }

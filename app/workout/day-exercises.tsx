@@ -4,11 +4,11 @@ import { router } from 'expo-router';
 import React, { useMemo } from 'react';
 import {
   FlatList,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { PrimaryButton } from '@/components/primary-button';
@@ -70,7 +70,7 @@ export default function DayExercises() {
       value: `${todays.durationMin}m`,
     },
     {
-      icon: 'flame-outline',
+      icon: 'bonfire-outline',
       label: 'Calories',
       value: `${todays.caloriesKcal}`,
     },

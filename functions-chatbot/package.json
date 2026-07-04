@@ -11,6 +11,8 @@
     "train": "tsc && npm run copy-intents && node lib/train.js",
     "serve": "npm run build && firebase emulators:start --only functions",
     "test": "jest",
+    "test:coverage": "jest --coverage --collectCoverageFrom=src/**/*.ts --collectCoverageFrom=!src/**/*.d.ts",
+    "eval": "npx ts-node --transpile-only eval/run-eval.ts",
     "seed:exercises": "npx ts-node scripts/seed-exercise-library.ts",
     "deploy": "firebase deploy --only functions:chatbot"
   },

@@ -1,4 +1,8 @@
-import { blockReply, preGeminiSafetyCheck } from '../src/chatbot/safetyRules';
+import {
+  blockReply,
+  offTopicReply,
+  preGeminiSafetyCheck,
+} from '../src/chatbot/safetyRules';
 
 // preGeminiSafetyCheck is pure — no mocking needed. These guard the
 // conservative-by-design patterns: real risk phrases must be caught, and
@@ -44,5 +48,16 @@ describe('preGeminiSafetyCheck — innocent questions stay "none"', () => {
     'what is progressive overload?',
   ])('does not flag: "%s"', (msg) => {
     expect(preGeminiSafetyCheck(msg).level).toBe('none');
+  });
+});
+
+describe('offTopicReply', () => {
+  it('returns a friendly redirect with tappable fitness suggestions', () => {
+    const r = offTopicReply();
+    expect(r.intent).toBe('off_topic');
+    expect(r.confidence).toBe(1.0);
+    expect(r.reply).toMatch(/fitness coach/i);
+    expect(r.segments?.shortAnswer).toBe(r.reply);
+    expect(r.suggestedActions?.length).toBeGreaterThan(0);
   });
 });

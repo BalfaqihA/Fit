@@ -13,8 +13,10 @@ type Override = {
 export const OVERRIDES: Override[] = [
   // Self-harm / mental health crisis
   {
+    // `suicid\w*` so the trailing \b lands at the real word end — bare `suicid`
+    // would never match "suicide"/"suicidal" (no boundary mid-word).
     pattern:
-      /\b(suicid|kill myself|end my life|self[- ]?harm|don'?t want to live|want to die)\b/i,
+      /\b(suicid\w*|kill myself|end my life|self[- ]?harm|don'?t want to live|want to die)\b/i,
     intent: 'safety_mental_health',
     reply:
       "I'm really glad you reached out, but I'm not the right help for that. Please contact a crisis line in your country (e.g. 988 in the US, 999 or 03-7956 8144 in Malaysia) or talk to someone you trust right now. You're not alone.",
@@ -40,8 +42,10 @@ export const OVERRIDES: Override[] = [
 
   // Disordered eating
   {
+    // Prefixes get `\w*` so inflections match: starve/starving, anorexia/-ic,
+    // bulimia/-ic. Bare prefixes + trailing \b never matched those.
     pattern:
-      /\b(starv|not eating|skip(ping)? meals|throw up after|purg(e|ing)|laxative|binge|anorexi|bulimi)\b/i,
+      /\b(starv\w*|not eating|skip(ping)? meals|throw up after|purg(e|ing)|laxative|binge|anorexi\w*|bulimi\w*)\b/i,
     intent: 'safety_disordered_eating',
     reply:
       "I'm not the right resource for that. Please reach out to a registered dietitian or a healthcare professional — your safety matters more than any training plan.",
@@ -49,8 +53,9 @@ export const OVERRIDES: Override[] = [
 
   // Use of unsafe substances
   {
+    // `steroid\w*` / `anabolic\w*` catch plurals (steroids, anabolics).
     pattern:
-      /\b(steroid|sarms|clenbuterol|peptide|hgh|trenbolone|deca|anabolic)\b/i,
+      /\b(steroid\w*|sarms|clenbuterol|peptide|hgh|trenbolone|deca|anabolic\w*)\b/i,
     intent: 'safety_substances',
     reply:
       "I can't give advice on performance-enhancing substances. Please talk to a qualified medical professional — natural training, food, and recovery will get you 95% of the results safely.",
@@ -58,8 +63,10 @@ export const OVERRIDES: Override[] = [
 
   // Pregnancy
   {
+    // `pregnan\w*` matches pregnant/pregnancy — bare `pregnan` + trailing \b
+    // matched neither (the next char is a word char, so no boundary).
     pattern:
-      /\b(pregnan|expecting|first trimester|second trimester|third trimester)\b/i,
+      /\b(pregnan\w*|expecting|first trimester|second trimester|third trimester)\b/i,
     intent: 'safety_pregnancy',
     reply:
       "Congrats — but please train under guidance from your OB/GYN or a prenatal-certified coach. I can't tailor a safe plan for pregnancy here.\n\nGeneral pointers (not medical advice): keep intensity moderate, avoid supine positions after the first trimester, and stop anything that feels off.",

@@ -3,6 +3,8 @@ import { buildPersonalContext } from '../personalize';
 
 import { checkAndIncrement } from './dailyQuota';
 import { callDeepSeek, DeepSeekError } from './deepseekClient';
+import { isFitnessDomain, looksLikeExerciseQuery } from './domain';
+import { correctText } from '../typoCorrect';
 import { appendMessage, getOrCreateActiveSession } from './chatHistoryService';
 import { loadMemory, updateMemory } from './chatMemoryService';
 import { mapToBroadIntent } from './intentMapper';
@@ -41,6 +43,12 @@ export type OrchestratorInputs = {
 const QUOTA_FALLBACK_SUGGESTION =
   "You've hit today's coaching limit — back tomorrow with personalized advice. Templated answers below for now.";
 
+// Fuzzy typo correction is flag-gated (eval-gated): enable by setting
+// CORRECTOR_ENABLED=1 in the function env. It only ever rewrites the text we
+// CLASSIFY / domain-check — the raw user message still goes to the LLM and is
+// what we persist.
+const CORRECTOR_ENABLED = process.env.CORRECTOR_ENABLED === '1';
+
 export async function handle(
   inputs: OrchestratorInputs,
 ): Promise<OrchestratorResult> {
@@ -60,9 +68,13 @@ export async function handle(
 
   // 2. Classify with the existing tfjs model. We need this both for the
   //    Gemini prompt's broad intent and as input to the template fallback.
+  //    `routingText` is the (optionally typo-corrected) text used ONLY for
+  //    classification + the domain guards below; the raw `message` is still
+  //    what reaches the LLM and what we persist.
+  const routingText = CORRECTOR_ENABLED ? correctText(message) : message;
   let classification: Classification;
   try {
-    classification = await classifyMessage(message);
+    classification = await classifyMessage(routingText);
   } catch (err) {
     console.warn('[chatbot] classifyMessage failed', err);
     classification = {
@@ -78,7 +90,14 @@ export async function handle(
   //     (non-fitness / non-app), short-circuit with a friendly redirect — we
   //     never spend an LLM call on it. Low-confidence guesses still flow
   //     through; the hardened system prompt redirects anything that slips past.
-  if (broadIntent === 'off_topic' && classification.topConf >= SOFT_THRESHOLD) {
+  //     Safety net: a deterministic in-domain keyword check vetoes the redirect
+  //     so loosely-phrased fitness questions the classifier mis-tags (e.g.
+  //     "give me two morning exercises") always reach the LLM.
+  if (
+    broadIntent === 'off_topic' &&
+    classification.topConf >= SOFT_THRESHOLD &&
+    !isFitnessDomain(routingText)
+  ) {
     const result = offTopicReply();
     await persistTurn(uid, message, result, classification, broadIntent, { level: 'none' }, []);
     return result;
@@ -132,6 +151,32 @@ export async function handle(
       : fallbackPromise;
   };
 
+  // 2c. App navigation / how-to is answered DETERMINISTICALLY from the vetted
+  // route table in intents.json (the template pipeline) — never the LLM, which
+  // can't know the app's real screens and would invent menu paths. Costs no LLM
+  // quota. Knowledge questions don't map to app_help, so they still hit the LLM.
+  if (broadIntent === 'app_help') {
+    const result = await runFallback();
+    await persistTurn(uid, message, result, classification, broadIntent, safety, []);
+    return result;
+  }
+
+  // 7 (early). Daily quota gate. Checked BEFORE the memory/knowledge retrieval
+  // below so a quota-exceeded turn — which serves a template reply that needs
+  // neither — doesn't pay for those Firestore reads + scoring. On allowed turns
+  // the cost is identical (a single atomic transaction either way).
+  // checkAndIncrement is atomic — a failed Gemini call after this point still
+  // costs a slot, but that's better than racing.
+  const quota = await checkAndIncrement(uid).catch((err) => {
+    console.warn('[chatbot] checkAndIncrement failed', err);
+    return { allowed: true, countAfter: 0, date: '' };
+  });
+  if (!quota.allowed) {
+    const result = await runFallback(QUOTA_FALLBACK_SUGGESTION);
+    await persistTurn(uid, message, result, classification, broadIntent, safety, []);
+    return result;
+  }
+
   // 4 + 5. Load memory and retrieve knowledge in parallel — both are
   // independent reads of the same Firestore region. For plan/exercise intents
   // we also pull dataset-backed exercise docs (skipped otherwise to save a
@@ -146,6 +191,13 @@ export async function handle(
   // Structured list comes straight from personalize.ts — no fragile string
   // parsing. The formatted `ctx.todayPlanExercises` is only for the prompt.
   const exerciseNamesFromPlan = ctx.__todayPlanExercisesList ?? [];
+  // Pull exercise docs for the mapped exercise intents OR whenever the raw
+  // message looks like an exercise ask — so loosely-phrased queries the
+  // classifier misses ("give me two morning exercises") still get grounded in
+  // `exercise_library`. The retriever is TTL-cached, so this is at most one
+  // extra read on a cold cache.
+  const wantExerciseDocs =
+    EXERCISE_INTENTS.has(broadIntent) || looksLikeExerciseQuery(routingText);
 
   let memory;
   let knowledge: KnowledgeDoc[];
@@ -158,7 +210,7 @@ export async function handle(
         goal: ctx.goal,
         fitnessLevel: ctx.__fitnessLevel,
       }),
-      EXERCISE_INTENTS.has(broadIntent)
+      wantExerciseDocs
         ? retrieveExerciseDocs({
             message,
             exerciseNamesFromPlan,
@@ -183,18 +235,6 @@ export async function handle(
     console.warn('[chatbot] memory+knowledge fetch failed', err);
     memory = { userId: uid };
     knowledge = [];
-  }
-
-  // 7. Daily quota gate. checkAndIncrement is atomic — a failed Gemini call
-  // after this point still costs a slot, but that's better than racing.
-  const quota = await checkAndIncrement(uid).catch((err) => {
-    console.warn('[chatbot] checkAndIncrement failed', err);
-    return { allowed: true, countAfter: 0, date: '' };
-  });
-  if (!quota.allowed) {
-    const result = await runFallback(QUOTA_FALLBACK_SUGGESTION);
-    await persistTurn(uid, message, result, classification, broadIntent, safety, []);
-    return result;
   }
 
   // 8 + 9. Build prompt, call Gemini, validate.

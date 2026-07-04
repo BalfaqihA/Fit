@@ -391,10 +391,18 @@ export async function runTemplatePipeline(
     intent = 'soft_clarify';
     const a = humanLabel(classification.topTag);
     const b = humanLabel(classification.secondTag);
-    chosenSeg = {
-      shortAnswer: `I'm not 100% sure — did you mean **${a}** or **${b}**?`,
-      suggestion: 'Reply with the topic or rephrase.',
-    };
+    // When the top two predictions collapse to the same label, "did you mean
+    // X or X?" reads broken — confirm the single topic instead.
+    chosenSeg =
+      a === b
+        ? {
+            shortAnswer: `I'm not 100% sure I caught that — did you want help with **${a}**?`,
+            suggestion: 'Reply yes, or rephrase your question.',
+          }
+        : {
+            shortAnswer: `I'm not 100% sure — did you mean **${a}** or **${b}**?`,
+            suggestion: 'Reply with the topic or rephrase.',
+          };
   } else {
     intent = 'unknown_fallback';
     chosenSeg = pickResponse('unknown_fallback', preferredStyle);
@@ -411,5 +419,19 @@ export async function runTemplatePipeline(
     followUpQuestion: rendered.followUpQuestion,
     action: rendered.action,
     quiz: rendered.quiz,
+    // On the "I'm not sure" branches, offer tappable topic chips. They give the
+    // user a one-tap path forward AND act as a labelling signal — which chip
+    // they tap reveals the intent the classifier missed (data flywheel).
+    suggestedActions:
+      intent === 'unknown_fallback' || intent === 'soft_clarify'
+        ? FALLBACK_SUGGESTIONS
+        : undefined,
   };
 }
+
+const FALLBACK_SUGGESTIONS = [
+  "Show today's workout",
+  'Give me 2 exercises',
+  'Nutrition advice',
+  'How do I use the app?',
+];

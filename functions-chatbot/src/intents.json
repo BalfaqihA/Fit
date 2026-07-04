@@ -593,7 +593,7 @@
           "style": "beginner",
           "shortAnswer": "Update your equipment in Settings → Edit Profile.",
           "explanation": "When I regenerate your plan, it'll only pick exercises that match what you have.",
-          "action": { "label": "Edit profile", "type": "navigate", "route": "/(tabs)/dashboard" }
+          "action": { "label": "Edit profile", "type": "navigate", "route": "/(tabs)/settings" }
         },
         {
           "style": "motivational",
@@ -883,7 +883,7 @@
             "Achievements → tap your Level pill on Dashboard"
           ],
           "suggestion": "Want me to open Settings?",
-          "action": { "label": "Open Dashboard", "type": "navigate", "route": "/(tabs)/dashboard" }
+          "action": { "label": "Open Settings", "type": "navigate", "route": "/(tabs)/settings" }
         },
         {
           "style": "beginner",
@@ -899,7 +899,7 @@
           "style": "advanced",
           "shortAnswer": "Plan regeneration: Settings → Regenerate Plan.",
           "explanation": "Change goal/equipment first if you want them reflected. The next plan picks them up automatically.",
-          "action": { "label": "Open Settings", "type": "navigate", "route": "/(tabs)/dashboard" }
+          "action": { "label": "Open Settings", "type": "navigate", "route": "/(tabs)/settings" }
         },
         {
           "style": "step",
@@ -1106,7 +1106,7 @@
           "style": "beginner",
           "shortAnswer": "Tell me the lift and I'll suggest a swap.",
           "explanation": "Or open Settings → Edit Profile to update your equipment, and I'll regenerate a plan that already fits.",
-          "action": { "label": "Edit equipment", "type": "navigate", "route": "/(tabs)/dashboard" }
+          "action": { "label": "Edit equipment", "type": "navigate", "route": "/(tabs)/settings" }
         },
         {
           "style": "advanced",
@@ -1516,7 +1516,7 @@
         {
           "style": "beginner",
           "shortAnswer": "Cool. Update equipment in Settings, then regenerate the plan.",
-          "action": { "label": "Open Settings", "type": "navigate", "route": "/(tabs)/dashboard" }
+          "action": { "label": "Open Settings", "type": "navigate", "route": "/(tabs)/settings" }
         }
       ]
     },
@@ -1607,7 +1607,7 @@
         {
           "style": "step",
           "shortAnswer": "Cool — opening Settings.",
-          "action": { "label": "Open Settings", "type": "navigate", "route": "/(tabs)/dashboard" }
+          "action": { "label": "Open Settings", "type": "navigate", "route": "/(tabs)/settings" }
         }
       ]
     },

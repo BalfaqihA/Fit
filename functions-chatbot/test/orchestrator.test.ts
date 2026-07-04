@@ -174,12 +174,39 @@ describe('handle — short-circuit paths', () => {
       secondConf: 0.05,
     });
     mockMapToBroadIntent.mockReturnValue('off_topic');
-    const r = await handle(INPUTS);
+    const r = await handle({ ...INPUTS, message: 'what is the capital of France' });
     expect(r.reply).toBe('OFFTOPIC');
     expect(r.intent).toBe('off_topic');
     expect(mockOffTopicReply).toHaveBeenCalled();
     expect(mockBuildPersonalContext).not.toHaveBeenCalled();
     expect(mockCallDeepSeek).not.toHaveBeenCalled();
+  });
+
+  it('does NOT redirect an in-domain message the classifier mis-tagged off_topic', async () => {
+    // Classifier wrongly calls this off_topic with high confidence...
+    mockClassifyMessage.mockResolvedValue({
+      topTag: 'off_topic',
+      topConf: 0.9,
+      secondTag: 'general_chat',
+      secondConf: 0.05,
+    });
+    mockMapToBroadIntent.mockReturnValue('off_topic');
+    // ...but the message is clearly about exercises, so the domain guard wins.
+    const r = await handle({ ...INPUTS, message: 'give me two morning exercises' });
+    expect(mockOffTopicReply).not.toHaveBeenCalled();
+    expect(mockBuildPersonalContext).toHaveBeenCalled();
+    expect(mockCallDeepSeek).toHaveBeenCalled();
+    expect(r.reply).toBe('RENDERED');
+  });
+
+  it('answers app navigation deterministically from templates, not the LLM', async () => {
+    mockMapToBroadIntent.mockReturnValue('app_help');
+    const r = await handle({ ...INPUTS, message: 'where do I change my password' });
+    expect(mockRunTemplatePipeline).toHaveBeenCalled();
+    expect(mockCallDeepSeek).not.toHaveBeenCalled();
+    // No LLM quota should be spent on a deterministic nav answer.
+    expect(mockCheckAndIncrement).not.toHaveBeenCalled();
+    expect(r.reply).toBe('TEMPLATE');
   });
 
   it('falls back to templates with a notice when the daily quota is spent', async () => {
@@ -193,6 +220,11 @@ describe('handle — short-circuit paths', () => {
     expect(r.reply).toMatch(/coaching limit/i);
     expect(mockCallDeepSeek).not.toHaveBeenCalled();
     expect(mockRunTemplatePipeline).toHaveBeenCalled();
+    // Perf: a quota-exceeded turn must NOT pay for memory/knowledge retrieval —
+    // the quota gate runs before those reads now.
+    expect(mockLoadMemory).not.toHaveBeenCalled();
+    expect(mockRetrieveKnowledge).not.toHaveBeenCalled();
+    expect(mockRetrieveExerciseDocs).not.toHaveBeenCalled();
   });
 });
 
@@ -219,5 +251,17 @@ describe('handle — Gemini paths', () => {
     expect(r.suggestedActions).toEqual(['Open workout']);
     expect(mockUpdateMemory).toHaveBeenCalled();
     expect(mockAppendMessage).toHaveBeenCalledTimes(2); // user + assistant
+  });
+
+  it('retrieves exercise docs for an exercise-shaped message even on a non-exercise intent', async () => {
+    mockMapToBroadIntent.mockReturnValue('general_chat'); // not in EXERCISE_INTENTS
+    await handle({ ...INPUTS, message: 'give me two morning exercises' });
+    expect(mockRetrieveExerciseDocs).toHaveBeenCalled();
+  });
+
+  it('skips exercise-doc retrieval for non-exercise messages', async () => {
+    mockMapToBroadIntent.mockReturnValue('general_chat');
+    await handle({ ...INPUTS, message: 'how much protein should I eat' });
+    expect(mockRetrieveExerciseDocs).not.toHaveBeenCalled();
   });
 });

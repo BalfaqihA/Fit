@@ -93,4 +93,122 @@ describe('buildGeminiPrompt — new blocks', () => {
     expect(systemInstruction).toContain('DOMAIN GATE');
     expect(systemInstruction).toContain('DATA-DRIVEN ANALYSIS');
   });
+
+  it('instructs the model to always answer in-domain, honor counts, and name exercises', () => {
+    const { systemInstruction } = buildGeminiPrompt({
+      message: 'give me two morning exercises',
+      personal: {} as PersonalContext,
+      memory: { userId: 'u1' } as never,
+      knowledge: [],
+      intent: 'workout_plan',
+      safety: { level: 'none' } as never,
+      history: [],
+    });
+    expect(systemInstruction).toContain('ALWAYS ANSWER IN-DOMAIN');
+    expect(systemInstruction).toContain('HONOR REQUESTED COUNTS');
+    expect(systemInstruction).toContain('EXERCISE REQUESTS');
+  });
+
+  it('renders the user profile block, including reported injuries', () => {
+    const p = build({
+      firstName: 'Sam',
+      goal: 'muscle gain',
+      fitnessLevel: 'intermediate',
+      equipment: 'full gym',
+      injuries: 'left shoulder impingement',
+      currentWeightKg: '80',
+    });
+    expect(p).toContain('USER PROFILE');
+    expect(p).toContain('- Name: Sam');
+    expect(p).toContain('- Injuries / limitations: left shoulder impingement');
+  });
+});
+
+describe('buildGeminiPrompt — memory / knowledge / history / safety blocks', () => {
+  const base = {
+    message: 'help me train',
+    personal: {} as PersonalContext,
+    knowledge: [],
+    intent: 'workout_plan' as const,
+    safety: { level: 'none' } as never,
+    history: [],
+  };
+
+  it('renders chat memory fields when present', () => {
+    const p = buildGeminiPrompt({
+      ...base,
+      memory: {
+        userId: 'u1',
+        summary: 'Wants to bulk',
+        lastGoal: 'muscle gain',
+        lastRecommendedWorkout: 'Push day with bench focus',
+        dislikedExercises: ['burpees', 'running'],
+        preferredTone: 'motivational',
+      } as never,
+    }).userPrompt;
+    expect(p).toContain('CHAT MEMORY');
+    expect(p).toContain('Summary: Wants to bulk');
+    expect(p).toContain('Last goal discussed: muscle gain');
+    expect(p).toContain('Last recommended workout: Push day with bench focus');
+    expect(p).toContain('Disliked exercises (avoid): burpees, running');
+    expect(p).toContain('Preferred tone: motivational');
+  });
+
+  it('shows a placeholder when memory summary is empty', () => {
+    const p = buildGeminiPrompt({ ...base, memory: { userId: 'u1' } as never }).userPrompt;
+    expect(p).toMatch(/Summary: \(none yet\)/);
+  });
+
+  it('renders retrieved knowledge with category, safety note and truncation', () => {
+    const longContent = 'x'.repeat(500);
+    const p = buildGeminiPrompt({
+      ...base,
+      memory: { userId: 'u1' } as never,
+      knowledge: [
+        {
+          id: 'k1',
+          title: 'Protein basics',
+          category: 'nutrition',
+          content: longContent,
+          safetyNotes: 'consult a doctor for kidney issues',
+        } as never,
+      ],
+    }).userPrompt;
+    expect(p).toContain('KNOWLEDGE BASE');
+    expect(p).toContain('[Protein basics] (nutrition)');
+    expect(p).toContain('[safety: consult a doctor for kidney issues]');
+    expect(p).toContain('…'); // content truncated at 350 chars
+    expect(p).not.toContain('x'.repeat(400));
+  });
+
+  it('notes when no knowledge entries matched', () => {
+    const p = buildGeminiPrompt({ ...base, memory: { userId: 'u1' } as never }).userPrompt;
+    expect(p).toMatch(/no matching entries/i);
+  });
+
+  it('renders only the last 5 conversation turns, truncating long text', () => {
+    const history = Array.from({ length: 7 }, (_, i) => ({
+      from: i % 2 === 0 ? ('user' as const) : ('bot' as const),
+      text: `turn ${i} ${'z'.repeat(300)}`,
+    }));
+    const p = buildGeminiPrompt({ ...base, memory: { userId: 'u1' } as never, history }).userPrompt;
+    expect(p).toContain('RECENT CONVERSATION (last 5 turns)');
+    expect(p).not.toContain('turn 0'); // dropped (only last 5 kept)
+    expect(p).toContain('turn 6');
+    expect(p).toContain('…'); // long turn text truncated at 250 chars
+  });
+
+  it('shows the first-message placeholder when history is empty', () => {
+    const p = buildGeminiPrompt({ ...base, memory: { userId: 'u1' } as never }).userPrompt;
+    expect(p).toMatch(/first message of this session/i);
+  });
+
+  it('surfaces a caution safety level with its reason', () => {
+    const p = buildGeminiPrompt({
+      ...base,
+      memory: { userId: 'u1' } as never,
+      safety: { level: 'caution', reason: 'localized knee pain' } as never,
+    }).userPrompt;
+    expect(p).toContain('SAFETY LEVEL: caution — localized knee pain');
+  });
 });

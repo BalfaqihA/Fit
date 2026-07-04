@@ -55,3 +55,10 @@ functions-chatbot/.secret.local
 google-services.json
 GoogleService-Info.plist
 *firebase-adminsdk*.json
+
+# test coverage output
+coverage/
+**/coverage/
+
+# Claude Code local tooling (skills, worktrees, local settings)
+.claude/

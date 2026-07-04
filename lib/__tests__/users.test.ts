@@ -79,6 +79,36 @@ describe('searchUsers', () => {
     (getDocs as jest.Mock).mockRejectedValue(new Error('rules denied'));
     expect(await searchUsers('x')).toEqual([]);
   });
+
+  it('maps populated optional fields (coverUri, goals) onto the row', async () => {
+    (getDocs as jest.Mock)
+      .mockResolvedValueOnce({
+        docs: [
+          docOf('a', {
+            bio: 'hi',
+            avatarUri: 'a.png',
+            coverUri: 'c.png',
+            goals: ['lose-weight'],
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({ docs: [] })
+      .mockResolvedValueOnce({ docs: [] });
+    const [row] = await searchUsers('x');
+    expect(row.coverUri).toBe('c.png');
+    expect(row.goals).toEqual(['lose-weight']);
+    expect(row.bio).toBe('hi');
+  });
+
+  it('falls back to the raw prefix when input has no alphanumeric tokens', async () => {
+    (getDocs as jest.Mock)
+      .mockResolvedValueOnce({ docs: [] })
+      .mockResolvedValueOnce({ docs: [] })
+      .mockResolvedValueOnce({ docs: [] });
+    expect(await searchUsers('@@@')).toEqual([]);
+    // All three queries still issued (token fell back to the raw prefix).
+    expect(getDocs).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe('buildUserSearchFields', () => {

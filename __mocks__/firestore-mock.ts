@@ -81,6 +81,13 @@ export function firestoreMock() {
       writes.push({ type: 'delete', path: pathOf(ref) });
       docs[pathOf(ref)] = null;
     },
+    updateDoc: async (ref: { __path: DocPath }, data: Record<string, unknown>) => {
+      writes.push({ type: 'update', path: pathOf(ref), data });
+      docs[pathOf(ref)] = {
+        ...(docs[pathOf(ref)] ?? {}),
+        ...data,
+      };
+    },
     getDoc: async (ref: { __path: DocPath }) => {
       const data = docs[pathOf(ref)];
       return {
